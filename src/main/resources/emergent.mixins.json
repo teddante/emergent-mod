@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"package": "com.teddante.emergent.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"mixins": [
+		"ExampleMixin",
+		"FireBlockMixin",
+		"SculkShriekerBlockEntityMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

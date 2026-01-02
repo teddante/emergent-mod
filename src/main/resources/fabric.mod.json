@@ -1,0 +1,31 @@
+{
+	"schemaVersion": 1,
+	"id": "emergent",
+	"version": "${version}",
+	"name": "Emergent",
+	"description": "Makes Minecraft more emergent and dynamic with infinite fire spread and universal Warden summoning.",
+	"authors": [
+		"Teddante"
+	],
+	"contact": {
+		"homepage": "https://github.com/teddante/emergent-mod",
+		"sources": "https://github.com/teddante/emergent-mod"
+	},
+	"license": "MIT",
+	"icon": "assets/emergent/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.teddante.emergent.Emergent"
+		]
+	},
+	"mixins": [
+		"emergent.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.18.4",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
