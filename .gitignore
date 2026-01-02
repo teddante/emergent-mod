@@ -38,3 +38,6 @@ hs_err_*.log
 replay_*.log
 *.hprof
 *.jfr
+
+# Decompiled Minecraft sources (do not commit - copyrighted)
+net/
