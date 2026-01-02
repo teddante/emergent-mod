@@ -5,7 +5,8 @@
 	"mixins": [
 		"ExampleMixin",
 		"FireBlockMixin",
-		"SculkShriekerBlockEntityMixin"
+		"SculkShriekerBlockEntityMixin",
+		"SculkShriekerBlockMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
