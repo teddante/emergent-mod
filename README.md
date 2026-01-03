@@ -26,6 +26,17 @@ Any Sculk Shrieker can now summon a Warden.
     - **Result**: Players must be extremely careful when handling Sculk. Accidentally creating a shrieker via a Catalyst can lead to a Warden summoning in your base.
     - **Mechanic**: The mod forces the `can_summon` check to always be true.
 
+## Compatibility
+
+Emergent is designed for **maximum compatibility** with vanilla Minecraft and other mods.
+
+- **Vanilla-First Design**: All features use standard Minecraft APIs and block/entity methods. Fire spreads using vanilla fire blocks, flammability is checked using vanilla `isBurnable()`, and block placement uses standard `setBlockState()`.
+- **Non-Destructive Mixins**: The mod uses `@Inject` injections rather than `@Overwrite`, meaning it adds behavior without replacing vanilla code. Other mods targeting the same methods will work alongside Emergent.
+- **Modded Content Support**: Custom blocks from other mods that define proper flammability will automatically work with fire spread. Custom entities that extend Minecraft's Entity class will inherit fire-spreading behavior when burning.
+- **Performance Mods**: Fully compatible with optimization mods like Lithium, Sodium, and similar performance enhancers.
+
+If you encounter compatibility issues with a specific mod, please [open an issue](https://github.com/teddante/emergent-mod/issues).
+
 ## Installation
 
 1.  Download the latest `.jar` from the [Releases](https://github.com/teddante/emergent-mod/releases) page.
