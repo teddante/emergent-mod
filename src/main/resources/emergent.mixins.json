@@ -10,7 +10,6 @@
 		"SculkShriekerBlockEntityMixin",
 		"SculkShriekerBlockMixin",
 		"ReactiveCreeperMixin",
-		"ExplosionAccessor",
 		"ExplosionMixin",
 		"WorldAccessor",
 		"EntityAccessor",
