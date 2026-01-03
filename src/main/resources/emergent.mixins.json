@@ -14,7 +14,8 @@
 		"VolatileInventoryMixin",
 		"CreeperInvoker",
 		"CreeperTrackerMixin",
-		"ItemEntityAutoPlantMixin"
+		"ItemEntityAutoPlantMixin",
+		"WaterFluidMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
