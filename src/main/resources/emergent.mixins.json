@@ -4,6 +4,7 @@
 	"package": "com.teddante.emergent.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
+		"ItemEntityVolatileMixin",
 		"EntityFireSpreadMixin",
 		"FireBlockMixin",
 		"SculkShriekerBlockEntityMixin",

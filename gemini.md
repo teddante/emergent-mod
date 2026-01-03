@@ -1,6 +1,6 @@
 # AI Development Guidelines
 
-1. **Philosophy**: Build dynamic, system-driven interactions that foster emergent gameplay. Features should interact with each other and the environment unpredictably but logically.
+1. **Philosophy**: Build dynamic, system-driven interactions that foster emergent gameplay. Features should interact with each other and the environment unpredictably but logically. If you do something and you expect it to happen as per logic or real life, it should happen. This is what the mod is going for.
 2. **Native Integration**: Always use existing vanilla functions, lists, and mechanics.
     - **Use Tags**: Never use hardcoded strings (e.g., `name.contains("tnt")`). Use Item Tags (`#emergent:high_explosives`) for all categorical checks. This ensures compatibility with other mods.
     - **Extend, Don't Reinvent**: Use vanilla `isBurnable`, `getBlastResistance`, etc.
