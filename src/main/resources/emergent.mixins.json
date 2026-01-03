@@ -15,7 +15,10 @@
 		"CreeperInvoker",
 		"CreeperTrackerMixin",
 		"ItemEntityAutoPlantMixin",
-		"WaterFluidMixin"
+		"FluidMixin",
+		"WaterFluidMixin",
+		"FlowableFluidMixin",
+		"ServerWorldMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
