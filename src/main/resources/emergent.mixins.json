@@ -1,5 +1,6 @@
 {
 	"required": true,
+	"refmap": "emergent.refmap.json",
 	"package": "com.teddante.emergent.mixin",
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
@@ -7,7 +8,14 @@
 		"ExampleMixin",
 		"FireBlockMixin",
 		"SculkShriekerBlockEntityMixin",
-		"SculkShriekerBlockMixin"
+		"SculkShriekerBlockMixin",
+		"ReactiveCreeperMixin",
+		"ExplosionAccessor",
+		"ExplosionMixin",
+		"WorldAccessor",
+		"EntityAccessor",
+		"CreeperInvoker",
+		"CreeperTrackerMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

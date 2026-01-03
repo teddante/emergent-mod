@@ -1,0 +1,15 @@
+{
+    "mappings": {
+        "net/minecraft/class_9892": {
+            "affectWorld": "method_61763",
+            "destroyBlocks": "Lnet/minecraft/class_9892;method_61730(Ljava/util/List;)V"
+        }
+    },
+    "data": {
+        "named:intermediary": {
+            "net/minecraft/class_9892": {
+                "affectWorld": "method_61763"
+            }
+        }
+    }
+}
