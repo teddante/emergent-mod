@@ -4,10 +4,12 @@ import com.teddante.emergent.WaterPhysics;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.Waterloggable;
 import net.minecraft.fluid.FlowableFluid;
 import net.minecraft.fluid.Fluid;
 import net.minecraft.fluid.FluidState;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Properties;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import org.spongepowered.asm.mixin.Mixin;
@@ -30,6 +32,9 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Shadow
     public abstract FluidState getFlowing(int level, boolean falling);
+
+    @Shadow
+    public abstract FluidState getStill(boolean falling);
 
     // Water tick rate is 5 ticks
     @Unique
@@ -75,9 +80,14 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // Update below - only set falling if can continue falling
                 setWaterLevel(world, below, newBelowLevel, canContinueFalling);
 
-                // Update current
+                // Update current position after transferring water down
                 if (newCurrentLevel <= 0) {
-                    world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL);
+                    // Check if this is a waterlogged block
+                    if (blockState.contains(Properties.WATERLOGGED) && blockState.get(Properties.WATERLOGGED)) {
+                        world.setBlockState(pos, blockState.with(Properties.WATERLOGGED, false), Block.NOTIFY_ALL);
+                    } else {
+                        world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL);
+                    }
                 } else {
                     setWaterLevel(world, pos, newCurrentLevel, false);
                 }
@@ -146,9 +156,14 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
                 }
 
-                // Update current position
+                // Update current position after horizontal distribution
                 if (currentLevel <= 0) {
-                    world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL);
+                    // Check if this is a waterlogged block
+                    if (blockState.contains(Properties.WATERLOGGED) && blockState.get(Properties.WATERLOGGED)) {
+                        world.setBlockState(pos, blockState.with(Properties.WATERLOGGED, false), Block.NOTIFY_ALL);
+                    } else {
+                        world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL);
+                    }
                 } else {
                     setWaterLevel(world, pos, currentLevel, false);
                 }
@@ -168,21 +183,56 @@ public abstract class FlowableFluidMixin extends Fluid {
             return true;
         if (WaterPhysics.isWater(state.getFluidState().getFluid()))
             return true;
-        // Could add more checks for waterloggable blocks etc.
+        // Allow flowing into waterloggable blocks that aren't already waterlogged
+        if (state.getBlock() instanceof Waterloggable) {
+            if (state.contains(Properties.WATERLOGGED) && !state.get(Properties.WATERLOGGED)) {
+                return true;
+            }
+        }
         return !state.isSolid();
+    }
+
+    /**
+     * Checks if the target position is a waterloggable block (not already
+     * waterlogged).
+     */
+    @Unique
+    private boolean isWaterloggableTarget(BlockState state) {
+        if (state.getBlock() instanceof Waterloggable) {
+            return state.contains(Properties.WATERLOGGED) && !state.get(Properties.WATERLOGGED);
+        }
+        return false;
     }
 
     @Unique
     private void setWaterLevel(ServerWorld world, BlockPos pos, int level, boolean falling) {
+        BlockState currentState = world.getBlockState(pos);
+
         if (level <= 0) {
-            world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL);
+            // Remove water - check if it's a waterlogged block first
+            if (currentState.contains(Properties.WATERLOGGED) && currentState.get(Properties.WATERLOGGED)) {
+                world.setBlockState(pos, currentState.with(Properties.WATERLOGGED, false), Block.NOTIFY_ALL);
+            } else if (!currentState.isAir() && currentState.getFluidState().isEmpty()) {
+                // Non-water block, don't modify
+            } else {
+                world.setBlockState(pos, Blocks.AIR.getDefaultState(), Block.NOTIFY_ALL);
+            }
         } else if (level >= 8) {
-            // Use flowing at level 8 (not source, to maintain uniform behavior)
-            FluidState newState = this.getFlowing(8, falling);
-            world.setBlockState(pos, newState.getBlockState(), Block.NOTIFY_ALL);
+            // Check if target is a waterloggable block
+            if (isWaterloggableTarget(currentState)) {
+                world.setBlockState(pos, currentState.with(Properties.WATERLOGGED, true), Block.NOTIFY_ALL);
+            } else {
+                // Use still/source for level 8 so buckets can pick it up
+                FluidState newState = this.getStill(false);
+                world.setBlockState(pos, newState.getBlockState(), Block.NOTIFY_ALL);
+            }
         } else {
-            FluidState newState = this.getFlowing(level, falling);
-            world.setBlockState(pos, newState.getBlockState(), Block.NOTIFY_ALL);
+            // Partial levels can't waterlog (you need full water)
+            // Only set if target isn't a solid block
+            if (currentState.isAir() || WaterPhysics.isWater(currentState.getFluidState().getFluid())) {
+                FluidState newState = this.getFlowing(level, falling);
+                world.setBlockState(pos, newState.getBlockState(), Block.NOTIFY_ALL);
+            }
         }
     }
 }
