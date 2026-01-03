@@ -18,6 +18,9 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * Cellular Automata Water Physics.
@@ -169,26 +172,61 @@ public abstract class FlowableFluidMixin extends Fluid {
             if (currentLevel > avgLevel) {
                 int toDistribute = currentLevel - avgLevel;
 
-                // Give 1 level to each lower neighbor until we've distributed enough
-                for (int i = 0; i < 4 && toDistribute > 0; i++) {
-                    if (canFlow[i] && neighborLevels[i] < currentLevel) {
+                // Iterative Fill Algorithm:
+                // 1. Find the lowest water level among neighbors.
+                // 2. Fill all neighbors at that lowest level by 1.
+                // 3. Repeat until toDistribute is exhausted.
+                // 4. If we don't have enough to fill all lowest neighbors, Randomize them.
 
-                        // Default give 1
-                        int give = 1;
-                        if (toDistribute > 1)
-                            give = Math.min(toDistribute, 8 - neighborLevels[i]);
-
-                        if (give > 0) {
-                            int newNeighborLevel = neighborLevels[i] + give;
-
-                            // Double check level cap
-                            if (newNeighborLevel <= 8) {
-                                setWaterLevel(world, neighbors[i], newNeighborLevel, false);
-                                world.scheduleFluidTick(neighbors[i], (Fluid) (Object) this, WATER_TICK_RATE);
-                                toDistribute -= give;
-                                currentLevel -= give;
+                while (toDistribute > 0) {
+                    // Find current minimum level among valid neighbors that we can flow into
+                    int minLevel = 9; // Max is 8
+                    for (int i = 0; i < 4; i++) {
+                        if (canFlow[i] && neighborLevels[i] < currentLevel) { // Only fill explicitly valid targets
+                            if (neighborLevels[i] < minLevel) {
+                                minLevel = neighborLevels[i];
                             }
                         }
+                    }
+
+                    // Collect all neighbors at this minimum level
+                    List<Integer> minLevelIndices = new ArrayList<>();
+                    for (int i = 0; i < 4; i++) {
+                        if (canFlow[i] && neighborLevels[i] == minLevel && neighborLevels[i] < currentLevel) {
+                            minLevelIndices.add(i);
+                        }
+                    }
+
+                    if (minLevelIndices.isEmpty()) {
+                        break; // Should not happen given logic
+                    }
+
+                    // Do we have enough to give 1 to everyone?
+                    if (toDistribute >= minLevelIndices.size()) {
+                        // Yes, give 1 to all
+                        for (int index : minLevelIndices) {
+                            neighborLevels[index]++;
+                            currentLevel--; // Update virtual current level
+                            toDistribute--;
+                        }
+                    } else {
+                        // No, we must choose lucky winners
+                        Collections.shuffle(minLevelIndices);
+                        for (int i = 0; i < toDistribute; i++) {
+                            int chosenIndex = minLevelIndices.get(i);
+                            neighborLevels[chosenIndex]++;
+                            currentLevel--;
+                        }
+                        toDistribute = 0; // All gone
+                    }
+                }
+
+                // Apply changes to world
+                for (int i = 0; i < 4; i++) {
+                    if (canFlow[i]) {
+                        // Optimization: The implementation of setWaterLevel does extensive checks.
+                        setWaterLevel(world, neighbors[i], neighborLevels[i], false);
+                        world.scheduleFluidTick(neighbors[i], (Fluid) (Object) this, WATER_TICK_RATE);
                     }
                 }
 
