@@ -67,8 +67,13 @@ public abstract class FlowableFluidMixin extends Fluid {
                 int newBelowLevel = belowLevel + transfer;
                 int newCurrentLevel = currentLevel - transfer;
 
-                // Update below
-                setWaterLevel(world, below, newBelowLevel, true);
+                // Check if water can continue falling (for falling flag)
+                BlockPos twoBelow = below.down();
+                BlockState twoBelowState = world.getBlockState(twoBelow);
+                boolean canContinueFalling = canFlowInto(world, twoBelow, twoBelowState);
+
+                // Update below - only set falling if can continue falling
+                setWaterLevel(world, below, newBelowLevel, canContinueFalling);
 
                 // Update current
                 if (newCurrentLevel <= 0) {
