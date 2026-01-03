@@ -13,7 +13,8 @@
 		"ExplosionMixin",
 		"VolatileInventoryMixin",
 		"CreeperInvoker",
-		"CreeperTrackerMixin"
+		"CreeperTrackerMixin",
+		"ItemEntityAutoPlantMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

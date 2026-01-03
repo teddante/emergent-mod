@@ -2,43 +2,94 @@
 
 The "Emergent" mod focuses on dynamic, system-driven interactions where the environment and entities react in unpredictable (but logical) ways. Here are several proposed features that align with this philosophy.
 
-## 1. Volatile Items (Item Ecology)
-**Concept**: Dropped items react to the environment physically, rather than just burning up.
-*   **Mechanic**: 
-    *   Dropped **Gunpowder**, **TNT**, or **Fire Charges** explode instantly if they touch fire, lava, or take explosion damage.
-    *   Dropped **Slime Blocks** bounce players/mobs if they land on them (item form acting as block?). *Alternative*: Slime items combine into larger slimes? (Maybe too complex).
-    *   **Focus**: Explosive reactivity.
-*   **Emergent Result**: A creeper dying in a fire might drop gunpowder, which then immediately explodes, furthering the chaos.
+---
 
-## 2. Reforestation / Self-Planting (Environmental Reactivity)
-**Concept**: Nature reclaims the world. Items dropped from decaying trees don't just despawn.
-*   **Mechanic**: 
-    *   **Saplings**, **Seeds**, **Mushrooms**, and **Sweet Berries** dropped on valid soil will automatically plant themselves after a short delay (e.g., 30 seconds).
-    *   Requires light level checks (generous ones) and block validation.
-*   **Emergent Result**: Deforested areas (or blown up areas) naturally regrow over time without player intervention. Farms can "leak" into the wild.
+## 🔥 Fire & Heat Systems
 
-## 3. Heavy Mob Trampling (Entity Dynamics)
-**Concept**: Large creatures shouldn't be stopped by fragile obstacles.
-*   **Mechanic**: 
-    *   **Ravagers**, **Iron Golems**, and **Warden** destroy specific "weak" blocks when walking through them.
-    *   **Weak Blocks**: Crops, Leaves, Glass Panes, Torches, Tall Grass, Flowers.
-*   **Emergent Result**: Fighting a Ravager near your greenhouse is a bad idea. Large mobs feel significantly heavier and more dangerous.
+### Campfire & Heat Source Ignition
+**Concept**: Open flames spread fire; heat melts ice.
+*   **Mechanics**:
+    *   Lit campfires ignite adjacent flammable blocks (logs, leaves, wool). Soul campfires exempt.
+    *   Lava/fire melt ice and snow within ~3 blocks radius over time.
+    *   Fire/lava destroys redstone dust, repeaters, and comparators.
+*   **Emergent Result**: Indoor campfires require fireproofing. Ice builds near heat sources are impossible. Redstone circuits can be sabotaged with fire.
 
-## 4. Fragile Structures (Physics/Combat)
+### Passive Arrow Ignition
+**Concept**: Arrows stuck in blocks catch fire from nearby flames.
+*   **Mechanic**: Stuck arrows check for fire/lava proximity; ignited arrows ignite the block they're embedded in.
+*   **Emergent Result**: Stray arrows in wooden structures become fire hazards during battles.
+
+---
+
+## 💥 Explosions & Physics
+
+### Enhanced Explosion Effects
+**Concept**: Explosions have realistic secondary effects.
+*   **Mechanics**:
+    *   Glass blocks/panes shatter in a larger radius than normal blast damage would allow.
+    *   Unstable blocks (sand/gravel) cascade/fall in a wider radius around blast holes.
+    *   TNT Minecarts explode when colliding at high velocity (~8 blocks/sec).
+*   **Emergent Result**: Windows are liabilities near combat. Mining explosions cause cave-ins. Derailed TNT minecarts are catastrophic.
+
+### Structural Integrity *(Complex — Config Toggle)*
+**Concept**: Unsupported blocks eventually fall.
+*   **Mechanic**: Blocks beyond a horizontal distance from support become unstable and fall like sand/gravel after a delay.
+*   **Emergent Result**: Realistic building constraints. Floating structures collapse. Mining becomes more dangerous.
+*   **Note**: High complexity, should be opt-in via config.
+
+---
+
+## 🌧️ Weather Effects
+
+### Storm Impacts
+**Concept**: Weather affects the world dynamically.
+*   **Mechanics**:
+    *   Heavy rain (thunderstorms) extinguishes exposed torches and campfires.
+    *   Lightning arcs between nearby conductive blocks (iron blocks, chains, lightning rods) within ~5 blocks, dealing reduced damage per arc.
+*   **Emergent Result**: Light security during storms becomes a priority. Metal structures become lightning magnets.
+
+---
+
+## 🧟 Mob Behavior
+
+### Skeleton Fire Avoidance
+**Concept**: Undead fear their weakness.
+*   **Mechanic**: Skeletons gain a flee goal to avoid fire blocks and burning entities (lower priority than attack).
+*   **Emergent Result**: Fire becomes a defensive tool against skeleton swarms.
+
+### Heavy Mob Trampling
+**Concept**: Large creatures destroy fragile obstacles.
+*   **Mechanic**: Ravagers, Iron Golems, and Wardens destroy weak blocks (crops, leaves, glass panes, torches, flowers) when walking.
+*   **Emergent Result**: Fighting large mobs near your greenhouse is catastrophic.
+
+---
+
+## 🌱 Item & Environmental Reactivity
+
+### Volatile Items ✅ *(Implemented)*
+**Status**: Core explosive reactivity is implemented. Dropped TNT/gunpowder/fire charges explode from fire, lava, or explosions.
+
+### Reforestation / Self-Planting
+**Concept**: Nature reclaims the world.
+*   **Mechanic**: Saplings, seeds, mushrooms, and berries dropped on valid soil auto-plant after ~30 seconds.
+*   **Emergent Result**: Deforested areas regrow naturally. Farms "leak" into the wild.
+
+---
+
+## 🏗️ Fragile Structures
+
+### Projectile & Combat Damage
 **Concept**: The world takes combat damage.
-*   **Mechanic**:
-    *   Projectiles (Arrows, Tridents) break **Glass** and **Glass Panes** upon impact.
-    *   Explosions cause "unstable" blocks (like Sand/Gravel) to cascade/fall in a wider radius than just the blast hole.
+*   **Mechanic**: Projectiles (arrows, tridents) break glass and glass panes on impact.
 *   **Emergent Result**: Windows are liabilities in skeleton shootouts.
 
-## 5. Reactive Creepers (Chain Reactions)
-**Concept**: Creepers are walking bombs, they should act like it.
-*   **Mechanic**:
-    *   If a Creeper takes **Explosion Damage** (from TNT or another Creeper), it doesn't just die; it **ignites** instantly (fuse = 0 or 10 ticks).
-*   **Emergent Result**: Chain reactions of creepers are possible in dense groups (dungeons/raids). One explosion can trigger a cluster.
+---
 
-## 6. Weather Effects (Environmental)
-**Concept**: Weather impacts basic survival elements.
-*   **Mechanic**: 
-    *   **Heavy Rain** (Thunderstorms) extinguishes Torches and Campfires that are exposed to the sky.
-*   **Emergent Result**: Maintaining light security during a storm becomes a priority.
+## ✅ Already Implemented
+
+| Feature | Status |
+|---------|--------|
+| Volatile Items (dropped explosives) | ✅ Done |
+| Reactive Creepers (chain detonation) | ✅ Done |
+| Burning Entity Fire Spread | ✅ Done |
+| Sculk Shrieker Always Summons | ✅ Done |
