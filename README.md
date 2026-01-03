@@ -46,6 +46,36 @@ Any Sculk Shrieker can now summon a Warden.
 - **Emergent Behavior**: **All** shriekers can summon Wardens.
     - **Result**: Players must be extremely careful when handling Sculk. Accidentally creating a shrieker via a Catalyst can lead to a Warden summoning in your base.
 
+### 💧 Finite Water Flow
+Water is now a finite resource that obeys volume conservation laws.
+- **Vanilla Behavior**: Placing two water sources with a gap creates a third infinite source. Water flow doesn't deplete the origin.
+- **Emergent Behavior**: **Infinite water sources are disabled. Water flow uses "Push-based Volume Splitting".**
+    - **Result**: Puddles dry up as they spread. Siphoning water from a lake will actually lower the water level.
+    - **Mechanic**: Origin blocks push their level (1-8) to targets. A target gaining Level 7 forces the origin to lose exactly 7 levels.
+    - **Pressure Spread**: High-pressure (high level) water spreads in all directions simultaneously, filling basins naturally rather than just seeking the "shortest path" to a hole.
+
+### 🌧️ Atmospheric Cycle
+The environment actively exchanges water with the terrain via weather.
+- **Vanilla Behavior**: Rain is cosmetic and doesn't affect water levels. Evaporation doesn't exist.
+- **Emergent Behavior**: **Rain refills basins, and heat evaporates exposed water.**
+    - **Accumulation**: During storms, top-level air/puddles have a chance to increase in water level.
+    - **Evaporation**: Water exposed to sky has a chance to evaporate, especially in hot biomes.
+    - **Result**: Deserts dry out puddles instantly, while Swamps and Jungles stay hydrated. Flash floods can occur during heavy thunderstorms.
+
+### 🏔️ Hydraulic Erosion
+Moving water physically alters the terrain.
+- **Vanilla Behavior**: Water flows over blocks without affecting them.
+- **Emergent Behavior**: **Flowing water has a chance to "erode" soft blocks beneath it.**
+    - **Result**: Rivers will slowly carve deeper channels into dirt, sand, and clay over time.
+    - **Mechanic**: Moving water (flowing or falling) triggers a check on the block below. Soft materials can be replaced with the fluid above or "dissolved" into air.
+
+### 🌱 Auto-Planting Seeds
+Dropped life-forms will attempt to take root.
+- **Vanilla Behavior**: Dropped seeds and saplings despawn after 5 minutes.
+- **Emergent Behavior**: **Seeds, saplings, and spores plant themselves on valid soil.**
+    - **Result**: Forests can naturally expand, and fallen seeds from harvested crops will replant themselves.
+    - **Mechanic**: Dropped ItemEntities (seeds, saplings, mushrooms, berries) perform a "growth check" after ~30 seconds of being on the ground.
+
 ## Compatibility
 
 Emergent is designed for **maximum compatibility** with vanilla Minecraft and other mods.
