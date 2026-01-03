@@ -11,6 +11,14 @@ Fire no longer "dies of old age" when spreading.
     - **Result**: Fire can spread indefinitely across forests and flammable structures.
     - **Balance**: Fire blocks still age and burnout naturally, so you won't be left with "eternal fire" blocks, but the *front* of the fire will keep moving as long as there is fuel.
 
+### 🔥 Burning Entity Fire Spread
+Entities on fire spread flames to flammable blocks they touch.
+- **Vanilla Behavior**: When a mob, player, or entity is burning, they take fire damage but do not ignite their surroundings. A burning zombie can walk through a wooden house without setting it ablaze.
+- **Emergent Behavior**: **Burning entities ignite flammable blocks they touch.**
+    - **Result**: A creeper that walked through lava will set your wooden base on fire. Flaming arrows aren't the only way to start fires anymore.
+    - **Mechanic**: The mod checks if burning entities are touching air blocks adjacent to flammable materials and randomly ignites them. Fire spreads naturally from there using vanilla mechanics (enhanced by Infinite Fire Spread above).
+    - **Balance**: Fire spread from entities has a cooldown and random chance to prevent instant infernos, making it feel natural rather than explosive.
+
 ### 🔊 Universal Warden Summoning
 Any Sculk Shrieker can now summon a Warden.
 - **Vanilla Behavior**: Only naturally generated Sculk Shriekers (placed during world generation) can summon Wardens. Player-placed or Catalyst-generated shriekers are decoration only.
