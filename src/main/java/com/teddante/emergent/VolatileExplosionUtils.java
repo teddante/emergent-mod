@@ -11,13 +11,17 @@ public class VolatileExplosionUtils {
 
     public static final TagKey<net.minecraft.item.Item> VOLATILE_EXPLOSIVES = TagKey.of(RegistryKeys.ITEM,
             Identifier.of("emergent", "volatile_explosives"));
+    public static final TagKey<net.minecraft.item.Item> HIGH_EXPLOSIVES = TagKey.of(RegistryKeys.ITEM,
+            Identifier.of("emergent", "high_explosives"));
+    public static final TagKey<net.minecraft.item.Item> LOW_EXPLOSIVES = TagKey.of(RegistryKeys.ITEM,
+            Identifier.of("emergent", "low_explosives"));
 
     /**
      * Calculates the explosion power based on a list of item stacks.
      * Uses a logarithmic scale to prevent excessive destruction.
      * Base Power: 0
-     * +1 per stack of Gunpowder/Fire Charge (approx)
-     * +4 per stack of TNT
+     * +0.25 equivalent per stack in LOW_EXPLOSIVES (Gunpowder/Fire Charge)
+     * +1.0 equivalent per stack in HIGH_EXPLOSIVES (TNT/Crystals)
      * Cap at 10.
      */
     public static float calculateExplosionPower(List<ItemStack> explosiveItems) {
@@ -28,10 +32,9 @@ public class VolatileExplosionUtils {
             if (stack.isEmpty())
                 continue;
 
-            // Check based on tag or rudimentary ID string match
-            if (stack.getItem().toString().contains("tnt")) {
+            if (stack.isIn(HIGH_EXPLOSIVES)) {
                 tntCount += stack.getCount();
-            } else {
+            } else if (stack.isIn(LOW_EXPLOSIVES)) {
                 weakCount += stack.getCount();
             }
         }
@@ -58,12 +61,6 @@ public class VolatileExplosionUtils {
     public static boolean isVolatile(ItemStack stack) {
         if (stack.isEmpty())
             return false;
-        if (stack.isIn(VOLATILE_EXPLOSIVES))
-            return true;
-
-        // Fallback: Check ID string directly in case tags fail (e.g. during dev/init
-        // issues)
-        String id = stack.getItem().toString();
-        return id.contains("tnt") || id.contains("gunpowder") || id.contains("fire_charge");
+        return stack.isIn(VOLATILE_EXPLOSIVES);
     }
 }

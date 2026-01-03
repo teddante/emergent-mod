@@ -33,7 +33,11 @@ public abstract class ExplosionMixin {
         // For now, we'll iterate directly over the provided list.
         // If concurrent modification issues arise, a copy should be made.
 
-        for (BlockPos pos : affectedBlocks) {
+        // Create a copy of the list to prevent ConcurrentModificationException
+        // if the recursive explosion modifies the original list within the same tick.
+        List<BlockPos> affectedBlocksCopy = new ArrayList<>(affectedBlocks);
+
+        for (BlockPos pos : affectedBlocksCopy) {
             BlockEntity be = world.getBlockEntity(pos);
             if (be instanceof LockableContainerBlockEntity container) {
                 // Check contents
