@@ -9,9 +9,9 @@
     - Avoid `@Redirect` unless absolutely necessary (e.g., when a value must be changed *before* it is used in logic that runs in the same tick).
 4. **Quality**: Use optimal programming paradigms and design patterns. Code must be clean, modular, and performant.
 5. **Source Code Access**: Do not guess method names or rely solely on online searches. The project includes generated Minecraft source code.
-    - **Verify Signatures**: Always verify method signatures and mapping names by checking the generated sources or using `javap`.
-    - **Generate Sources**: If sources are missing, run `./gradlew genSources` to generate them locally. This provides the correct Yarn-mapped code for the specific project version.
-    - **Locate Sources**: Generated sources are stored in the Gradle cache (e.g., `~/.gradle/caches/fabric-loom/.../minecraft-merged-...-sources.jar`). Identifying and reading this JAR is the canonical way to reference vanilla code.
+    - **Local Source Cache**: Use the `mc-src` directory in the project root to inspect Minecraft source code. If it is empty or missing, run `scripts/extract_sources.ps1` to populate it.
+    - **Verify Signatures**: Always verify method signatures and mapping names by checking `mc-src` or using `javap`.
+    - **Generate Sources**: If sources are missing from the Gradle cache, run `./gradlew genSources` first, then run the extraction script.
 6. **Configuration Integrity**: Ensure configuration files are synchronized with codebase changes.
     - **Mixin Config**: When deleting or renaming a Mixin class, immediately update `mixins.json` to remove or update the reference.
     - **Refmap**: Ensure `refmap` is defined in `mixins.json` to prevent runtime mapping errors.

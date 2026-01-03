@@ -1,9 +1,7 @@
 {
     "replace": false,
     "values": [
-        "minecraft:tnt",
-        "minecraft:tnt_minecart",
-        "minecraft:gunpowder",
-        "minecraft:fire_charge"
+        "#emergent:high_explosives",
+        "#emergent:low_explosives"
     ]
 }
