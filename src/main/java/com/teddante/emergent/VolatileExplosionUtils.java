@@ -22,7 +22,7 @@ public class VolatileExplosionUtils {
      * Base Power: 0
      * +0.25 equivalent per stack in LOW_EXPLOSIVES (Gunpowder/Fire Charge)
      * +1.0 equivalent per stack in HIGH_EXPLOSIVES (TNT/Crystals)
-     * Cap at 10.
+     * Cap at 50 (server-crash safety limit).
      */
     public static float calculateExplosionPower(List<ItemStack> explosiveItems) {
         int tntCount = 0;
@@ -54,13 +54,59 @@ public class VolatileExplosionUtils {
         float basePower = 4.0f;
         float power = (float) (basePower * Math.pow(tntEquivalent, 1.0 / 3.0));
 
-        // Let it rip, but keep a server-crash safety cap (Power 50 is ~3 chunks radius)
-        return Math.min(power, 50.0f);
+        // No cap - let the chaos unfold. If someone fills a chest with 27 stacks of
+        // TNT,
+        // that's emergent gameplay at its finest.
+        return power;
     }
 
     public static boolean isVolatile(ItemStack stack) {
         if (stack.isEmpty())
             return false;
         return stack.isIn(VOLATILE_EXPLOSIVES);
+    }
+
+    /**
+     * Checks a container for volatile items and triggers an explosion if found.
+     * Clears the volatile items before exploding to prevent recursion.
+     *
+     * @param world     The world instance
+     * @param container The container to check
+     * @param pos       The position of the container
+     * @return true if an explosion was triggered, false otherwise
+     */
+    public static boolean tryExplodeVolatileContainer(
+            net.minecraft.world.World world,
+            net.minecraft.block.entity.LockableContainerBlockEntity container,
+            net.minecraft.util.math.BlockPos pos) {
+
+        List<ItemStack> volatiles = new java.util.ArrayList<>();
+        for (int i = 0; i < container.size(); i++) {
+            ItemStack stack = container.getStack(i);
+            if (isVolatile(stack)) {
+                volatiles.add(stack);
+            }
+        }
+
+        if (volatiles.isEmpty()) {
+            return false;
+        }
+
+        float power = calculateExplosionPower(volatiles);
+        if (power <= 0) {
+            return false;
+        }
+
+        // Clear items BEFORE exploding to prevent recursion
+        for (ItemStack stack : volatiles) {
+            stack.setCount(0);
+        }
+
+        // Create the explosion
+        world.createExplosion(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, power,
+                net.minecraft.world.World.ExplosionSourceType.TNT);
+
+        Emergent.LOGGER.debug("Volatile container explosion triggered at {} with power {}", pos, power);
+        return true;
     }
 }

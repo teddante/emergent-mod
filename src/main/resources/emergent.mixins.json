@@ -5,14 +5,12 @@
 	"compatibilityLevel": "JAVA_21",
 	"mixins": [
 		"EntityFireSpreadMixin",
-		"ExampleMixin",
 		"FireBlockMixin",
 		"SculkShriekerBlockEntityMixin",
 		"SculkShriekerBlockMixin",
 		"ReactiveCreeperMixin",
 		"ExplosionMixin",
-		"WorldAccessor",
-		"EntityAccessor",
+		"VolatileInventoryMixin",
 		"CreeperInvoker",
 		"CreeperTrackerMixin"
 	],

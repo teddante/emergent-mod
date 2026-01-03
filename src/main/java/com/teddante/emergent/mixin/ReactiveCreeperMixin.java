@@ -21,14 +21,10 @@ public abstract class ReactiveCreeperMixin {
             // Check recursion guard
             if (creeper instanceof ReactiveCreeperTracker tracker) {
                 if (tracker.emergent$isReacting()) {
-                    // System.out.println("DEBUG: Recursion guard hit for creeper " +
-                    // creeper.getId());
                     return; // Already exploding, ignore further damage
                 }
 
                 if (source.isIn(DamageTypeTags.IS_EXPLOSION)) {
-                    // System.out.println("DEBUG: Triggering reactive explosion for creeper " +
-                    // creeper.getId());
                     // Set guard
                     tracker.emergent$setReacting(true);
 

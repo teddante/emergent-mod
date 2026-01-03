@@ -4,27 +4,47 @@
 
 ## Features
 
+### 💥 Volatile Containers
+Containers with explosives detonate when caught in explosions or fire.
+- **Vanilla Behavior**: When a chest full of TNT is destroyed by an explosion, the TNT items simply drop on the ground.
+- **Emergent Behavior**: **Explosive items inside containers detonate when the container is destroyed by explosions or fire.**
+    - **Result**: Chain reactions! A single explosion can trigger nearby chests, barrels, or hoppers containing TNT to explode, which can trigger more containers, and so on.
+    - **Mechanic**: The mod checks for containers in explosion blast zones and containers targeted by fire spread. If they contain volatile items (TNT, End Crystals, Gunpowder, Fire Charges), they explode with power based on their contents.
+    - **Physics**: Explosion power scales with the cube root of total explosive mass (realistic blast physics). 64 TNT = power 16 (~4× the radius of a single TNT).
+
+### 💥 Volatile Inventory
+Entities carrying explosives detonate when damaged by fire or explosions.
+- **Vanilla Behavior**: If a player carrying TNT in their inventory catches fire, the TNT is unaffected.
+- **Emergent Behavior**: **Fire and explosion damage triggers volatile items in entity inventories.**
+    - **Result**: Players and mobs carrying explosives become walking bombs when exposed to fire or caught in blasts.
+    - **Mechanic**: Checks player inventories and mob equipment slots for volatile items when they take fire/explosion damage.
+
+### 💥 Reactive Creepers
+Creepers caught in explosions immediately explode.
+- **Vanilla Behavior**: Creepers take damage from explosions like any other mob but don't react specially.
+- **Emergent Behavior**: **Creepers instantly detonate when damaged by an explosion.**
+    - **Result**: Creeper chain reactions! One explosion near a group of creepers causes a devastating cascade.
+    - **Mechanic**: Uses a recursion guard to prevent infinite loops while still allowing chain reactions.
+
 ### 🔥 Infinite Fire Spread
 Fire no longer "dies of old age" when spreading.
-- **Vanilla Behavior**: Fire has an `age` property (0-15). As it spreads, new fire gets an older age. Once it reaches 15, it stops spreading. Behavior: Fire patches eventually burn themselves out.
+- **Vanilla Behavior**: Fire has an `age` property (0-15). As it spreads, new fire gets an older age. Once it reaches 15, it stops spreading.
 - **Emergent Behavior**: Fire always spreads as if it were "new" (age 0).
     - **Result**: Fire can spread indefinitely across forests and flammable structures.
-    - **Balance**: Fire blocks still age and burnout naturally, so you won't be left with "eternal fire" blocks, but the *front* of the fire will keep moving as long as there is fuel.
+    - **Balance**: Fire blocks still age and burnout naturally, but the *front* of the fire keeps moving as long as there is fuel.
 
 ### 🔥 Burning Entity Fire Spread
 Entities on fire spread flames to flammable blocks they touch.
-- **Vanilla Behavior**: When a mob, player, or entity is burning, they take fire damage but do not ignite their surroundings. A burning zombie can walk through a wooden house without setting it ablaze.
+- **Vanilla Behavior**: Burning mobs do not ignite their surroundings. A burning zombie can walk through a wooden house without setting it ablaze.
 - **Emergent Behavior**: **Burning entities ignite flammable blocks they touch.**
-    - **Result**: A creeper that walked through lava will set your wooden base on fire. Flaming arrows aren't the only way to start fires anymore.
-    - **Mechanic**: The mod checks if burning entities are touching air blocks adjacent to flammable materials and randomly ignites them. Fire spreads naturally from there using vanilla mechanics (enhanced by Infinite Fire Spread above).
-    - **Balance**: Fire spread from entities has a cooldown and random chance to prevent instant infernos, making it feel natural rather than explosive.
+    - **Result**: A creeper that walked through lava will set your wooden base on fire.
+    - **Balance**: Fire spread from entities has a random chance to prevent instant infernos.
 
 ### 🔊 Universal Warden Summoning
 Any Sculk Shrieker can now summon a Warden.
-- **Vanilla Behavior**: Only naturally generated Sculk Shriekers (placed during world generation) can summon Wardens. Player-placed or Catalyst-generated shriekers are decoration only.
+- **Vanilla Behavior**: Only naturally generated Sculk Shriekers can summon Wardens. Player-placed or Catalyst-generated shriekers are decoration only.
 - **Emergent Behavior**: **All** shriekers can summon Wardens.
     - **Result**: Players must be extremely careful when handling Sculk. Accidentally creating a shrieker via a Catalyst can lead to a Warden summoning in your base.
-    - **Mechanic**: The mod forces the `can_summon` check to always be true.
 
 ## Compatibility
 
