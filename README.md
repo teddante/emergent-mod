@@ -54,13 +54,12 @@ Water is now a finite resource that obeys volume conservation laws.
     - **Mechanic**: Origin blocks push their level (1-8) to targets. A target gaining Level 7 forces the origin to lose exactly 7 levels.
     - **Pressure Spread**: High-pressure (high level) water spreads in all directions simultaneously, filling basins naturally rather than just seeking the "shortest path" to a hole.
 
-### 🌧️ Atmospheric Cycle
-The environment actively exchanges water with the terrain via weather.
-- **Vanilla Behavior**: Rain is cosmetic and doesn't affect water levels. Evaporation doesn't exist.
-- **Emergent Behavior**: **Rain refills basins, and heat evaporates exposed water.**
-    - **Accumulation**: During storms, top-level air/puddles have a chance to increase in water level.
-    - **Evaporation**: Water exposed to sky has a chance to evaporate, especially in hot biomes.
-    - **Result**: Deserts dry out puddles instantly, while Swamps and Jungles stay hydrated. Flash floods can occur during heavy thunderstorms.
+### 🌧️ Rain Accumulation
+The environment actively collects water in basins during weather events.
+- **Vanilla Behavior**: Rain is cosmetic and doesn't affect water levels.
+- **Emergent Behavior**: **Rain refills puddles and basins.**
+    - **Accumulation**: During storms, sky-exposed air blocks or existing water blocks have a chance to increase in water level.
+    - **Result**: Low-lying areas will naturally fill with water during heavy thunderstorms, creating seasonal ponds or flooding previously dry paths.
 
 ### 🏔️ Hydraulic Erosion
 Moving water physically alters the terrain.
@@ -90,7 +89,7 @@ If you encounter compatibility issues with a specific mod, please [open an issue
 ## Installation
 
 1.  Download the latest `.jar` from the [Releases](https://github.com/teddante/emergent-mod/releases) page.
-2.  Install [Fabric Loader](https://fabricmc.net/) for Minecraft 1.21.1.
+2.  Install [Fabric Loader](https://fabricmc.net/) for Minecraft 1.21.11.
 3.  Place the `.jar` and [Fabric API](https://modrinth.com/mod/fabric-api) into your `mods` folder.
 
 ## Building from Source
@@ -98,7 +97,7 @@ If you encounter compatibility issues with a specific mod, please [open an issue
 This project uses Gradle.
 
 1.  Clone the repository.
-2.  Run `./gradlew build` (Linux/Mac) or `gradlew build` (Windows).
+2.  Run `./gradlew build` (Linux/Mac) or `.\gradlew build` (Windows).
 3.  The compiled jar will be in `build/libs/`.
 
 ## License
