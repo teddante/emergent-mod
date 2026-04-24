@@ -53,11 +53,11 @@ public abstract class ItemEntityVolatileMixin {
      * - Lava damage (Entity.setOnFireFromLava)
      * - Explosion damage (when not immune)
      */
-    @Inject(method = "hurtServer", at = @At("HEAD"))
+    @Inject(method = "hurtServer", at = @At("RETURN"))
     private void explodeOnDamage(ServerLevel world, DamageSource source, float amount,
             CallbackInfoReturnable<Boolean> cir) {
 
-        if (!EmergentConfig.get().volatileDroppedItems) {
+        if (!EmergentConfig.get().volatileDroppedItems || !cir.getReturnValue()) {
             return;
         }
 

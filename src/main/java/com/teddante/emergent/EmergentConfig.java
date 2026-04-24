@@ -33,8 +33,12 @@ public class EmergentConfig {
         return INSTANCE;
     }
 
+    public static void save() {
+        save(configPath());
+    }
+
     public static void load() {
-        Path path = FabricLoader.getInstance().getConfigDir().resolve(CONFIG_FILE);
+        Path path = configPath();
 
         if (Files.notExists(path)) {
             INSTANCE = new EmergentConfig();
@@ -62,5 +66,8 @@ public class EmergentConfig {
             Emergent.LOGGER.warn("Failed to write {}", path, e);
         }
     }
-}
 
+    private static Path configPath() {
+        return FabricLoader.getInstance().getConfigDir().resolve(CONFIG_FILE);
+    }
+}

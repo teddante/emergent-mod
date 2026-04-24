@@ -17,6 +17,9 @@
 	"entrypoints": {
 		"main": [
 			"com.teddante.emergent.Emergent"
+		],
+		"modmenu": [
+			"com.teddante.emergent.client.EmergentModMenuIntegration"
 		]
 	},
 	"mixins": [
@@ -27,5 +30,9 @@
 		"minecraft": ">=26.1",
 		"java": ">=25",
 		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": ">=18.0.0-alpha.8",
+		"cloth-config": ">=26.1.154"
 	}
 }

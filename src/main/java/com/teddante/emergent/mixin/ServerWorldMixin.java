@@ -27,26 +27,27 @@ public abstract class ServerWorldMixin {
 
         if (EmergentConfig.get().rainAccumulation && serverWorld.isRaining()) {
             BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
+            BlockPos surfacePos = topPos.below();
             Biome biome = serverWorld.getBiome(topPos).value();
 
             // Only accumulate in biomes where it actually rains (not freezes)
-            if (biome.getPrecipitationAt(topPos, serverWorld.getSeaLevel()) == Biome.Precipitation.RAIN) {
+            if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) == Biome.Precipitation.RAIN) {
+                BlockState surfaceState = serverWorld.getBlockState(surfacePos);
                 BlockState state = serverWorld.getBlockState(topPos);
 
-                // If air, 10% chance to start a puddle
-                if (state.isAir()) {
+                // If the exposed surface is already water, deepen that water instead of
+                // stacking a new water block above it.
+                if (surfaceState.is(Blocks.WATER)) {
+                    if (serverWorld.getRandom().nextDouble() < 0.5) {
+                        int currentLevel = surfaceState.getValue(LiquidBlock.LEVEL);
+                        if (currentLevel > 0) { // If not already a source block
+                            serverWorld.setBlock(surfacePos, surfaceState.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
+                        }
+                    }
+                } else if (state.isAir()) {
                     if (serverWorld.getRandom().nextDouble() < 0.1) {
                         // Start with level 1 water
                         serverWorld.setBlock(topPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
-                    }
-                }
-                // If it's already water, 50% chance to increase level
-                else if (state.is(Blocks.WATER)) {
-                    if (serverWorld.getRandom().nextDouble() < 0.5) {
-                        int currentLevel = state.getValue(LiquidBlock.LEVEL);
-                        if (currentLevel > 0) { // If not already a source block
-                            serverWorld.setBlock(topPos, state.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
-                        }
                     }
                 }
             }

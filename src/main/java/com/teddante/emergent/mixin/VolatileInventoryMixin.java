@@ -21,11 +21,10 @@ import java.util.List;
 @Mixin(LivingEntity.class)
 public abstract class VolatileInventoryMixin {
 
-    // Updated signature: serverWorld is the first arg
-    @Inject(method = "hurtServer", at = @At("HEAD"))
+    @Inject(method = "hurtServer", at = @At("RETURN"))
     private void checkVolatileInventory(ServerLevel world, DamageSource source, float amount,
             CallbackInfoReturnable<Boolean> cir) {
-        if (!EmergentConfig.get().volatileInventories) {
+        if (!EmergentConfig.get().volatileInventories || !cir.getReturnValue()) {
             return;
         }
 

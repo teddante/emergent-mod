@@ -277,16 +277,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             return true;
         if (WaterPhysics.isWater(state.getFluidState().getType()))
             return true;
-        // Allow flowing into waterloggable blocks
-        if (state.getBlock() instanceof LiquidBlockContainer) {
-            if (state.hasProperty(BlockStateProperties.WATERLOGGED) && !state.getValue(BlockStateProperties.WATERLOGGED)) {
-                return true;
-            }
-        }
-        // Allow flowing into any non-solid block (High grass, flowers, etc)
-        // Also allow flowing into waterloggable blocks even without the property set
-        // (redundant but safe)
-        return !state.isSolid() || state.getBlock() instanceof LiquidBlockContainer;
+        return state.canBeReplaced((Fluid) (Object) this);
     }
 
     @Unique
@@ -327,6 +318,9 @@ public abstract class FlowableFluidMixin extends Fluid {
             // Check if we need to destroy a block (Destructive Flow)
             // If the target is NOT Air and NOT Water, we must break it to place water here.
             if (!currentState.isAir() && !isWater) {
+                if (!currentState.canBeReplaced((Fluid) (Object) this)) {
+                    return;
+                }
                 Block.dropResources(currentState, world, pos,
                         currentState.hasBlockEntity() ? world.getBlockEntity(pos) : null);
                 // Note: We don't need to manually set to Air first, setting to water block
