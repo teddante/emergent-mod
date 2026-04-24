@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:glass",
+    "minecraft:tinted_glass",
+    "minecraft:calcite",
+    "minecraft:tuff",
+    "minecraft:dripstone_block"
+  ]
+}

@@ -13,13 +13,28 @@ public final class EmergentClothConfigScreen {
 
     public static Screen create(Screen parent) {
         EmergentConfig config = EmergentConfig.get();
+        final EmergentConfig.Preset[] selectedPreset = {EmergentConfig.Preset.CUSTOM};
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("emergent.config.title"))
-                .setSavingRunnable(EmergentConfig::save);
+                .setSavingRunnable(() -> {
+                    config.applyPreset(selectedPreset[0]);
+                    EmergentConfig.save();
+                });
 
         ConfigEntryBuilder entries = builder.entryBuilder();
+        ConfigCategory presets = builder.getOrCreateCategory(Component.translatable("emergent.config.category.presets"));
         ConfigCategory features = builder.getOrCreateCategory(Component.translatable("emergent.config.category.features"));
+
+        presets.addEntry(entries.startEnumSelector(
+                        Component.translatable("emergent.config.preset"),
+                        EmergentConfig.Preset.class,
+                        EmergentConfig.Preset.CUSTOM)
+                .setDefaultValue(EmergentConfig.Preset.CUSTOM)
+                .setEnumNameProvider(preset -> Component.translatable(((EmergentConfig.Preset) preset).translationKey()))
+                .setTooltip(Component.translatable("emergent.config.preset.tooltip"))
+                .setSaveConsumer(value -> selectedPreset[0] = value)
+                .build());
 
         features.addEntry(entries.startBooleanToggle(
                         Component.translatable("emergent.config.volatile_containers"),
@@ -107,6 +122,14 @@ public final class EmergentClothConfigScreen {
                 .setDefaultValue(true)
                 .setTooltip(Component.translatable("emergent.config.auto_planting.tooltip"))
                 .setSaveConsumer(value -> config.autoPlanting = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.material_reactions"),
+                        config.materialReactions)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.material_reactions.tooltip"))
+                .setSaveConsumer(value -> config.materialReactions = value)
                 .build());
 
         return builder.build();

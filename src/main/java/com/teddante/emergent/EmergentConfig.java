@@ -28,6 +28,19 @@ public class EmergentConfig {
     public boolean rainAccumulation = true;
     public boolean hydraulicErosion = true;
     public boolean autoPlanting = true;
+    public boolean materialReactions = true;
+
+    public enum Preset {
+        CUSTOM,
+        VANILLA_PLUS,
+        REALISTIC,
+        CHAOTIC,
+        HARDCORE_PHYSICS;
+
+        public String translationKey() {
+            return "emergent.config.preset." + name().toLowerCase(java.util.Locale.ROOT);
+        }
+    }
 
     public static EmergentConfig get() {
         return INSTANCE;
@@ -35,6 +48,69 @@ public class EmergentConfig {
 
     public static void save() {
         save(configPath());
+    }
+
+    public void applyPreset(Preset preset) {
+        switch (preset) {
+            case VANILLA_PLUS -> {
+                volatileContainers = true;
+                volatileDroppedItems = true;
+                volatileInventories = false;
+                reactiveCreepers = true;
+                infiniteFireSpread = false;
+                burningEntityFireSpread = false;
+                universalWardenSummoning = false;
+                finiteWaterFlow = false;
+                rainAccumulation = false;
+                hydraulicErosion = false;
+                autoPlanting = true;
+                materialReactions = true;
+            }
+            case REALISTIC -> {
+                volatileContainers = true;
+                volatileDroppedItems = true;
+                volatileInventories = true;
+                reactiveCreepers = true;
+                infiniteFireSpread = false;
+                burningEntityFireSpread = true;
+                universalWardenSummoning = false;
+                finiteWaterFlow = true;
+                rainAccumulation = true;
+                hydraulicErosion = true;
+                autoPlanting = true;
+                materialReactions = true;
+            }
+            case CHAOTIC -> {
+                volatileContainers = true;
+                volatileDroppedItems = true;
+                volatileInventories = true;
+                reactiveCreepers = true;
+                infiniteFireSpread = true;
+                burningEntityFireSpread = true;
+                universalWardenSummoning = true;
+                finiteWaterFlow = false;
+                rainAccumulation = true;
+                hydraulicErosion = true;
+                autoPlanting = true;
+                materialReactions = true;
+            }
+            case HARDCORE_PHYSICS -> {
+                volatileContainers = true;
+                volatileDroppedItems = true;
+                volatileInventories = true;
+                reactiveCreepers = true;
+                infiniteFireSpread = true;
+                burningEntityFireSpread = true;
+                universalWardenSummoning = true;
+                finiteWaterFlow = true;
+                rainAccumulation = true;
+                hydraulicErosion = true;
+                autoPlanting = true;
+                materialReactions = true;
+            }
+            case CUSTOM -> {
+            }
+        }
     }
 
     public static void load() {

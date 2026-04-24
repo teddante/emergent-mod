@@ -75,6 +75,14 @@ Dropped life-forms will attempt to take root.
     - **Result**: Forests can naturally expand, and fallen seeds from harvested crops will replant themselves.
     - **Mechanic**: Dropped ItemEntities (seeds, saplings, mushrooms, berries) perform a "growth check" after ~30 seconds of being on the ground.
 
+### Tag-Driven Material Reactions
+Blocks can opt into physical reactions through data tags.
+- **Fire**: Blocks in `#emergent:chars_in_fire` can char when fire tries to consume them.
+- **Water**: Blocks in `#emergent:erodes_in_water`, `#emergent:washes_away_in_water`, and `#emergent:brittle` participate in hydraulic erosion.
+- **Conductivity**: Blocks in `#emergent:conductive` react when finite water flows nearby, causing redstone updates and wire power loss.
+- **Rain**: Blocks in `#emergent:rain_oxidizes` use vanilla copper weathering, while `#emergent:rain_grows` uses vanilla bonemeal/growth behavior.
+- **Compatibility**: Other mods can add their own blocks to these tags without Java integration.
+
 ## Configuration
 
 Emergent writes `config/emergent.json` the first time it starts. Each feature can be toggled independently:
@@ -91,7 +99,8 @@ Emergent writes `config/emergent.json` the first time it starts. Each feature ca
   "finiteWaterFlow": true,
   "rainAccumulation": true,
   "hydraulicErosion": true,
-  "autoPlanting": true
+  "autoPlanting": true,
+  "materialReactions": true
 }
 ```
 

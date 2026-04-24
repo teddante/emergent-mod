@@ -2,6 +2,7 @@ package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.WaterPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -307,10 +308,12 @@ public abstract class FlowableFluidMixin extends Fluid {
             // Check if target is a waterloggable block
             if (isWaterloggableTarget(currentState)) {
                 world.setBlock(pos, currentState.setValue(BlockStateProperties.WATERLOGGED, true), 3);
+                emergent$afterWaterPlaced(world, pos);
             } else {
                 // Use still/source for level 8 so buckets can pick it up
                 FluidState newState = this.getSource(false);
                 world.setBlock(pos, newState.createLegacyBlock(), 3);
+                emergent$afterWaterPlaced(world, pos);
             }
         } else {
             // Partial levels (1-7)
@@ -330,6 +333,14 @@ public abstract class FlowableFluidMixin extends Fluid {
             // CRITICAL FIX: Always pass falling=false for partial levels.
             FluidState newState = this.getFlowing(level, false);
             world.setBlock(pos, newState.createLegacyBlock(), 3);
+            emergent$afterWaterPlaced(world, pos);
+        }
+    }
+
+    @Unique
+    private void emergent$afterWaterPlaced(ServerLevel world, BlockPos pos) {
+        if (EmergentConfig.get().materialReactions) {
+            MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());
         }
     }
 }

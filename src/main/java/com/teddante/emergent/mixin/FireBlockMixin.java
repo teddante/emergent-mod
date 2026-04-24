@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -24,6 +25,12 @@ public abstract class FireBlockMixin {
         // If we are about to spread fire TO a block, check if that block is a volatile
         // container.
         // We only care if it's a server world (explosions are server-side).
+        if (world instanceof ServerLevel serverWorld && EmergentConfig.get().materialReactions
+                && MaterialReactions.tryCharFromFire(serverWorld, pos, world.getBlockState(pos), random)) {
+            ci.cancel();
+            return;
+        }
+
         if (EmergentConfig.get().volatileContainers && world instanceof ServerLevel) {
 
             // Check if the target block is a volatile container

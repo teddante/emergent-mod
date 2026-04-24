@@ -93,12 +93,22 @@ public class ErosionPhysics {
         if (state.is(BlockTags.FEATURES_CANNOT_REPLACE))
             return;
 
+        if (!state.is(MaterialReactionTags.ERODES_IN_WATER)
+                && !state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)
+                && !state.is(MaterialReactionTags.BRITTLE)
+                && !DEGRADATION_MAP.containsKey(state.getBlock())) {
+            return;
+        }
+
         // Resistance R = Hardness^2
         float hardness = state.getDestroySpeed(world, pos);
         if (hardness < 0)
             return; // Unbreakable
 
         float resistance = hardness * hardness;
+        if (state.is(MaterialReactionTags.BRITTLE)) {
+            resistance *= 0.5f;
+        }
         if (resistance < 0.1f)
             resistance = 0.1f;
 
@@ -123,8 +133,7 @@ public class ErosionPhysics {
             world.playSound(null, pos, SoundEvents.GRAVEL_BREAK, SoundSource.BLOCKS, 0.5f, 0.8f);
         } else {
             float hardness = state.getDestroySpeed(world, pos);
-            if (hardness < 1.0f || state.is(BlockTags.SAND) || state.is(Blocks.GRAVEL)
-                    || state.is(BlockTags.DIRT)) {
+            if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
                 Emergent.LOGGER.info("Erosion (Washing) at {} [{}]: {} -> AIR",
                         pos.toShortString(),
                         String.format("%.2f", hardness),

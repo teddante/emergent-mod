@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.MaterialReactions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.biome.Biome;
@@ -49,6 +50,11 @@ public abstract class ServerWorldMixin {
                         // Start with level 1 water
                         serverWorld.setBlock(topPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
                     }
+                }
+
+                if (EmergentConfig.get().materialReactions) {
+                    MaterialReactions.tryRainOxidize(serverWorld, surfacePos, surfaceState, serverWorld.getRandom());
+                    MaterialReactions.tryRainGrow(serverWorld, topPos, state, serverWorld.getRandom());
                 }
             }
         }
