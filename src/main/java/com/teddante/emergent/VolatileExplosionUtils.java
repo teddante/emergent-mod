@@ -1,20 +1,24 @@
 package com.teddante.emergent;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 
 import java.util.List;
 
 public class VolatileExplosionUtils {
 
-    public static final TagKey<net.minecraft.item.Item> VOLATILE_EXPLOSIVES = TagKey.of(RegistryKeys.ITEM,
-            Identifier.of("emergent", "volatile_explosives"));
-    public static final TagKey<net.minecraft.item.Item> HIGH_EXPLOSIVES = TagKey.of(RegistryKeys.ITEM,
-            Identifier.of("emergent", "high_explosives"));
-    public static final TagKey<net.minecraft.item.Item> LOW_EXPLOSIVES = TagKey.of(RegistryKeys.ITEM,
-            Identifier.of("emergent", "low_explosives"));
+    public static final TagKey<Item> VOLATILE_EXPLOSIVES = TagKey.create(Registries.ITEM,
+            Identifier.parse("emergent:volatile_explosives"));
+    public static final TagKey<Item> HIGH_EXPLOSIVES = TagKey.create(Registries.ITEM,
+            Identifier.parse("emergent:high_explosives"));
+    public static final TagKey<Item> LOW_EXPLOSIVES = TagKey.create(Registries.ITEM,
+            Identifier.parse("emergent:low_explosives"));
 
     /**
      * Calculates the explosion power based on a list of item stacks.
@@ -32,9 +36,9 @@ public class VolatileExplosionUtils {
             if (stack.isEmpty())
                 continue;
 
-            if (stack.isIn(HIGH_EXPLOSIVES)) {
+            if (stack.is(HIGH_EXPLOSIVES)) {
                 tntCount += stack.getCount();
-            } else if (stack.isIn(LOW_EXPLOSIVES)) {
+            } else if (stack.is(LOW_EXPLOSIVES)) {
                 weakCount += stack.getCount();
             }
         }
@@ -63,7 +67,7 @@ public class VolatileExplosionUtils {
     public static boolean isVolatile(ItemStack stack) {
         if (stack.isEmpty())
             return false;
-        return stack.isIn(VOLATILE_EXPLOSIVES);
+        return stack.is(VOLATILE_EXPLOSIVES);
     }
 
     /**
@@ -76,13 +80,13 @@ public class VolatileExplosionUtils {
      * @return true if an explosion was triggered, false otherwise
      */
     public static boolean tryExplodeVolatileContainer(
-            net.minecraft.world.World world,
-            net.minecraft.block.entity.LockableContainerBlockEntity container,
-            net.minecraft.util.math.BlockPos pos) {
+            Level world,
+            RandomizableContainerBlockEntity container,
+            BlockPos pos) {
 
         List<ItemStack> volatiles = new java.util.ArrayList<>();
-        for (int i = 0; i < container.size(); i++) {
-            ItemStack stack = container.getStack(i);
+        for (int i = 0; i < container.getContainerSize(); i++) {
+            ItemStack stack = container.getItem(i);
             if (isVolatile(stack)) {
                 volatiles.add(stack);
             }
@@ -103,8 +107,8 @@ public class VolatileExplosionUtils {
         }
 
         // Create the explosion
-        world.createExplosion(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, power,
-                net.minecraft.world.World.ExplosionSourceType.TNT);
+        world.explode(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, power,
+                Level.ExplosionInteraction.TNT);
 
         Emergent.LOGGER.debug("Volatile container explosion triggered at {} with power {}", pos, power);
         return true;

@@ -1,7 +1,7 @@
 package com.teddante.emergent;
 
-import net.minecraft.fluid.Fluid;
-import net.minecraft.fluid.WaterFluid;
+import net.minecraft.world.level.material.Fluid;
+import net.minecraft.world.level.material.WaterFluid;
 
 /**
  * Centralized water physics helper.
@@ -20,3 +20,4 @@ public final class WaterPhysics {
         return fluid instanceof WaterFluid;
     }
 }
+

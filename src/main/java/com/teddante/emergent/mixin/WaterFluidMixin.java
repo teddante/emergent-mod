@@ -1,23 +1,25 @@
 package com.teddante.emergent.mixin;
 
-import net.minecraft.fluid.WaterFluid;
-import net.minecraft.server.world.ServerWorld;
+import com.teddante.emergent.EmergentConfig;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.level.material.WaterFluid;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
 /**
  * Water physics mixin.
- * Disables infinite water regeneration for volume conservation.
+ * Disables source conversion for volume conservation.
  */
 @Mixin(WaterFluid.class)
 public abstract class WaterFluidMixin {
 
     /**
      * @author Emergent Mod
-     * @reason Disable infinite water regeneration for volume conservation.
+     * @reason Disable water source conversion for volume conservation.
      */
     @Overwrite
-    protected boolean isInfinite(ServerWorld world) {
-        return false;
+    protected boolean canConvertToSource(ServerLevel world) {
+        return !EmergentConfig.get().finiteWaterFlow && world.getGameRules().get(GameRules.WATER_SOURCE_CONVERSION);
     }
 }

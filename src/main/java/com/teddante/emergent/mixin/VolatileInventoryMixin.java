@@ -1,14 +1,15 @@
 package com.teddante.emergent.mixin;
 
+import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.VolatileExplosionUtils;
-import net.minecraft.entity.EquipmentSlot;
-import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.tag.DamageTypeTags;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.world.World;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,30 +22,32 @@ import java.util.List;
 public abstract class VolatileInventoryMixin {
 
     // Updated signature: serverWorld is the first arg
-    @Inject(method = "damage", at = @At("HEAD"))
-    private void checkVolatileInventory(ServerWorld world, DamageSource source, float amount,
+    @Inject(method = "hurtServer", at = @At("HEAD"))
+    private void checkVolatileInventory(ServerLevel world, DamageSource source, float amount,
             CallbackInfoReturnable<Boolean> cir) {
-        // World is ServerWorld, so logic only runs on server. Perfect.
+        if (!EmergentConfig.get().volatileInventories) {
+            return;
+        }
 
-        boolean isFire = source.isIn(DamageTypeTags.IS_FIRE);
-        boolean isExplosion = source.isIn(DamageTypeTags.IS_EXPLOSION);
+        boolean isFire = source.is(DamageTypeTags.IS_FIRE);
+        boolean isExplosion = source.is(DamageTypeTags.IS_EXPLOSION);
 
         if (isFire || isExplosion) {
             LivingEntity entity = (LivingEntity) (Object) this;
             List<ItemStack> volatiles = new ArrayList<>();
 
-            if (entity instanceof PlayerEntity player) {
+            if (entity instanceof Player player) {
                 // Main Inventory
-                for (int i = 0; i < player.getInventory().size(); i++) {
-                    ItemStack stack = player.getInventory().getStack(i);
+                for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+                    ItemStack stack = player.getInventory().getItem(i);
                     if (VolatileExplosionUtils.isVolatile(stack)) {
                         volatiles.add(stack);
                     }
                 }
             } else {
                 // Check Equipment
-                for (EquipmentSlot slot : EquipmentSlot.values()) {
-                    ItemStack stack = entity.getEquippedStack(slot);
+                for (EquipmentSlot slot : EquipmentSlot.VALUES) {
+                    ItemStack stack = entity.getItemBySlot(slot);
                     if (VolatileExplosionUtils.isVolatile(stack)) {
                         volatiles.add(stack);
                     }
@@ -60,8 +63,8 @@ public abstract class VolatileInventoryMixin {
                         stack.setCount(0);
                     }
 
-                    world.createExplosion(null, entity.getX(), entity.getY(), entity.getZ(), power,
-                            World.ExplosionSourceType.TNT);
+                    world.explode(null, entity.getX(), entity.getY(), entity.getZ(), power,
+                            Level.ExplosionInteraction.TNT);
                 }
             }
         }

@@ -1,15 +1,15 @@
 package com.teddante.emergent;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.fluid.FluidState;
-import net.minecraft.registry.tag.BlockTags;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.sound.SoundCategory;
-import net.minecraft.sound.SoundEvents;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -37,24 +37,24 @@ public class ErosionPhysics {
         DEGRADATION_MAP.put(Blocks.RED_SANDSTONE, Blocks.RED_SAND);
     }
 
-    public static void attemptErosion(ServerWorld world, BlockPos fluidPos, FluidState fluidState) {
+    public static void attemptErosion(ServerLevel world, BlockPos fluidPos, FluidState fluidState) {
         // 1. Get 3D Velocity Vector (The "Push" of the water)
-        Vec3d velocity = fluidState.getVelocity(world, fluidPos);
-        double speedSq = velocity.lengthSquared();
+        Vec3 velocity = fluidState.getFlow(world, fluidPos);
+        double speedSq = velocity.lengthSqr();
 
         if (speedSq < 0.001)
             return; // Too still to erode
 
         // 2. Define Total Energy
-        float level = fluidState.getLevel();
+        float level = fluidState.getAmount();
         // Mass (level) * velocity^2 = Kinetic Energy
         float energyMultiplier = 25.0f; // Tuning constant for "Oomph"
         float totalEnergy = (float) (level * speedSq * energyMultiplier);
 
         // 3. 3D Momentum Raycast
         // We cast a ray from the center of the water block along the velocity vector.
-        Vec3d start = Vec3d.ofCenter(fluidPos);
-        Vec3d direction = velocity.normalize();
+        Vec3 start = Vec3.atCenterOf(fluidPos);
+        Vec3 direction = velocity.normalize();
 
         // Raycast steps (0.5 blocks per step)
         int maxSteps = 10; // Up to 5 blocks distance
@@ -62,8 +62,8 @@ public class ErosionPhysics {
         BlockState targetState = null;
 
         for (int i = 1; i <= maxSteps; i++) {
-            Vec3d current = start.add(direction.multiply(i * 0.5));
-            BlockPos checkPos = BlockPos.ofFloored(current.x, current.y, current.z);
+            Vec3 current = start.add(direction.scale(i * 0.5));
+            BlockPos checkPos = BlockPos.containing(current.x, current.y, current.z);
 
             // Skip the source block itself
             if (checkPos.equals(fluidPos))
@@ -86,15 +86,15 @@ public class ErosionPhysics {
         }
     }
 
-    private static void attemptBlockBreak(ServerWorld world, BlockPos pos, BlockState state, float energy) {
+    private static void attemptBlockBreak(ServerLevel world, BlockPos pos, BlockState state, float energy) {
         // Common Checks
-        if (state.isOf(Blocks.BEDROCK) || state.isOf(Blocks.OBSIDIAN))
+        if (state.is(Blocks.BEDROCK) || state.is(Blocks.OBSIDIAN))
             return;
-        if (state.isIn(BlockTags.FEATURES_CANNOT_REPLACE))
+        if (state.is(BlockTags.FEATURES_CANNOT_REPLACE))
             return;
 
         // Resistance R = Hardness^2
-        float hardness = state.getHardness(world, pos);
+        float hardness = state.getDestroySpeed(world, pos);
         if (hardness < 0)
             return; // Unbreakable
 
@@ -105,31 +105,31 @@ public class ErosionPhysics {
         // Probability P = (E / R) * k
         double probability = (energy / resistance) * 0.005; // 0.5% Base Chance
 
-        if (world.random.nextDouble() < probability) {
+        if (world.getRandom().nextDouble() < probability) {
             erodeBlock(world, pos, state);
         }
     }
 
-    private static void erodeBlock(ServerWorld world, BlockPos pos, BlockState state) {
+    private static void erodeBlock(ServerLevel world, BlockPos pos, BlockState state) {
         Block convertedBlock = DEGRADATION_MAP.get(state.getBlock());
 
         if (convertedBlock != null) {
             Emergent.LOGGER.info("Erosion (Weathering) at {} [{}]: {} -> {}",
                     pos.toShortString(),
-                    String.format("%.2f", state.getHardness(world, pos)),
+                    String.format("%.2f", state.getDestroySpeed(world, pos)),
                     state.getBlock().getName().getString(),
                     convertedBlock.getName().getString());
-            world.setBlockState(pos, convertedBlock.getDefaultState());
-            world.playSound(null, pos, SoundEvents.BLOCK_GRAVEL_BREAK, SoundCategory.BLOCKS, 0.5f, 0.8f);
+            world.setBlockAndUpdate(pos, convertedBlock.defaultBlockState());
+            world.playSound(null, pos, SoundEvents.GRAVEL_BREAK, SoundSource.BLOCKS, 0.5f, 0.8f);
         } else {
-            float hardness = state.getHardness(world, pos);
-            if (hardness < 1.0f || state.isIn(BlockTags.SAND) || state.isOf(Blocks.GRAVEL)
-                    || state.isIn(BlockTags.DIRT)) {
+            float hardness = state.getDestroySpeed(world, pos);
+            if (hardness < 1.0f || state.is(BlockTags.SAND) || state.is(Blocks.GRAVEL)
+                    || state.is(BlockTags.DIRT)) {
                 Emergent.LOGGER.info("Erosion (Washing) at {} [{}]: {} -> AIR",
                         pos.toShortString(),
                         String.format("%.2f", hardness),
                         state.getBlock().getName().getString());
-                world.breakBlock(pos, false);
+                world.destroyBlock(pos, false);
             }
         }
     }

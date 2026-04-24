@@ -1,18 +1,19 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.Emergent;
-import net.minecraft.block.BlockState;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.AutomaticItemPlacementContext;
-import net.minecraft.item.BlockItem;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.RegistryKeys;
-import net.minecraft.registry.tag.TagKey;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
+import com.teddante.emergent.EmergentConfig;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.Identifier;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.DirectionalPlaceContext;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -31,44 +32,44 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ItemEntityAutoPlantMixin {
 
     @Unique
-    private static final TagKey<Item> PLANTABLES = TagKey.of(RegistryKeys.ITEM,
-            Identifier.of("emergent", "plantables"));
+    private static final TagKey<Item> PLANTABLES = TagKey.create(Registries.ITEM,
+            Identifier.parse("emergent:plantables"));
 
     @Shadow
-    public abstract ItemStack getStack();
+    public abstract ItemStack getItem();
 
     @Shadow
-    public abstract int getItemAge();
+    public abstract int getAge();
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void tryAutoPlant(CallbackInfo ci) {
         ItemEntity self = (ItemEntity) (Object) this;
-        World world = self.getEntityWorld();
+        Level world = self.level();
 
         // Only run server-side, when on ground, after 30 seconds
-        if (world.isClient() || !self.isOnGround() || getItemAge() < 600) {
+        if (!EmergentConfig.get().autoPlanting || world.isClientSide() || !self.onGround() || getAge() < 600) {
             return;
         }
 
-        ItemStack stack = getStack();
+        ItemStack stack = getItem();
 
         // Must be a plantable BlockItem
-        if (!stack.isIn(PLANTABLES)) {
+        if (!stack.is(PLANTABLES)) {
             return;
         }
         if (!(stack.getItem() instanceof BlockItem blockItem)) {
             return;
         }
 
-        BlockPos pos = self.getBlockPos();
+        BlockPos pos = self.blockPosition();
 
         // Use vanilla's automatic placement context (same pattern as dispensers)
-        AutomaticItemPlacementContext context = new AutomaticItemPlacementContext(
+        DirectionalPlaceContext context = new DirectionalPlaceContext(
                 world, pos, Direction.DOWN, stack, Direction.UP);
 
         // Delegate entirely to vanilla placement - handles validation, sounds, game
         // events, decrement
-        if (blockItem.place(context).isAccepted()) {
+        if (blockItem.place(context).consumesAction()) {
             BlockState placed = world.getBlockState(pos);
             Emergent.LOGGER.debug("Auto-planted {} at {}", placed.getBlock(), pos);
 

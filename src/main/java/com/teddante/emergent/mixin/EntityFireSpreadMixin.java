@@ -1,13 +1,14 @@
 package com.teddante.emergent.mixin;
 
-import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.block.FireBlock;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Box;
-import net.minecraft.util.math.Direction;
-import net.minecraft.world.World;
+import com.teddante.emergent.EmergentConfig;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.FireBlock;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -29,10 +30,10 @@ public abstract class EntityFireSpreadMixin {
     @Inject(method = "tick", at = @At("TAIL"))
     private void emergent$spreadFireFromBurningEntity(CallbackInfo ci) {
         Entity self = (Entity) (Object) this;
-        World world = self.getEntityWorld();
+        Level world = self.level();
 
         // Only run on server side and if the entity is on fire
-        if (world.isClient() || !self.isOnFire()) {
+        if (!EmergentConfig.get().burningEntityFireSpread || world.isClientSide() || !self.isOnFire()) {
             return;
         }
 
@@ -44,25 +45,25 @@ public abstract class EntityFireSpreadMixin {
         FireBlock fireBlock = (FireBlock) Blocks.FIRE;
 
         // PRIORITY 1: Try to place fire at the entity's feet (creates fire trails)
-        BlockPos feetPos = self.getBlockPos();
+        BlockPos feetPos = self.blockPosition();
         if (emergent$tryPlaceFireAt(world, feetPos, fireBlock, self)) {
             // Successfully placed fire at feet, also try adjacent positions for wider trail
-            for (Direction horizontal : Direction.Type.HORIZONTAL) {
+            for (Direction horizontal : Direction.Plane.HORIZONTAL) {
                 if (world.getRandom().nextFloat() < 0.3f) { // 30% chance for each adjacent
-                    emergent$tryPlaceFireAt(world, feetPos.offset(horizontal), fireBlock, self);
+                    emergent$tryPlaceFireAt(world, feetPos.relative(horizontal), fireBlock, self);
                 }
             }
             return;
         }
 
         // PRIORITY 2: Check one block above feet (for when standing in grass/flowers)
-        BlockPos aboveFeet = feetPos.up();
+        BlockPos aboveFeet = feetPos.above();
         if (emergent$tryPlaceFireAt(world, aboveFeet, fireBlock, self)) {
             return;
         }
 
         // PRIORITY 3: Scan the entity's bounding box for any valid fire positions
-        Box box = self.getBoundingBox();
+        AABB box = self.getBoundingBox();
         int minX = (int) Math.floor(box.minX);
         int minY = (int) Math.floor(box.minY);
         int minZ = (int) Math.floor(box.minZ);
@@ -86,7 +87,7 @@ public abstract class EntityFireSpreadMixin {
      * Attempt to place fire at a position. Returns true if fire was placed.
      */
     @Unique
-    private boolean emergent$tryPlaceFireAt(World world, BlockPos pos, FireBlock fireBlock, Entity entity) {
+    private boolean emergent$tryPlaceFireAt(Level world, BlockPos pos, FireBlock fireBlock, Entity entity) {
         BlockState stateAtPos = world.getBlockState(pos);
 
         // Must be air to place fire
@@ -100,7 +101,7 @@ public abstract class EntityFireSpreadMixin {
         }
 
         // Place the fire
-        world.setBlockState(pos, fireBlock.getDefaultState(), 3);
+        world.setBlock(pos, fireBlock.defaultBlockState(), 3);
         return true;
     }
 
@@ -109,17 +110,17 @@ public abstract class EntityFireSpreadMixin {
      * Fire needs either a solid block below or a flammable block adjacent.
      */
     @Unique
-    private boolean emergent$canPlaceFireAt(World world, BlockPos pos, Entity entity) {
-        BlockPos below = pos.down();
+    private boolean emergent$canPlaceFireAt(Level world, BlockPos pos, Entity entity) {
+        BlockPos below = pos.below();
         BlockState belowState = world.getBlockState(below);
 
         // Can place fire on top of flammable blocks (wood, leaves, wool, etc.)
-        if (belowState.isBurnable()) {
+        if (belowState.ignitedByLava()) {
             return true;
         }
 
         // Can place fire on solid surfaces if there's something flammable nearby
-        if (belowState.isSolidSurface(world, below, entity, Direction.UP)) {
+        if (belowState.entityCanStandOnFace(world, below, entity, Direction.UP)) {
             return emergent$hasFlammableNeighbor(world, pos);
         }
 
@@ -130,10 +131,10 @@ public abstract class EntityFireSpreadMixin {
      * Check if there's a flammable block next to the given position.
      */
     @Unique
-    private boolean emergent$hasFlammableNeighbor(World world, BlockPos pos) {
+    private boolean emergent$hasFlammableNeighbor(Level world, BlockPos pos) {
         for (Direction direction : Direction.values()) {
-            BlockState neighbor = world.getBlockState(pos.offset(direction));
-            if (neighbor.isBurnable()) {
+            BlockState neighbor = world.getBlockState(pos.relative(direction));
+            if (neighbor.ignitedByLava()) {
                 return true;
             }
         }

@@ -75,6 +75,28 @@ Dropped life-forms will attempt to take root.
     - **Result**: Forests can naturally expand, and fallen seeds from harvested crops will replant themselves.
     - **Mechanic**: Dropped ItemEntities (seeds, saplings, mushrooms, berries) perform a "growth check" after ~30 seconds of being on the ground.
 
+## Configuration
+
+Emergent writes `config/emergent.json` the first time it starts. Each feature can be toggled independently:
+
+```json
+{
+  "volatileContainers": true,
+  "volatileDroppedItems": true,
+  "volatileInventories": true,
+  "reactiveCreepers": true,
+  "infiniteFireSpread": true,
+  "burningEntityFireSpread": true,
+  "universalWardenSummoning": true,
+  "finiteWaterFlow": true,
+  "rainAccumulation": true,
+  "hydraulicErosion": true,
+  "autoPlanting": true
+}
+```
+
+Set a value to `false` to disable that system while keeping the rest of the mod active. Servers should restart after changing the file.
+
 ## Compatibility
 
 Emergent is designed for **maximum compatibility** with vanilla Minecraft and other mods.
@@ -89,12 +111,12 @@ If you encounter compatibility issues with a specific mod, please [open an issue
 ## Installation
 
 1.  Download the latest `.jar` from the [Releases](https://github.com/teddante/emergent-mod/releases) page.
-2.  Install [Fabric Loader](https://fabricmc.net/) for Minecraft 1.21.11.
+2.  Install [Fabric Loader](https://fabricmc.net/) for Minecraft 26.1 or newer.
 3.  Place the `.jar` and [Fabric API](https://modrinth.com/mod/fabric-api) into your `mods` folder.
 
 ## Building from Source
 
-This project uses Gradle.
+This project uses Gradle and targets Minecraft 26.1.2, Fabric's unobfuscated Loom flow, and Java 25.
 
 1.  Clone the repository.
 2.  Run `./gradlew build` (Linux/Mac) or `.\gradlew build` (Windows).

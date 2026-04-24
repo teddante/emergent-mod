@@ -2,7 +2,7 @@
 	"required": true,
 	"refmap": "emergent.refmap.json",
 	"package": "com.teddante.emergent.mixin",
-	"compatibilityLevel": "JAVA_21",
+	"compatibilityLevel": "JAVA_25",
 	"mixins": [
 		"ItemEntityVolatileMixin",
 		"EntityFireSpreadMixin",

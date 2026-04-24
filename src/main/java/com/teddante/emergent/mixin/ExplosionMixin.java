@@ -1,12 +1,12 @@
 package com.teddante.emergent.mixin;
 
+import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.VolatileExplosionUtils;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.block.entity.LockableContainerBlockEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-import net.minecraft.world.explosion.ExplosionImpl;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ServerExplosion;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,15 +16,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mixin(ExplosionImpl.class)
+@Mixin(ServerExplosion.class)
 public abstract class ExplosionMixin {
 
     @Shadow
-    public abstract ServerWorld getWorld();
+    public abstract ServerLevel level();
 
-    @Inject(method = "destroyBlocks", at = @At("HEAD"))
+    @Inject(method = "interactWithBlocks", at = @At("HEAD"))
     private void checkVolatileBlocks(List<BlockPos> affectedBlocks, CallbackInfo ci) {
-        World world = this.getWorld();
+        if (!EmergentConfig.get().volatileContainers) {
+            return;
+        }
+
+        ServerLevel world = this.level();
 
         // The original code had a copy of affectedBlocks, which might be necessary
         // if the list is modified during iteration or if new explosions affect the same
@@ -38,7 +42,7 @@ public abstract class ExplosionMixin {
 
         for (BlockPos pos : affectedBlocksCopy) {
             BlockEntity be = world.getBlockEntity(pos);
-            if (be instanceof LockableContainerBlockEntity container) {
+            if (be instanceof RandomizableContainerBlockEntity container) {
                 VolatileExplosionUtils.tryExplodeVolatileContainer(world, container, pos);
             }
         }
