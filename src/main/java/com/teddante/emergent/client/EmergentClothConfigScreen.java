@@ -4,6 +4,7 @@ import com.teddante.emergent.EmergentConfig;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -19,96 +20,103 @@ public final class EmergentClothConfigScreen {
                 .setSavingRunnable(EmergentConfig::save);
 
         ConfigEntryBuilder entries = builder.entryBuilder();
-        ConfigCategory features = builder.getOrCreateCategory(Component.translatable("emergent.config.category.features"));
+        ConfigCategory presets = builder.getOrCreateCategory(
+                Component.translatable("emergent.config.category.presets"));
 
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.volatile_containers"),
-                        config.volatileContainers)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.volatile_containers.tooltip"))
-                .setSaveConsumer(value -> config.volatileContainers = value)
+        presets.addEntry(entries.startTextDescription(
+                Component.translatable("emergent.config.preset.description")).build());
+
+        presets.addEntry(entries.startBooleanToggle(
+                Component.translatable("emergent.config.preset.vanilla_plus"), false)
+                .setDefaultValue(false)
+                .setTooltip(Component.translatable("emergent.config.preset.vanilla_plus.tooltip"))
+                .setSaveConsumer(value -> applyPresetIfChecked(value, EmergentConfig.Preset.VANILLA_PLUS))
                 .build());
 
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.volatile_dropped_items"),
-                        config.volatileDroppedItems)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.volatile_dropped_items.tooltip"))
-                .setSaveConsumer(value -> config.volatileDroppedItems = value)
+        presets.addEntry(entries.startBooleanToggle(
+                Component.translatable("emergent.config.preset.realistic"), false)
+                .setDefaultValue(false)
+                .setTooltip(Component.translatable("emergent.config.preset.realistic.tooltip"))
+                .setSaveConsumer(value -> applyPresetIfChecked(value, EmergentConfig.Preset.REALISTIC))
                 .build());
 
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.volatile_inventories"),
-                        config.volatileInventories)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.volatile_inventories.tooltip"))
-                .setSaveConsumer(value -> config.volatileInventories = value)
+        presets.addEntry(entries.startBooleanToggle(
+                Component.translatable("emergent.config.preset.chaotic"), false)
+                .setDefaultValue(false)
+                .setTooltip(Component.translatable("emergent.config.preset.chaotic.tooltip"))
+                .setSaveConsumer(value -> applyPresetIfChecked(value, EmergentConfig.Preset.CHAOTIC))
                 .build());
 
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.reactive_creepers"),
-                        config.reactiveCreepers)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.reactive_creepers.tooltip"))
-                .setSaveConsumer(value -> config.reactiveCreepers = value)
+        presets.addEntry(entries.startBooleanToggle(
+                Component.translatable("emergent.config.preset.hardcore"), false)
+                .setDefaultValue(false)
+                .setTooltip(Component.translatable("emergent.config.preset.hardcore.tooltip"))
+                .setSaveConsumer(value -> applyPresetIfChecked(value, EmergentConfig.Preset.HARDCORE))
                 .build());
 
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.infinite_fire_spread"),
-                        config.infiniteFireSpread)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.infinite_fire_spread.tooltip"))
-                .setSaveConsumer(value -> config.infiniteFireSpread = value)
-                .build());
+        ConfigCategory features = builder.getOrCreateCategory(
+                Component.translatable("emergent.config.category.features"));
 
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.burning_entity_fire_spread"),
-                        config.burningEntityFireSpread)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.burning_entity_fire_spread.tooltip"))
-                .setSaveConsumer(value -> config.burningEntityFireSpread = value)
-                .build());
-
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.universal_warden_summoning"),
-                        config.universalWardenSummoning)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.universal_warden_summoning.tooltip"))
-                .setSaveConsumer(value -> config.universalWardenSummoning = value)
-                .build());
-
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.finite_water_flow"),
-                        config.finiteWaterFlow)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.finite_water_flow.tooltip"))
-                .setSaveConsumer(value -> config.finiteWaterFlow = value)
-                .build());
-
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.rain_accumulation"),
-                        config.rainAccumulation)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.rain_accumulation.tooltip"))
-                .setSaveConsumer(value -> config.rainAccumulation = value)
-                .build());
-
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.hydraulic_erosion"),
-                        config.hydraulicErosion)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.hydraulic_erosion.tooltip"))
-                .setSaveConsumer(value -> config.hydraulicErosion = value)
-                .build());
-
-        features.addEntry(entries.startBooleanToggle(
-                        Component.translatable("emergent.config.auto_planting"),
-                        config.autoPlanting)
-                .setDefaultValue(true)
-                .setTooltip(Component.translatable("emergent.config.auto_planting.tooltip"))
-                .setSaveConsumer(value -> config.autoPlanting = value)
-                .build());
+        addToggle(entries, features, "volatile_containers", config.volatileContainers,
+                v -> config.volatileContainers = v);
+        addToggle(entries, features, "volatile_dropped_items", config.volatileDroppedItems,
+                v -> config.volatileDroppedItems = v);
+        addToggle(entries, features, "volatile_inventories", config.volatileInventories,
+                v -> config.volatileInventories = v);
+        addToggle(entries, features, "reactive_creepers", config.reactiveCreepers,
+                v -> config.reactiveCreepers = v);
+        addToggle(entries, features, "infinite_fire_spread", config.infiniteFireSpread,
+                v -> config.infiniteFireSpread = v);
+        addToggle(entries, features, "burning_entity_fire_spread", config.burningEntityFireSpread,
+                v -> config.burningEntityFireSpread = v);
+        addToggle(entries, features, "universal_warden_summoning", config.universalWardenSummoning,
+                v -> config.universalWardenSummoning = v);
+        addToggle(entries, features, "finite_water_flow", config.finiteWaterFlow,
+                v -> config.finiteWaterFlow = v);
+        addToggle(entries, features, "rain_accumulation", config.rainAccumulation,
+                v -> config.rainAccumulation = v);
+        addToggle(entries, features, "hydraulic_erosion", config.hydraulicErosion,
+                v -> config.hydraulicErosion = v);
+        addToggle(entries, features, "auto_planting", config.autoPlanting,
+                v -> config.autoPlanting = v);
+        addToggle(entries, features, "smoke_and_fumes", config.smokeAndFumes,
+                v -> config.smokeAndFumes = v);
+        addToggle(entries, features, "pressure_explosions", config.pressureExplosions,
+                v -> config.pressureExplosions = v);
+        addToggle(entries, features, "structural_stress", config.structuralStress,
+                v -> config.structuralStress = v);
+        addToggle(entries, features, "fire_ecology", config.fireEcology,
+                v -> config.fireEcology = v);
+        addToggle(entries, features, "water_lava_steam", config.waterLavaSteam,
+                v -> config.waterLavaSteam = v);
+        addToggle(entries, features, "chemistry_reactions", config.chemistryReactions,
+                v -> config.chemistryReactions = v);
+        addToggle(entries, features, "creature_panic", config.creaturePanic,
+                v -> config.creaturePanic = v);
 
         return builder.build();
+    }
+
+    private static void addToggle(ConfigEntryBuilder entries, ConfigCategory category, String key,
+            boolean current, java.util.function.Consumer<Boolean> setter) {
+        category.addEntry(entries.startBooleanToggle(
+                Component.translatable("emergent.config." + key), current)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config." + key + ".tooltip"))
+                .setSaveConsumer(setter::accept)
+                .build());
+    }
+
+    private static void applyPresetIfChecked(boolean checked, EmergentConfig.Preset preset) {
+        if (!checked) {
+            return;
+        }
+        EmergentConfig.get().applyPreset(preset);
+        EmergentConfig.save();
+        // Re-open the screen so toggles reflect the applied preset.
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) {
+            mc.execute(() -> mc.setScreen(create(null)));
+        }
     }
 }

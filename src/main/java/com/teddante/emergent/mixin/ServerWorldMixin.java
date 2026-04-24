@@ -1,6 +1,8 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.FireEcology;
+import com.teddante.emergent.SmokeSystem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.biome.Biome;
@@ -25,30 +27,42 @@ public abstract class ServerWorldMixin {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
 
-        if (EmergentConfig.get().rainAccumulation && serverWorld.isRaining()) {
-            BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
-            BlockPos surfacePos = topPos.below();
-            Biome biome = serverWorld.getBiome(topPos).value();
+        // Prune expired smoke sources so the collection never grows unbounded.
+        SmokeSystem.pruneExpired(serverWorld.getGameTime());
 
-            // Only accumulate in biomes where it actually rains (not freezes)
-            if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) == Biome.Precipitation.RAIN) {
-                BlockState surfaceState = serverWorld.getBlockState(surfacePos);
-                BlockState state = serverWorld.getBlockState(topPos);
+        if (!serverWorld.isRaining()) {
+            return;
+        }
 
-                // If the exposed surface is already water, deepen that water instead of
-                // stacking a new water block above it.
-                if (surfaceState.is(Blocks.WATER)) {
-                    if (serverWorld.getRandom().nextDouble() < 0.5) {
-                        int currentLevel = surfaceState.getValue(LiquidBlock.LEVEL);
-                        if (currentLevel > 0) { // If not already a source block
-                            serverWorld.setBlock(surfacePos, surfaceState.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
-                        }
+        BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
+        BlockPos surfacePos = topPos.below();
+        Biome biome = serverWorld.getBiome(topPos).value();
+
+        if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) != Biome.Precipitation.RAIN) {
+            return;
+        }
+
+        // Rain-driven ash regrowth on burned soil.
+        FireEcology.tickRainOnAshes(serverWorld, topPos);
+
+        if (EmergentConfig.get().rainAccumulation) {
+            BlockState surfaceState = serverWorld.getBlockState(surfacePos);
+            BlockState state = serverWorld.getBlockState(topPos);
+
+            // If the exposed surface is already water, deepen that water instead of
+            // stacking a new water block above it.
+            if (surfaceState.is(Blocks.WATER)) {
+                if (serverWorld.getRandom().nextDouble() < 0.5) {
+                    int currentLevel = surfaceState.getValue(LiquidBlock.LEVEL);
+                    if (currentLevel > 0) { // If not already a source block
+                        serverWorld.setBlock(surfacePos, surfaceState.setValue(LiquidBlock.LEVEL, currentLevel - 1),
+                                3);
                     }
-                } else if (state.isAir()) {
-                    if (serverWorld.getRandom().nextDouble() < 0.1) {
-                        // Start with level 1 water
-                        serverWorld.setBlock(topPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
-                    }
+                }
+            } else if (state.isAir()) {
+                if (serverWorld.getRandom().nextDouble() < 0.1) {
+                    // Start with level 1 water
+                    serverWorld.setBlock(topPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
                 }
             }
         }

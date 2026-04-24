@@ -2,6 +2,7 @@ package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.SteamPhysics;
 import com.teddante.emergent.WaterPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -57,6 +58,10 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         if (EmergentConfig.get().hydraulicErosion) {
             ErosionPhysics.attemptErosion(world, pos, fluidState);
+        }
+
+        if (EmergentConfig.get().waterLavaSteam) {
+            SteamPhysics.tickForWater(world, pos, fluidState);
         }
 
         if (!EmergentConfig.get().finiteWaterFlow) {

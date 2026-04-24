@@ -17,7 +17,8 @@
 		"ItemEntityAutoPlantMixin",
 		"WaterFluidMixin",
 		"FlowableFluidMixin",
-		"ServerWorldMixin"
+		"ServerWorldMixin",
+		"LivingEntityAmbientHazardMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

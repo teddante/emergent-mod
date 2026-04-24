@@ -1,0 +1,9 @@
+{
+    "replace": false,
+    "values": [
+        "minecraft:sugar",
+        "minecraft:glowstone_dust",
+        "minecraft:redstone",
+        "minecraft:bone_meal"
+    ]
+}

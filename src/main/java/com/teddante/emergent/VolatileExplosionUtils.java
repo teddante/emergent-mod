@@ -101,6 +101,13 @@ public class VolatileExplosionUtils {
             return false;
         }
 
+        // Pressure scaling: confined detonations punch harder.
+        if (world instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            float confinement = PressurePhysics.confinementFactor(serverLevel, pos.getX() + 0.5,
+                    pos.getY() + 0.5, pos.getZ() + 0.5);
+            power = PressurePhysics.pressureScaledPower(power, confinement);
+        }
+
         // Clear items BEFORE exploding to prevent recursion
         for (ItemStack stack : volatiles) {
             stack.setCount(0);

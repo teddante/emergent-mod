@@ -1,12 +1,15 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.SmokeSystem;
+import com.teddante.emergent.StructuralStress;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -22,6 +25,12 @@ public abstract class ExplosionMixin {
     @Shadow
     public abstract ServerLevel level();
 
+    @Shadow
+    public abstract Vec3 center();
+
+    @Shadow
+    public abstract float radius();
+
     @Inject(method = "interactWithBlocks", at = @At("HEAD"))
     private void checkVolatileBlocks(List<BlockPos> affectedBlocks, CallbackInfo ci) {
         if (!EmergentConfig.get().volatileContainers) {
@@ -29,12 +38,6 @@ public abstract class ExplosionMixin {
         }
 
         ServerLevel world = this.level();
-
-        // The original code had a copy of affectedBlocks, which might be necessary
-        // if the list is modified during iteration or if new explosions affect the same
-        // list.
-        // For now, we'll iterate directly over the provided list.
-        // If concurrent modification issues arise, a copy should be made.
 
         // Create a copy of the list to prevent ConcurrentModificationException
         // if the recursive explosion modifies the original list within the same tick.
@@ -45,6 +48,21 @@ public abstract class ExplosionMixin {
             if (be instanceof RandomizableContainerBlockEntity container) {
                 VolatileExplosionUtils.tryExplodeVolatileContainer(world, container, pos);
             }
+        }
+    }
+
+    @Inject(method = "interactWithBlocks", at = @At("TAIL"))
+    private void emergent$postBlastEffects(List<BlockPos> affectedBlocks, CallbackInfo ci) {
+        ServerLevel world = this.level();
+        Vec3 c = this.center();
+
+        if (EmergentConfig.get().smokeAndFumes) {
+            SmokeSystem.emitExplosionSmoke(world, c.x, c.y, c.z, this.radius());
+        }
+
+        if (EmergentConfig.get().structuralStress && !affectedBlocks.isEmpty()) {
+            List<BlockPos> copy = new ArrayList<>(affectedBlocks);
+            StructuralStress.applyAfterExplosion(world, copy);
         }
     }
 }

@@ -1,0 +1,16 @@
+{
+    "replace": false,
+    "values": [
+        "#minecraft:stone_bricks",
+        "#minecraft:base_stone_overworld",
+        "#minecraft:base_stone_nether",
+        "minecraft:cobblestone",
+        "minecraft:mossy_cobblestone",
+        "minecraft:stone",
+        "minecraft:stone_bricks",
+        "minecraft:deepslate",
+        "minecraft:cobbled_deepslate",
+        "minecraft:sandstone",
+        "minecraft:red_sandstone"
+    ]
+}

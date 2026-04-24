@@ -1,14 +1,18 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.FireEcology;
+import com.teddante.emergent.SmokeSystem;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -43,5 +47,23 @@ public abstract class FireBlockMixin {
     @ModifyArg(method = "tick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/FireBlock;checkBurnOut(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;ILnet/minecraft/util/RandomSource;I)V"), index = 4)
     private int emergent$modifyFireAge(int age) {
         return EmergentConfig.get().infiniteFireSpread ? 0 : age;
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void emergent$fireSideEffects(BlockState state, ServerLevel world, BlockPos pos, RandomSource random,
+            CallbackInfo ci) {
+        // Scorch the ground below long-burning fire into coarse dirt.
+        if (EmergentConfig.get().fireEcology && random.nextInt(6) == 0) {
+            BlockPos below = pos.below();
+            BlockState belowState = world.getBlockState(below);
+            if (belowState.is(Blocks.GRASS_BLOCK) || belowState.is(Blocks.PODZOL) || belowState.is(Blocks.MYCELIUM)) {
+                FireEcology.onFireConsumes(world, below, belowState);
+            }
+        }
+
+        // Periodic ambient smoke emission.
+        if (EmergentConfig.get().smokeAndFumes) {
+            SmokeSystem.ambientSmokeParticles(world, pos, false);
+        }
     }
 }
