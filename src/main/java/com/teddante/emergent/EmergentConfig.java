@@ -29,6 +29,9 @@ public class EmergentConfig {
     public boolean hydraulicErosion = true;
     public boolean autoPlanting = true;
     public boolean materialReactions = true;
+    public boolean boundlessEnchanting = true;
+    public boolean unrestrictedEnchantments = true;
+    public boolean boundlessBrewing = true;
 
     public enum Preset {
         CUSTOM,
@@ -65,6 +68,9 @@ public class EmergentConfig {
                 hydraulicErosion = false;
                 autoPlanting = true;
                 materialReactions = true;
+                boundlessEnchanting = true;
+                unrestrictedEnchantments = true;
+                boundlessBrewing = true;
             }
             case REALISTIC -> {
                 volatileContainers = true;
@@ -79,6 +85,9 @@ public class EmergentConfig {
                 hydraulicErosion = true;
                 autoPlanting = true;
                 materialReactions = true;
+                boundlessEnchanting = true;
+                unrestrictedEnchantments = true;
+                boundlessBrewing = true;
             }
             case CHAOTIC -> {
                 volatileContainers = true;
@@ -93,6 +102,9 @@ public class EmergentConfig {
                 hydraulicErosion = true;
                 autoPlanting = true;
                 materialReactions = true;
+                boundlessEnchanting = true;
+                unrestrictedEnchantments = true;
+                boundlessBrewing = true;
             }
             case HARDCORE_PHYSICS -> {
                 volatileContainers = true;
@@ -107,6 +119,9 @@ public class EmergentConfig {
                 hydraulicErosion = true;
                 autoPlanting = true;
                 materialReactions = true;
+                boundlessEnchanting = true;
+                unrestrictedEnchantments = true;
+                boundlessBrewing = true;
             }
             case CUSTOM -> {
             }

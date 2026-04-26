@@ -124,7 +124,7 @@ public class ErosionPhysics {
         Block convertedBlock = DEGRADATION_MAP.get(state.getBlock());
 
         if (convertedBlock != null) {
-            Emergent.LOGGER.info("Erosion (Weathering) at {} [{}]: {} -> {}",
+            Emergent.LOGGER.debug("Erosion (Weathering) at {} [{}]: {} -> {}",
                     pos.toShortString(),
                     String.format("%.2f", state.getDestroySpeed(world, pos)),
                     state.getBlock().getName().getString(),
@@ -134,11 +134,18 @@ public class ErosionPhysics {
         } else {
             float hardness = state.getDestroySpeed(world, pos);
             if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
-                Emergent.LOGGER.info("Erosion (Washing) at {} [{}]: {} -> AIR",
+                Emergent.LOGGER.debug("Erosion (Washing) at {} [{}]: {} -> AIR",
                         pos.toShortString(),
                         String.format("%.2f", hardness),
                         state.getBlock().getName().getString());
                 world.destroyBlock(pos, false);
+            } else if (state.is(MaterialReactionTags.BRITTLE)) {
+                Emergent.LOGGER.debug("Erosion (Shattering) at {} [{}]: {} -> AIR",
+                        pos.toShortString(),
+                        String.format("%.2f", hardness),
+                        state.getBlock().getName().getString());
+                world.destroyBlock(pos, false);
+                world.playSound(null, pos, state.getSoundType().getBreakSound(), SoundSource.BLOCKS, 0.5f, 0.9f);
             }
         }
     }

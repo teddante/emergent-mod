@@ -1,93 +1,90 @@
 # Emergent
 
-**Emergent** is a Minecraft mod designed to make the game world feel more dynamic, dangerous, and unpredictable. It tweaks core mechanics to encourage emergent gameplay scenarios where the environment reacts in ways that can spiral out of control if not managed.
+A Minecraft Fabric mod that makes world systems interact in broader, more physical ways. Fire, water, rain, explosions, mobs, inventories, brewing, enchanting, and terrain all become more dynamic while staying configurable.
 
 ## Features
 
-### 💥 Volatile Containers
-Containers with explosives detonate when caught in explosions or fire.
-- **Vanilla Behavior**: When a chest full of TNT is destroyed by an explosion, the TNT items simply drop on the ground.
-- **Emergent Behavior**: **Explosive items inside containers detonate when the container is destroyed by explosions or fire.**
-    - **Result**: Chain reactions! A single explosion can trigger nearby chests, barrels, or hoppers containing TNT to explode, which can trigger more containers, and so on.
-    - **Mechanic**: The mod checks for containers in explosion blast zones and containers targeted by fire spread. If they contain volatile items (TNT, End Crystals, Gunpowder, Fire Charges), they explode with power based on their contents.
-    - **Physics**: Explosion power scales with the cube root of total explosive mass (realistic blast physics). 64 TNT = power 16 (~4× the radius of a single TNT).
+### Volatile Explosives
 
-### 💥 Volatile Inventory
-Entities carrying explosives detonate when damaged by fire or explosions.
-- **Vanilla Behavior**: If a player carrying TNT in their inventory catches fire, the TNT is unaffected.
-- **Emergent Behavior**: **Fire and explosion damage triggers volatile items in entity inventories.**
-    - **Result**: Players and mobs carrying explosives become walking bombs when exposed to fire or caught in blasts.
-    - **Mechanic**: Checks player inventories and mob equipment slots for volatile items when they take fire/explosion damage.
+Explosive item stacks can detonate when exposed to explosions, fire, lava, lightning, burning entities, or other configured triggers.
 
-### 💥 Reactive Creepers
-Creepers caught in explosions immediately explode.
-- **Vanilla Behavior**: Creepers take damage from explosions like any other mob but don't react specially.
-- **Emergent Behavior**: **Creepers instantly detonate when damaged by an explosion.**
-    - **Result**: Creeper chain reactions! One explosion near a group of creepers causes a devastating cascade.
-    - **Mechanic**: Uses a recursion guard to prevent infinite loops while still allowing chain reactions.
+- Dropped explosives can chain react.
+- Explosive items inside inventories or containers can detonate.
+- Nested container items, such as shulker boxes filled with TNT, are inspected too.
+- Explosion strength scales with the quantity and category of explosives.
 
-### 🔥 Infinite Fire Spread
-Fire no longer "dies of old age" when spreading.
-- **Vanilla Behavior**: Fire has an `age` property (0-15). As it spreads, new fire gets an older age. Once it reaches 15, it stops spreading.
-- **Emergent Behavior**: Fire always spreads as if it were "new" (age 0).
-    - **Result**: Fire can spread indefinitely across forests and flammable structures.
-    - **Balance**: Fire blocks still age and burnout naturally, but the *front* of the fire keeps moving as long as there is fuel.
+Example:
 
-### 🔥 Burning Entity Fire Spread
-Entities on fire spread flames to flammable blocks they touch.
-- **Vanilla Behavior**: Burning mobs do not ignite their surroundings. A burning zombie can walk through a wooden house without setting it ablaze.
-- **Emergent Behavior**: **Burning entities ignite flammable blocks they touch.**
-    - **Result**: A creeper that walked through lava will set your wooden base on fire.
-    - **Balance**: Fire spread from entities has a random chance to prevent instant infernos.
+- 1 gunpowder = tiny pop.
+- 1 TNT = vanilla-ish TNT blast.
+- 64 TNT = power 16, roughly 4x TNT radius.
 
-### 🔊 Universal Warden Summoning
-Any Sculk Shrieker can now summon a Warden.
-- **Vanilla Behavior**: Only naturally generated Sculk Shriekers can summon Wardens. Player-placed or Catalyst-generated shriekers are decoration only.
-- **Emergent Behavior**: **All** shriekers can summon Wardens.
-    - **Result**: Players must be extremely careful when handling Sculk. Accidentally creating a shrieker via a Catalyst can lead to a Warden summoning in your base.
+Tags control what counts as an explosive:
 
-### 💧 Finite Water Flow
-Water is now a finite resource that obeys volume conservation laws.
-- **Vanilla Behavior**: Placing two water sources with a gap creates a third infinite source. Water flow doesn't deplete the origin.
-- **Emergent Behavior**: **Infinite water sources are disabled. Water flow uses "Push-based Volume Splitting".**
-    - **Result**: Puddles dry up as they spread. Siphoning water from a lake will actually lower the water level.
-    - **Mechanic**: Origin blocks push their level (1-8) to targets. A target gaining Level 7 forces the origin to lose exactly 7 levels.
-    - **Pressure Spread**: High-pressure (high level) water spreads in all directions simultaneously, filling basins naturally rather than just seeking the "shortest path" to a hole.
+- `#emergent:low_explosives`
+- `#emergent:explosives`
+- `#emergent:high_explosives`
 
-### 🌧️ Rain Accumulation
-The environment actively collects water in basins during weather events.
-- **Vanilla Behavior**: Rain is cosmetic and doesn't affect water levels.
-- **Emergent Behavior**: **Rain refills puddles and basins.**
-    - **Accumulation**: During storms, sky-exposed air blocks or existing water blocks have a chance to increase in water level.
-    - **Result**: Low-lying areas will naturally fill with water during heavy thunderstorms, creating seasonal ponds or flooding previously dry paths.
+### Reactive Creepers
 
-### 🏔️ Hydraulic Erosion
-Moving water physically alters the terrain.
-- **Vanilla Behavior**: Water flows over blocks without affecting them.
-- **Emergent Behavior**: **Flowing water has a chance to "erode" soft blocks beneath it.**
-    - **Result**: Rivers will slowly carve deeper channels into dirt, sand, and clay over time.
-    - **Mechanic**: Moving water (flowing or falling) triggers a check on the block below. Soft materials can be replaced with the fluid above or "dissolved" into air.
+Creepers can react to nearby explosions instead of ignoring them.
 
-### 🌱 Auto-Planting Seeds
-Dropped life-forms will attempt to take root.
-- **Vanilla Behavior**: Dropped seeds and saplings despawn after 5 minutes.
-- **Emergent Behavior**: **Seeds, saplings, and spores plant themselves on valid soil.**
-    - **Result**: Forests can naturally expand, and fallen seeds from harvested crops will replant themselves.
-    - **Mechanic**: Dropped ItemEntities (seeds, saplings, mushrooms, berries) perform a "growth check" after ~30 seconds of being on the ground.
+### Infinite Fire Spread
 
-### Tag-Driven Material Reactions
-Blocks can opt into physical reactions through data tags.
-- **Fire**: Blocks in `#emergent:chars_in_fire` can char when fire tries to consume them.
-- **Water**: Blocks in `#emergent:erodes_in_water`, `#emergent:washes_away_in_water`, and `#emergent:brittle` participate in hydraulic erosion.
-- **Conductivity**: Blocks in `#emergent:conductive` react when finite water flows nearby, causing redstone updates and wire power loss.
-- **Rain**: Blocks in `#emergent:rain_oxidizes` use vanilla copper weathering, while `#emergent:rain_grows` uses vanilla bonemeal/growth behavior.
-- **Compatibility**: Other mods can add their own blocks to these tags without Java integration.
+Fire can keep spreading beyond vanilla limits when enabled. Placement still uses vanilla fire placement state selection so dimension behavior and modded hooks have a chance to participate.
+
+### Burning Entity Fire Spread
+
+Burning entities can ignite nearby valid blocks as they move.
+
+### Universal Warden Summoning
+
+Warden summoning behavior can be widened beyond vanilla's default restrictions.
+
+### Finite Water Flow
+
+Water sources can be prevented from regenerating infinitely, making water flow more physical.
+
+### Rain Accumulation
+
+Rain can accumulate water in exposed spaces.
+
+### Hydraulic Erosion
+
+Flowing water can erode vulnerable blocks over time. Erosion is driven by block tags and vanilla material properties where possible.
+
+### Auto Planting
+
+Dropped seeds and plantable items can eventually plant themselves when resting on valid soil. Failed attempts are throttled so invalid piles do not retry every tick forever.
+
+### Material Reactions
+
+Rain and water can interact with tagged materials.
+
+- Rain can oxidize copper-like blocks.
+- Rain can grow exposed tagged plants when the plant actually supports the growth operation.
+- Water can wash away tagged blocks.
+- Brittle blocks can shatter under erosion.
+
+### Boundless Enchanting
+
+Optional enchanting changes can remove or relax selected vanilla limits.
+
+### Boundless Brewing
+
+Optional brewing changes can extend potion amplifier or duration limits. Brewing stops matching once an effect is already at the configured cap, so ingredients are not consumed for no effect.
 
 ## Configuration
 
-Emergent writes `config/emergent.json` the first time it starts. Each feature can be toggled independently:
+The config is generated at:
 
-```json
+```text
+config/emergent.json5
+```
+
+Example:
+
+```json5
 {
   "volatileContainers": true,
   "volatileDroppedItems": true,
@@ -100,37 +97,44 @@ Emergent writes `config/emergent.json` the first time it starts. Each feature ca
   "rainAccumulation": true,
   "hydraulicErosion": true,
   "autoPlanting": true,
-  "materialReactions": true
+  "materialReactions": true,
+  "boundlessEnchanting": true,
+  "unrestrictedEnchantments": true,
+  "boundlessBrewing": true
 }
 ```
 
-Set a value to `false` to disable that system while keeping the rest of the mod active. Servers should restart after changing the file.
+## Tags
+
+Most categorical behavior is tag-driven for compatibility with vanilla and other mods.
+
+Common tag paths:
+
+```text
+data/emergent/tags/item/low_explosives.json
+data/emergent/tags/item/explosives.json
+data/emergent/tags/item/high_explosives.json
+data/emergent/tags/block/brittle.json
+data/emergent/tags/block/washes_away_in_water.json
+data/emergent/tags/block/rain_grows.json
+```
 
 ## Compatibility
 
-Emergent is designed for **maximum compatibility** with vanilla Minecraft and other mods.
+Emergent prefers vanilla APIs, block tags, item tags, block states, inventories, and standard placement/growth hooks instead of hardcoded block names.
 
-- **Vanilla-First Design**: All features use standard Minecraft APIs and block/entity methods. Fire spreads using vanilla fire blocks, flammability is checked using vanilla `isBurnable()`, and block placement uses standard `setBlockState()`.
-- **Non-Destructive Mixins**: The mod uses `@Inject` injections rather than `@Overwrite`, meaning it adds behavior without replacing vanilla code. Other mods targeting the same methods will work alongside Emergent.
-- **Modded Content Support**: Custom blocks from other mods that define proper flammability will automatically work with fire spread. Custom entities that extend Minecraft's Entity class will inherit fire-spreading behavior when burning.
-- **Performance Mods**: Fully compatible with optimization mods like Lithium, Sodium, and similar performance enhancers.
+Mixin compatibility:
 
-If you encounter compatibility issues with a specific mod, please [open an issue](https://github.com/teddante/emergent-mod/issues).
+- Most features use non-destructive injections where practical.
+- A narrow overwrite is currently used for water source conversion because the behavior must change at the exact point vanilla decides whether flowing water becomes a source.
+- Container reactions use the generic `Container` interface when available, so vanilla and modded inventories are supported more broadly than chest-like block entities only.
 
-## Installation
+## Building
 
-1.  Download the latest `.jar` from the [Releases](https://github.com/teddante/emergent-mod/releases) page.
-2.  Install [Fabric Loader](https://fabricmc.net/) for Minecraft 26.1 or newer.
-3.  Place the `.jar` and [Fabric API](https://modrinth.com/mod/fabric-api) into your `mods` folder.
-
-## Building from Source
-
-This project uses Gradle and targets Minecraft 26.1.2, Fabric's unobfuscated Loom flow, and Java 25.
-
-1.  Clone the repository.
-2.  Run `./gradlew build` (Linux/Mac) or `.\gradlew build` (Windows).
-3.  The compiled jar will be in `build/libs/`.
+```powershell
+./gradlew.bat build
+```
 
 ## License
 
-This project is licensed under the **MIT License**. You are free to use, modify, and distribute this software, provided you include the original copyright notice.
+This project is provided under the repository's license.

@@ -1,14 +1,17 @@
 package com.teddante.emergent;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
+import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class VolatileExplosionUtils {
@@ -22,11 +25,11 @@ public class VolatileExplosionUtils {
 
     /**
      * Calculates the explosion power based on a list of item stacks.
-     * Uses a logarithmic scale to prevent excessive destruction.
+     * Uses cube-root scaling so large caches grow dramatically without scaling linearly.
      * Base Power: 0
      * +0.25 equivalent per stack in LOW_EXPLOSIVES (Gunpowder/Fire Charge)
      * +1.0 equivalent per stack in HIGH_EXPLOSIVES (TNT/Crystals)
-     * Cap at 50 (server-crash safety limit).
+     * Intentionally uncapped: enormous stockpiles should remain dangerous.
      */
     public static float calculateExplosionPower(List<ItemStack> explosiveItems) {
         int tntCount = 0;
@@ -70,6 +73,26 @@ public class VolatileExplosionUtils {
         return stack.is(VOLATILE_EXPLOSIVES);
     }
 
+    public static boolean containsVolatileItems(ItemStack stack) {
+        if (isVolatile(stack)) {
+            return true;
+        }
+
+        ItemContainerContents contents = stack.get(DataComponents.CONTAINER);
+        return contents != null && contents.nonEmptyItemCopyStream().anyMatch(VolatileExplosionUtils::containsVolatileItems);
+    }
+
+    public static void collectVolatileItems(ItemStack stack, List<ItemStack> volatiles) {
+        if (isVolatile(stack)) {
+            volatiles.add(stack);
+        }
+
+        ItemContainerContents contents = stack.get(DataComponents.CONTAINER);
+        if (contents != null) {
+            contents.nonEmptyItemCopyStream().forEach(nested -> collectVolatileItems(nested, volatiles));
+        }
+    }
+
     /**
      * Checks a container for volatile items and triggers an explosion if found.
      * Clears the volatile items before exploding to prevent recursion.
@@ -81,14 +104,16 @@ public class VolatileExplosionUtils {
      */
     public static boolean tryExplodeVolatileContainer(
             Level world,
-            RandomizableContainerBlockEntity container,
+            Container container,
             BlockPos pos) {
 
-        List<ItemStack> volatiles = new java.util.ArrayList<>();
+        List<ItemStack> volatiles = new ArrayList<>();
+        List<ItemStack> stacksToClear = new ArrayList<>();
         for (int i = 0; i < container.getContainerSize(); i++) {
             ItemStack stack = container.getItem(i);
-            if (isVolatile(stack)) {
-                volatiles.add(stack);
+            if (containsVolatileItems(stack)) {
+                collectVolatileItems(stack, volatiles);
+                stacksToClear.add(stack);
             }
         }
 
@@ -102,9 +127,10 @@ public class VolatileExplosionUtils {
         }
 
         // Clear items BEFORE exploding to prevent recursion
-        for (ItemStack stack : volatiles) {
+        for (ItemStack stack : stacksToClear) {
             stack.setCount(0);
         }
+        container.setChanged();
 
         // Create the explosion
         world.explode(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5, power,

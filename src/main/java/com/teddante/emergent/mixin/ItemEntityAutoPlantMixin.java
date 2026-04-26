@@ -34,6 +34,10 @@ public abstract class ItemEntityAutoPlantMixin {
     @Unique
     private static final TagKey<Item> PLANTABLES = TagKey.create(Registries.ITEM,
             Identifier.parse("emergent:plantables"));
+    @Unique
+    private static final int PLANTING_START_AGE = 600;
+    @Unique
+    private static final int PLANTING_RETRY_INTERVAL = 100;
 
     @Shadow
     public abstract ItemStack getItem();
@@ -47,7 +51,12 @@ public abstract class ItemEntityAutoPlantMixin {
         Level world = self.level();
 
         // Only run server-side, when on ground, after 30 seconds
-        if (!EmergentConfig.get().autoPlanting || world.isClientSide() || !self.onGround() || getAge() < 600) {
+        int age = getAge();
+        if (!EmergentConfig.get().autoPlanting
+                || world.isClientSide()
+                || !self.onGround()
+                || age < PLANTING_START_AGE
+                || (age - PLANTING_START_AGE) % PLANTING_RETRY_INTERVAL != 0) {
             return;
         }
 

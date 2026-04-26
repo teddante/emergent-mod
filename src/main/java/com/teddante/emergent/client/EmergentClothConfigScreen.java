@@ -132,6 +132,30 @@ public final class EmergentClothConfigScreen {
                 .setSaveConsumer(value -> config.materialReactions = value)
                 .build());
 
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.boundless_enchanting"),
+                        config.boundlessEnchanting)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.boundless_enchanting.tooltip"))
+                .setSaveConsumer(value -> config.boundlessEnchanting = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.unrestricted_enchantments"),
+                        config.unrestrictedEnchantments)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.unrestricted_enchantments.tooltip"))
+                .setSaveConsumer(value -> config.unrestrictedEnchantments = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.boundless_brewing"),
+                        config.boundlessBrewing)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.boundless_brewing.tooltip"))
+                .setSaveConsumer(value -> config.boundlessBrewing = value)
+                .build());
+
         return builder.build();
     }
 }

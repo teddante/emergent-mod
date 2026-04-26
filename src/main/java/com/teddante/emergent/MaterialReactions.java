@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.WeatheringCopper;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
 
 import java.util.Map;
 
@@ -108,11 +109,42 @@ public final class MaterialReactions {
             return;
         }
 
-        if (state.hasProperty(BlockStateProperties.AGE_7)) {
-            int age = state.getValue(BlockStateProperties.AGE_7);
-            if (age < 7) {
-                world.setBlock(pos, state.setValue(BlockStateProperties.AGE_7, age + 1), 3);
-            }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_1)) {
+            return;
         }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_2)) {
+            return;
+        }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_3)) {
+            return;
+        }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_4)) {
+            return;
+        }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_5)) {
+            return;
+        }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_7)) {
+            return;
+        }
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_15)) {
+            return;
+        }
+        tryIncrementAge(world, pos, state, BlockStateProperties.AGE_25);
+    }
+
+    private static boolean tryIncrementAge(ServerLevel world, BlockPos pos, BlockState state, IntegerProperty property) {
+        if (!state.hasProperty(property)) {
+            return false;
+        }
+
+        int age = state.getValue(property);
+        int maxAge = property.getPossibleValues().stream().mapToInt(Integer::intValue).max().orElse(age);
+        if (age >= maxAge) {
+            return false;
+        }
+
+        world.setBlock(pos, state.setValue(property, age + 1), 3);
+        return true;
     }
 }

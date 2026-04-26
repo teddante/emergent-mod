@@ -4,13 +4,16 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.DamageTypeTags;
+import net.minecraft.world.Container;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -34,22 +37,18 @@ public abstract class VolatileInventoryMixin {
         if (isFire || isExplosion) {
             LivingEntity entity = (LivingEntity) (Object) this;
             List<ItemStack> volatiles = new ArrayList<>();
+            List<ItemStack> stacksToClear = new ArrayList<>();
 
             if (entity instanceof Player player) {
-                // Main Inventory
-                for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                    ItemStack stack = player.getInventory().getItem(i);
-                    if (VolatileExplosionUtils.isVolatile(stack)) {
-                        volatiles.add(stack);
-                    }
-                }
+                emergent$collectVolatileStacks(player.getInventory(), volatiles, stacksToClear);
             } else {
-                // Check Equipment
                 for (EquipmentSlot slot : EquipmentSlot.VALUES) {
                     ItemStack stack = entity.getItemBySlot(slot);
-                    if (VolatileExplosionUtils.isVolatile(stack)) {
-                        volatiles.add(stack);
-                    }
+                    emergent$collectVolatileStack(stack, volatiles, stacksToClear);
+                }
+
+                if (entity instanceof InventoryCarrier carrier) {
+                    emergent$collectVolatileStacks(carrier.getInventory(), volatiles, stacksToClear);
                 }
             }
 
@@ -58,7 +57,7 @@ public abstract class VolatileInventoryMixin {
                 if (power > 0) {
                     // Remove items BEFORE exploding to prevent recursion (explosion -> damage ->
                     // check inventory -> explosion)
-                    for (ItemStack stack : volatiles) {
+                    for (ItemStack stack : stacksToClear) {
                         stack.setCount(0);
                     }
 
@@ -66,6 +65,22 @@ public abstract class VolatileInventoryMixin {
                             Level.ExplosionInteraction.TNT);
                 }
             }
+        }
+    }
+
+    @Unique
+    private void emergent$collectVolatileStacks(Container container, List<ItemStack> volatiles, List<ItemStack> stacksToClear) {
+        for (int i = 0; i < container.getContainerSize(); i++) {
+            emergent$collectVolatileStack(container.getItem(i), volatiles, stacksToClear);
+        }
+        container.setChanged();
+    }
+
+    @Unique
+    private void emergent$collectVolatileStack(ItemStack stack, List<ItemStack> volatiles, List<ItemStack> stacksToClear) {
+        if (VolatileExplosionUtils.containsVolatileItems(stack)) {
+            VolatileExplosionUtils.collectVolatileItems(stack, volatiles);
+            stacksToClear.add(stack);
         }
     }
 }

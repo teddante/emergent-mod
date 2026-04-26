@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.MaterialReactionTags;
 import com.teddante.emergent.MaterialReactions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -10,6 +11,7 @@ import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
@@ -54,9 +56,33 @@ public abstract class ServerWorldMixin {
 
                 if (EmergentConfig.get().materialReactions) {
                     MaterialReactions.tryRainOxidize(serverWorld, surfacePos, surfaceState, serverWorld.getRandom());
-                    MaterialReactions.tryRainGrow(serverWorld, topPos, state, serverWorld.getRandom());
+                    emergent$tryRainGrowExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState);
                 }
             }
         }
+    }
+
+    @Unique
+    private void emergent$tryRainGrowExposedBlock(
+            ServerLevel world,
+            BlockPos topPos,
+            BlockPos surfacePos,
+            BlockState topState,
+            BlockState surfaceState) {
+        if (emergent$tryRainGrowAt(world, topPos, topState)) {
+            return;
+        }
+
+        emergent$tryRainGrowAt(world, surfacePos, surfaceState);
+    }
+
+    @Unique
+    private boolean emergent$tryRainGrowAt(ServerLevel world, BlockPos pos, BlockState state) {
+        if (!state.is(MaterialReactionTags.RAIN_GROWS)) {
+            return false;
+        }
+
+        MaterialReactions.tryRainGrow(world, pos, state, world.getRandom());
+        return true;
     }
 }

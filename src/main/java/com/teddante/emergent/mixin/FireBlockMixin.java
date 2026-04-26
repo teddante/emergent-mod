@@ -6,10 +6,10 @@ import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Container;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.entity.RandomizableContainerBlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -35,7 +35,7 @@ public abstract class FireBlockMixin {
 
             // Check if the target block is a volatile container
             BlockEntity be = world.getBlockEntity(pos);
-            if (be instanceof RandomizableContainerBlockEntity container) {
+            if (be instanceof Container container) {
                 if (VolatileExplosionUtils.tryExplodeVolatileContainer(world, container, pos)) {
                     // We destroyed the block with an explosion, cancel the fire spread
                     ci.cancel();
