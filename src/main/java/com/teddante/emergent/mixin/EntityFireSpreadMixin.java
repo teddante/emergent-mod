@@ -1,6 +1,8 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.FireWetness;
+import com.teddante.emergent.MaterialReactions;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
@@ -97,6 +99,10 @@ public abstract class EntityFireSpreadMixin {
             return false;
         }
 
+        if (FireWetness.shouldDampenIgnition(world, pos, world.getRandom())) {
+            return false;
+        }
+
         // Place the same fire state vanilla would choose for this position.
         world.setBlock(pos, BaseFireBlock.getState(world, pos), 3);
         return true;
@@ -116,6 +122,10 @@ public abstract class EntityFireSpreadMixin {
             return true;
         }
 
+        if (MaterialReactions.canReactToFire(belowState)) {
+            return true;
+        }
+
         // Can place fire on solid surfaces if there's something flammable nearby
         if (belowState.entityCanStandOnFace(world, below, entity, Direction.UP)) {
             return emergent$hasFlammableNeighbor(world, pos);
@@ -131,7 +141,7 @@ public abstract class EntityFireSpreadMixin {
     private boolean emergent$hasFlammableNeighbor(Level world, BlockPos pos) {
         for (Direction direction : Direction.values()) {
             BlockState neighbor = world.getBlockState(pos.relative(direction));
-            if (neighbor.ignitedByLava()) {
+            if (neighbor.ignitedByLava() || MaterialReactions.canReactToFire(neighbor)) {
                 return true;
             }
         }

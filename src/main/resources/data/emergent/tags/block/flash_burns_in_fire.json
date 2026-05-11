@@ -1,0 +1,17 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:wool",
+    "#minecraft:wool_carpets",
+    "minecraft:dead_bush",
+    "minecraft:short_dry_grass",
+    "minecraft:tall_dry_grass",
+    "minecraft:leaf_litter",
+    "minecraft:wildflowers",
+    "minecraft:pink_petals",
+    "minecraft:hay_block",
+    "minecraft:dried_kelp_block",
+    "minecraft:bamboo",
+    "minecraft:scaffolding"
+  ]
+}

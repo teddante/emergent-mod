@@ -23,6 +23,10 @@ public class EmergentConfig {
     public boolean reactiveCreepers = true;
     public boolean infiniteFireSpread = true;
     public boolean burningEntityFireSpread = true;
+    public boolean wetnessFireDampening = true;
+    public boolean passengerMomentumTransfer = true;
+    public boolean kineticImpacts = true;
+    public boolean ballisticInertia = true;
     public boolean universalWardenSummoning = true;
     public boolean finiteWaterFlow = true;
     public boolean rainAccumulation = true;
@@ -62,6 +66,10 @@ public class EmergentConfig {
                 reactiveCreepers = true;
                 infiniteFireSpread = false;
                 burningEntityFireSpread = false;
+                wetnessFireDampening = true;
+                passengerMomentumTransfer = false;
+                kineticImpacts = false;
+                ballisticInertia = false;
                 universalWardenSummoning = false;
                 finiteWaterFlow = false;
                 rainAccumulation = false;
@@ -79,6 +87,10 @@ public class EmergentConfig {
                 reactiveCreepers = true;
                 infiniteFireSpread = false;
                 burningEntityFireSpread = true;
+                wetnessFireDampening = true;
+                passengerMomentumTransfer = true;
+                kineticImpacts = true;
+                ballisticInertia = true;
                 universalWardenSummoning = false;
                 finiteWaterFlow = true;
                 rainAccumulation = true;
@@ -96,6 +108,10 @@ public class EmergentConfig {
                 reactiveCreepers = true;
                 infiniteFireSpread = true;
                 burningEntityFireSpread = true;
+                wetnessFireDampening = true;
+                passengerMomentumTransfer = true;
+                kineticImpacts = true;
+                ballisticInertia = true;
                 universalWardenSummoning = true;
                 finiteWaterFlow = false;
                 rainAccumulation = true;
@@ -113,6 +129,10 @@ public class EmergentConfig {
                 reactiveCreepers = true;
                 infiniteFireSpread = true;
                 burningEntityFireSpread = true;
+                wetnessFireDampening = true;
+                passengerMomentumTransfer = true;
+                kineticImpacts = true;
+                ballisticInertia = true;
                 universalWardenSummoning = true;
                 finiteWaterFlow = true;
                 rainAccumulation = true;

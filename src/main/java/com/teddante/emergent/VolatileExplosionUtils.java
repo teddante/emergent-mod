@@ -14,7 +14,7 @@ import net.minecraft.world.level.Level;
 import java.util.ArrayList;
 import java.util.List;
 
-public class VolatileExplosionUtils {
+public final class VolatileExplosionUtils {
 
     public static final TagKey<Item> VOLATILE_EXPLOSIVES = TagKey.create(Registries.ITEM,
             Identifier.parse("emergent:volatile_explosives"));
@@ -22,6 +22,9 @@ public class VolatileExplosionUtils {
             Identifier.parse("emergent:high_explosives"));
     public static final TagKey<Item> LOW_EXPLOSIVES = TagKey.create(Registries.ITEM,
             Identifier.parse("emergent:low_explosives"));
+
+    private VolatileExplosionUtils() {
+    }
 
     /**
      * Calculates the explosion power based on a list of item stacks.
@@ -32,8 +35,8 @@ public class VolatileExplosionUtils {
      * Intentionally uncapped: enormous stockpiles should remain dangerous.
      */
     public static float calculateExplosionPower(List<ItemStack> explosiveItems) {
-        int tntCount = 0;
-        int weakCount = 0;
+        double tntCount = 0.0;
+        double weakCount = 0.0;
 
         for (ItemStack stack : explosiveItems) {
             if (stack.isEmpty())

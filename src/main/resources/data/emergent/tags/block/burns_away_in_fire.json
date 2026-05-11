@@ -1,0 +1,30 @@
+{
+  "replace": false,
+  "values": [
+    "#minecraft:leaves",
+    "#minecraft:flowers",
+    "minecraft:short_grass",
+    "minecraft:tall_grass",
+    "minecraft:fern",
+    "minecraft:large_fern",
+    "minecraft:bush",
+    "minecraft:azalea",
+    "minecraft:flowering_azalea",
+    "minecraft:sweet_berry_bush",
+    "minecraft:firefly_bush",
+    "minecraft:spore_blossom",
+    "minecraft:cactus_flower",
+    "minecraft:vine",
+    "minecraft:cave_vines",
+    "minecraft:cave_vines_plant",
+    "minecraft:big_dripleaf",
+    "minecraft:big_dripleaf_stem",
+    "minecraft:small_dripleaf",
+    "minecraft:glow_lichen",
+    "minecraft:mangrove_roots",
+    "minecraft:hanging_roots",
+    "minecraft:pale_hanging_moss",
+    "minecraft:pale_moss_carpet",
+    "minecraft:moss_carpet"
+  ]
+}

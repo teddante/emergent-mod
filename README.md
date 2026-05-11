@@ -6,7 +6,7 @@ A Minecraft Fabric mod that makes world systems interact in broader, more physic
 
 ### Volatile Explosives
 
-Explosive item stacks can detonate when exposed to explosions, fire, lava, lightning, burning entities, or other configured triggers.
+Explosive item stacks can detonate when exposed to fire, lava, or explosion damage. Lightning and burning entities can trigger them indirectly when they apply those vanilla damage types.
 
 - Dropped explosives can chain react.
 - Explosive items inside inventories or containers can detonate.
@@ -24,6 +24,7 @@ Tags control what counts as an explosive:
 - `#emergent:low_explosives`
 - `#emergent:explosives`
 - `#emergent:high_explosives`
+- `#emergent:volatile_explosives`
 
 ### Reactive Creepers
 
@@ -36,6 +37,30 @@ Fire can keep spreading beyond vanilla limits when enabled. Placement still uses
 ### Burning Entity Fire Spread
 
 Burning entities can ignite nearby valid blocks as they move.
+
+### Wetness Fire Dampening
+
+Rain, waterlogged blocks, and nearby water reduce the chance that fire spreads or burning entities ignite a block. Vanilla flammability still decides what can burn, while local wetness changes how likely ignition is.
+
+Grass-like surface blocks tagged with `#emergent:scorches_to_dirt_in_fire` have their own living moisture. When fire reaches them, they can resist, scorch into dirt, or scorch and briefly carry flame above the surface.
+
+Additional fire reaction tags cover fragile organics, dry flash fuels, and dense fuels:
+
+- `#emergent:burns_away_in_fire`
+- `#emergent:flash_burns_in_fire`
+- `#emergent:sustains_fire`
+
+### Passenger Momentum Transfer
+
+Dismounting from a moving vehicle carries the vehicle's momentum into the passenger. Fast minecarts can throw players and mobs forward instead of letting them step off as if the cart were stationary, including when minecart speed has been increased by game rules or other mods. Inherited momentum briefly preserves inertia against vanilla ground friction so high-speed dismounts slide or fly farther before terrain, fluids, or collisions bleed the motion away.
+
+### Kinetic Impacts
+
+Fast minecarts, boats, falling blocks, and moving living entities can injure entities or break brittle blocks based on mass and relative speed. Falling sand, gravel, anvils, and other falling blocks transfer impact momentum instead of only relying on vanilla's special-case anvil damage.
+
+### Ballistic Inertia
+
+Airborne living entities, off-rail minecarts, boats, falling blocks, and dropped items keep more physically believable trajectories. Drag is based on simple mass versus frontal area, so dense/heavy objects hold speed better while small light objects slow more. Ground, rails, water, lava, and collisions still bleed momentum through their normal environmental rules.
 
 ### Universal Warden Summoning
 
@@ -92,6 +117,10 @@ Example:
   "reactiveCreepers": true,
   "infiniteFireSpread": true,
   "burningEntityFireSpread": true,
+  "wetnessFireDampening": true,
+  "passengerMomentumTransfer": true,
+  "kineticImpacts": true,
+  "ballisticInertia": true,
   "universalWardenSummoning": true,
   "finiteWaterFlow": true,
   "rainAccumulation": true,
@@ -114,7 +143,12 @@ Common tag paths:
 data/emergent/tags/item/low_explosives.json
 data/emergent/tags/item/explosives.json
 data/emergent/tags/item/high_explosives.json
+data/emergent/tags/item/volatile_explosives.json
 data/emergent/tags/block/brittle.json
+data/emergent/tags/block/burns_away_in_fire.json
+data/emergent/tags/block/flash_burns_in_fire.json
+data/emergent/tags/block/scorches_to_dirt_in_fire.json
+data/emergent/tags/block/sustains_fire.json
 data/emergent/tags/block/washes_away_in_water.json
 data/emergent/tags/block/rain_grows.json
 ```
@@ -133,6 +167,18 @@ Mixin compatibility:
 
 ```powershell
 ./gradlew.bat build
+```
+
+Fast local smoke check:
+
+```powershell
+.\scripts\dev_smoke.ps1
+```
+
+Build, check mixin-package hygiene, and copy the jar into the default Prism test instance:
+
+```powershell
+.\scripts\dev_smoke.ps1 -CopyToPrism
 ```
 
 ## License

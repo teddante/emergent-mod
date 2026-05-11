@@ -30,12 +30,6 @@ public abstract class ExplosionMixin {
 
         ServerLevel world = this.level();
 
-        // The original code had a copy of affectedBlocks, which might be necessary
-        // if the list is modified during iteration or if new explosions affect the same
-        // list.
-        // For now, we'll iterate directly over the provided list.
-        // If concurrent modification issues arise, a copy should be made.
-
         // Create a copy of the list to prevent ConcurrentModificationException
         // if the recursive explosion modifies the original list within the same tick.
         List<BlockPos> affectedBlocksCopy = new ArrayList<>(affectedBlocks);

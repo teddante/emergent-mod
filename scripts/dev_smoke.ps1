@@ -1,0 +1,207 @@
+param(
+    [switch]$SkipBuild,
+    [switch]$CopyToPrism,
+    [string]$PrismMinecraftDir = "C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
+)
+
+$ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+$ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$MixinConfigPath = Join-Path $ProjectRoot "src\main\resources\emergent.mixins.json"
+$MixinSourceDir = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\mixin"
+$ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
+$McSourceDir = Join-Path $ProjectRoot "mc-src"
+$JarPath = Join-Path $ProjectRoot "build\libs\emergent-1.0.0.jar"
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host "==> $Message"
+}
+
+function Assert-MixinConfig {
+    Write-Step "Checking mixin config hygiene"
+
+    if (-not (Test-Path -LiteralPath $MixinConfigPath)) {
+        throw "Missing mixin config: $MixinConfigPath"
+    }
+
+    $config = Get-Content -LiteralPath $MixinConfigPath -Raw | ConvertFrom-Json
+    if ([string]::IsNullOrWhiteSpace($config.refmap)) {
+        throw "emergent.mixins.json must define refmap."
+    }
+
+    $declaredMixins = @($config.mixins)
+    $declaredSet = @{}
+    foreach ($mixin in $declaredMixins) {
+        $declaredSet[$mixin] = $true
+        $sourcePath = Join-Path $MixinSourceDir "$mixin.java"
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "Mixin listed in emergent.mixins.json has no source file: $mixin"
+        }
+
+        $source = Get-Content -LiteralPath $sourcePath
+        $sourceText = $source -join "`n"
+        if ($sourceText.Contains("@Mixin({")) {
+            for ($i = 0; $i -lt $source.Count; $i++) {
+                if ($source[$i] -notmatch "@Unique") {
+                    continue
+                }
+
+                for ($j = $i + 1; $j -lt $source.Count; $j++) {
+                    $line = $source[$j].Trim()
+                    if ([string]::IsNullOrWhiteSpace($line)) {
+                        continue
+                    }
+
+                    if ($line -match "\)\s*\{") {
+                        throw "Multi-target mixin $mixin declares an @Unique helper method. Move helper logic outside the mixin to avoid runtime NoSuchMethodError."
+                    }
+
+                    break
+                }
+            }
+        }
+    }
+
+    Get-ChildItem -LiteralPath $MixinSourceDir -Filter "*.java" | ForEach-Object {
+        $className = $_.BaseName
+        if (-not $declaredSet.ContainsKey($className)) {
+            throw "Non-mixin helper class is inside the mixin package: $($_.FullName). Move helpers/duck interfaces outside com.teddante.emergent.mixin."
+        }
+    }
+}
+
+function Assert-ResourceHygiene {
+    Write-Step "Checking resource JSON hygiene"
+
+    Get-ChildItem -LiteralPath $ResourcesDir -Recurse -Filter "*.json" | ForEach-Object {
+        $raw = Get-Content -LiteralPath $_.FullName -Raw
+        try {
+            $raw | ConvertFrom-Json | Out-Null
+        } catch {
+            throw "Invalid JSON resource: $($_.FullName): $($_.Exception.Message)"
+        }
+
+        if ($raw.Contains("minecraft:wall_redstone_torch")) {
+            throw "Resource references removed block id minecraft:wall_redstone_torch. Use minecraft:redstone_wall_torch in Minecraft 26.1.2."
+        }
+    }
+
+    $blocksPath = Join-Path $McSourceDir "net\minecraft\block\Blocks.java"
+    $blockKeysPath = Join-Path $McSourceDir "net\minecraft\block\BlockKeys.java"
+    $itemsPath = Join-Path $McSourceDir "net\minecraft\item\Items.java"
+    $itemKeysPath = Join-Path $McSourceDir "net\minecraft\item\ItemKeys.java"
+    foreach ($path in @($blocksPath, $blockKeysPath, $itemsPath, $itemKeysPath)) {
+        if (-not (Test-Path -LiteralPath $path)) {
+            throw "Minecraft source cache is missing required registry source: $path"
+        }
+    }
+
+    $blockIds = @{}
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blocksPath -Raw), 'register\(\s*"([^"]+)"')) {
+        $blockIds["minecraft:$($match.Groups[1].Value)"] = $true
+    }
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blockKeysPath -Raw), 'of\("([^"]+)"\)')) {
+        $blockIds["minecraft:$($match.Groups[1].Value)"] = $true
+    }
+
+    $itemIds = @{}
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemsPath -Raw), 'register\(\s*"([^"]+)"')) {
+        $itemIds["minecraft:$($match.Groups[1].Value)"] = $true
+    }
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemKeysPath -Raw), 'of\("([^"]+)"\)')) {
+        $itemIds["minecraft:$($match.Groups[1].Value)"] = $true
+    }
+    foreach ($id in $blockIds.Keys) {
+        $itemIds[$id] = $true
+    }
+
+    Get-ChildItem -LiteralPath (Join-Path $ResourcesDir "data\emergent\tags") -Recurse -Filter "*.json" | ForEach-Object {
+        $json = Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json
+        $kind = if ($_.FullName -like "*\tags\block\*") { "block" } elseif ($_.FullName -like "*\tags\item\*") { "item" } else { "other" }
+        foreach ($value in @($json.values)) {
+            $id = $null
+            $required = $true
+            if ($value -is [string]) {
+                $id = $value
+            } else {
+                $id = $value.id
+                if ($null -ne $value.required) {
+                    $required = [bool]$value.required
+                }
+            }
+
+            if ([string]::IsNullOrWhiteSpace($id) -or $id.StartsWith("#") -or -not $id.StartsWith("minecraft:") -or -not $required) {
+                continue
+            }
+
+            if ($kind -eq "block" -and -not $blockIds.ContainsKey($id)) {
+                throw "Required vanilla block tag entry does not exist in local Minecraft sources: $($_.FullName): $id"
+            }
+            if ($kind -eq "item" -and -not $itemIds.ContainsKey($id)) {
+                throw "Required vanilla item tag entry does not exist in local Minecraft sources: $($_.FullName): $id"
+            }
+        }
+    }
+}
+
+function Assert-JarMixinContents {
+    Write-Step "Checking built jar mixin package contents"
+
+    if (-not (Test-Path -LiteralPath $JarPath)) {
+        throw "Expected built jar not found: $JarPath"
+    }
+
+    $config = Get-Content -LiteralPath $MixinConfigPath -Raw | ConvertFrom-Json
+    $declaredSet = @{}
+    foreach ($mixin in @($config.mixins)) {
+        $declaredSet[$mixin] = $true
+    }
+
+    $entries = & jar tf $JarPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "jar tf failed for $JarPath"
+    }
+
+    foreach ($entry in $entries) {
+        if ($entry -match "^com/teddante/emergent/mixin/([^/]+)\.class$") {
+            $baseName = $Matches[1] -replace "\$.*$", ""
+            if (-not $declaredSet.ContainsKey($baseName)) {
+                throw "Built jar contains a directly loadable helper in the mixin package: $entry"
+            }
+        }
+    }
+}
+
+Push-Location $ProjectRoot
+try {
+    Assert-MixinConfig
+    Assert-ResourceHygiene
+
+    if (-not $SkipBuild) {
+        Write-Step "Running Gradle build"
+        & .\gradlew.bat build
+        if ($LASTEXITCODE -ne 0) {
+            throw "Gradle build failed."
+        }
+    }
+
+    Assert-JarMixinContents
+
+    if ($CopyToPrism) {
+        $modsDir = Join-Path $PrismMinecraftDir "mods"
+        if (-not (Test-Path -LiteralPath $modsDir)) {
+            throw "Prism mods folder not found: $modsDir"
+        }
+
+        $targetJar = Join-Path $modsDir "emergent-1.0.0.jar"
+        Write-Step "Copying jar to Prism mods folder"
+        Copy-Item -LiteralPath $JarPath -Destination $targetJar -Force
+        Write-Host "Copied: $targetJar"
+    }
+
+    Write-Host "Smoke checks passed."
+} finally {
+    Pop-Location
+}

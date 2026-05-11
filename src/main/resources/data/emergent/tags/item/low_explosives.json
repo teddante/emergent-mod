@@ -2,6 +2,9 @@
     "replace": false,
     "values": [
         "minecraft:gunpowder",
-        "minecraft:fire_charge"
+        "minecraft:fire_charge",
+        "minecraft:firework_rocket",
+        "minecraft:firework_star",
+        "minecraft:wind_charge"
     ]
 }

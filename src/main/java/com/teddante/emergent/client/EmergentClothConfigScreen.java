@@ -85,6 +85,38 @@ public final class EmergentClothConfigScreen {
                 .build());
 
         features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.wetness_fire_dampening"),
+                        config.wetnessFireDampening)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.wetness_fire_dampening.tooltip"))
+                .setSaveConsumer(value -> config.wetnessFireDampening = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.passenger_momentum_transfer"),
+                        config.passengerMomentumTransfer)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.passenger_momentum_transfer.tooltip"))
+                .setSaveConsumer(value -> config.passengerMomentumTransfer = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.kinetic_impacts"),
+                        config.kineticImpacts)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.kinetic_impacts.tooltip"))
+                .setSaveConsumer(value -> config.kineticImpacts = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.ballistic_inertia"),
+                        config.ballisticInertia)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.ballistic_inertia.tooltip"))
+                .setSaveConsumer(value -> config.ballisticInertia = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
                         Component.translatable("emergent.config.universal_warden_summoning"),
                         config.universalWardenSummoning)
                 .setDefaultValue(true)

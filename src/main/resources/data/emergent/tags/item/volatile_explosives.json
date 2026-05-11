@@ -1,7 +1,6 @@
 {
     "replace": false,
     "values": [
-        "#emergent:high_explosives",
-        "#emergent:low_explosives"
+        "#emergent:explosives"
     ]
 }

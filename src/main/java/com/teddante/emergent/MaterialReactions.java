@@ -7,6 +7,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BonemealableBlock;
 import net.minecraft.world.level.block.RedStoneWireBlock;
@@ -19,6 +20,17 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import java.util.Map;
 
 public final class MaterialReactions {
+    private static final int CHAR_WEIGHT = 35;
+    private static final int SCORCH_WEIGHT = 55;
+    private static final int FLASH_BURN_WEIGHT = 70;
+    private static final int BURN_AWAY_WEIGHT = 50;
+    private static final float WETNESS_REACTION_DAMPENING = 0.7f;
+    private static final float MAX_WETNESS_DAMPENING = 0.85f;
+    private static final float LIVING_SURFACE_MOISTURE = 0.35f;
+    private static final float SCORCHED_SURFACE_IGNITION_CHANCE = 0.35f;
+    private static final float FLASH_UPWARD_IGNITION_CHANCE = 0.6f;
+    private static final float FLASH_SIDE_IGNITION_CHANCE = 0.35f;
+
     private static final Map<Block, Block> CHARRED_LOGS = Map.ofEntries(
             Map.entry(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG),
             Map.entry(Blocks.OAK_WOOD, Blocks.STRIPPED_OAK_WOOD),
@@ -47,11 +59,61 @@ public final class MaterialReactions {
     private MaterialReactions() {
     }
 
+    public static boolean canReactToFire(BlockState state) {
+        return state.is(MaterialReactionTags.SUSTAINS_FIRE)
+                || state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)
+                || state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE)
+                || state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE)
+                || state.is(MaterialReactionTags.CHARS_IN_FIRE) && CHARRED_LOGS.containsKey(state.getBlock());
+    }
+
+    public static boolean tryReactToFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        trySustainFire(world, pos, state, random);
+
+        int charWeight = state.is(MaterialReactionTags.CHARS_IN_FIRE) && CHARRED_LOGS.containsKey(state.getBlock()) ? CHAR_WEIGHT : 0;
+        int scorchWeight = state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE) ? SCORCH_WEIGHT : 0;
+        int flashWeight = state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE) ? FLASH_BURN_WEIGHT : 0;
+        int burnAwayWeight = state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE) ? BURN_AWAY_WEIGHT : 0;
+        int totalWeight = charWeight + scorchWeight + flashWeight + burnAwayWeight;
+        if (totalWeight <= 0) {
+            return false;
+        }
+
+        float wetness = FireWetness.getWetness(world, pos);
+        if (random.nextFloat() < Math.min(MAX_WETNESS_DAMPENING, wetness * WETNESS_REACTION_DAMPENING)) {
+            if (random.nextFloat() < 0.25f) {
+                world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.2f);
+            }
+            return true;
+        }
+
+        int roll = random.nextInt(totalWeight);
+        if (roll < charWeight) {
+            return charFromFire(world, pos, state);
+        }
+
+        roll -= charWeight;
+        if (roll < scorchWeight) {
+            return tryScorchToDirtFromFire(world, pos, state, random);
+        }
+
+        roll -= scorchWeight;
+        if (roll < flashWeight) {
+            return tryFlashBurnFromFire(world, pos, state, random);
+        }
+
+        return tryBurnAwayFromFire(world, pos, state, random);
+    }
+
     public static boolean tryCharFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
         if (!state.is(MaterialReactionTags.CHARS_IN_FIRE) || random.nextFloat() > 0.35f) {
             return false;
         }
 
+        return charFromFire(world, pos, state);
+    }
+
+    private static boolean charFromFire(ServerLevel world, BlockPos pos, BlockState state) {
         Block charredBlock = CHARRED_LOGS.get(state.getBlock());
         if (charredBlock == null) {
             return false;
@@ -64,6 +126,86 @@ public final class MaterialReactions {
 
         world.setBlock(pos, charredState, 3);
         world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.4f, 0.8f);
+        return true;
+    }
+
+    public static boolean tryScorchToDirtFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        if (!state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)) {
+            return false;
+        }
+
+        float wetness = Math.min(0.9f, FireWetness.getWetness(world, pos) + LIVING_SURFACE_MOISTURE);
+        float roll = random.nextFloat();
+
+        if (roll < wetness) {
+            if (random.nextFloat() < 0.2f) {
+                world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.2f);
+            }
+            return true;
+        }
+
+        BlockState scorchedState = Blocks.DIRT.defaultBlockState();
+        world.setBlock(pos, scorchedState, 3);
+        world.playSound(null, pos, SoundEvents.GRASS_BREAK, SoundSource.BLOCKS, 0.45f, 0.8f);
+
+        if (random.nextFloat() < SCORCHED_SURFACE_IGNITION_CHANCE) {
+            BlockPos above = pos.above();
+            if (world.getBlockState(above).isAir()) {
+                world.setBlock(above, BaseFireBlock.getState(world, above), 3);
+            }
+        }
+
+        return true;
+    }
+
+    public static boolean tryBurnAwayFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        if (!state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE)) {
+            return false;
+        }
+
+        if (FireWetness.shouldDampenIgnition(world, pos, random)) {
+            return true;
+        }
+
+        world.removeBlock(pos, false);
+        world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.6f);
+        return true;
+    }
+
+    public static boolean tryFlashBurnFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        if (!state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE)) {
+            return false;
+        }
+
+        if (random.nextFloat() < FireWetness.getWetness(world, pos) * 0.75f) {
+            return true;
+        }
+
+        world.removeBlock(pos, false);
+        world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.4f, 1.8f);
+
+        if (random.nextFloat() < FLASH_UPWARD_IGNITION_CHANCE) {
+            tryPlaceFire(world, pos.above());
+        }
+
+        if (random.nextFloat() < FLASH_SIDE_IGNITION_CHANCE) {
+            Direction direction = Direction.Plane.HORIZONTAL.getRandomDirection(random);
+            tryPlaceFire(world, pos.relative(direction));
+        }
+
+        return true;
+    }
+
+    public static boolean trySustainFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        if (!state.is(MaterialReactionTags.SUSTAINS_FIRE)) {
+            return false;
+        }
+
+        if (FireWetness.shouldDampenIgnition(world, pos, random)) {
+            return true;
+        }
+
+        tryPlaceFire(world, pos.above());
         return true;
     }
 
@@ -145,6 +287,20 @@ public final class MaterialReactions {
         }
 
         world.setBlock(pos, state.setValue(property, age + 1), 3);
+        return true;
+    }
+
+    private static boolean tryPlaceFire(ServerLevel world, BlockPos pos) {
+        if (!world.getBlockState(pos).isAir()) {
+            return false;
+        }
+
+        BlockState fireState = BaseFireBlock.getState(world, pos);
+        if (!fireState.canSurvive(world, pos)) {
+            return false;
+        }
+
+        world.setBlock(pos, fireState, 3);
         return true;
     }
 }
