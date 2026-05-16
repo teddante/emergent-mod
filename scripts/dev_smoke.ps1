@@ -1,6 +1,7 @@
 param(
     [switch]$SkipBuild,
     [switch]$CopyToPrism,
+    [switch]$RequireMinecraftSources,
     [string]$PrismMinecraftDir = ""
 )
 
@@ -174,6 +175,15 @@ function Assert-ResourceHygiene {
         }
     }
 
+    if (-not (Test-MinecraftSourceCache)) {
+        if ($RequireMinecraftSources) {
+            Ensure-MinecraftSourceCache
+        } else {
+            Write-Warning "Minecraft source cache is missing; skipping required vanilla registry ID validation. Run scripts/extract_sources.ps1 or pass -RequireMinecraftSources for the full local gate."
+            return
+        }
+    }
+
     $blocksPath = Join-Path $McSourceDir "net\minecraft\block\Blocks.java"
     $blockKeysPath = Join-Path $McSourceDir "net\minecraft\block\BlockKeys.java"
     $itemsPath = Join-Path $McSourceDir "net\minecraft\item\Items.java"
@@ -341,7 +351,6 @@ Push-Location $ProjectRoot
 try {
     Assert-MixinConfig
     Assert-RepositoryWorkflowHygiene
-    Ensure-MinecraftSourceCache
     Assert-ResourceHygiene
 
     if (-not $SkipBuild) {

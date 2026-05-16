@@ -53,6 +53,12 @@ For code changes, run:
 
 On GitHub Actions/Linux, the workflow runs the same script with PowerShell Core.
 
+For release hardening or registry/tag changes, run the deeper local gate:
+
+```powershell
+.\scripts\dev_smoke.ps1 -RequireMinecraftSources
+```
+
 For gameplay changes, also do a focused in-game smoke test and describe it in the PR.
 
 When Codex opens a PR, prefer a draft PR unless the change has already been built, smoke checked, and is ready for review.

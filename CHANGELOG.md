@@ -21,4 +21,4 @@ Target version: `0.1.0`.
 
 - Hardened mixin and resource validation to catch multi-target mixin helper issues and stale vanilla IDs before release.
 - Smoke checks now derive the release jar name from `gradle.properties` instead of assuming `emergent-1.0.0.jar`.
-- Smoke checks now generate/extract the local Minecraft source cache when missing, so CI runners can validate vanilla registry IDs without committing `mc-src`.
+- Smoke checks validate vanilla registry IDs when the local Minecraft source cache exists, with `-RequireMinecraftSources` available for release-hardening runs without forcing every PR CI job to decompile sources.

@@ -31,6 +31,8 @@ Before opening a PR:
 
 On GitHub Actions/Linux, the same script runs through PowerShell Core as `./scripts/dev_smoke.ps1`.
 
+For release hardening or registry/tag changes, run `.\scripts\dev_smoke.ps1 -RequireMinecraftSources` so vanilla block/item IDs are checked against local extracted Minecraft sources.
+
 For gameplay changes, also test in-game with the smallest world/setup that exercises the behavior. Mention that scenario in the PR.
 
 ## Versioning
