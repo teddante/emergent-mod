@@ -1,31 +1,47 @@
-name: Build Mod
+name: Build
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+      - "release/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Build and smoke check
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-      - name: Validate Gradle Wrapper
-        uses: gradle/wrapper-validation-action@v3
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - name: Set up Java 25
+        uses: actions/setup-java@v5
         with:
-          java-version: '21'
-          distribution: 'microsoft'
+          distribution: microsoft
+          java-version: "25"
 
-      - name: Make Gradle Wrapper Executable
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build with Gradle
-        run: ./gradlew build
+      - name: Smoke check
+        shell: pwsh
+        run: ./scripts/dev_smoke.ps1
 
-      - name: Upload Artifact
+      - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
-          name: Mod Jar
-          path: build/libs/*.jar
+          name: emergent-${{ github.sha }}
+          path: |
+            build/libs/*.jar
+            !build/libs/*-sources.jar

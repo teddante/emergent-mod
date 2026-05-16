@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible problem with Emergent.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make Emergent sturdier. Please include enough detail for the bug to be reproduced without guessing.
+  - type: input
+    id: minecraft-version
+    attributes:
+      label: Minecraft version
+      placeholder: "26.1.2"
+    validations:
+      required: true
+  - type: input
+    id: mod-version
+    attributes:
+      label: Emergent version
+      placeholder: "0.1.0 or commit hash"
+    validations:
+      required: true
+  - type: input
+    id: fabric-loader
+    attributes:
+      label: Fabric Loader / Fabric API
+      placeholder: "Loader 0.19.2, Fabric API 0.146.1+26.1.2"
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the behavior and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Create/load a world with...
+        2. Place/use...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or crash report
+      description: Paste the relevant latest.log/crash report section, or link to a gist/paste.
+      render: text
+  - type: textarea
+    id: mods
+    attributes:
+      label: Other installed mods
+      description: Include the mod list if the issue might involve compatibility.
+      render: text

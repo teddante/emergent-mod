@@ -165,8 +165,16 @@ Mixin compatibility:
 
 ## Building
 
+Windows:
+
 ```powershell
-./gradlew.bat build
+.\gradlew.bat build
+```
+
+macOS, Linux, and GitHub Actions:
+
+```sh
+./gradlew build
 ```
 
 Fast local smoke check:
@@ -180,6 +188,16 @@ Build, check mixin-package hygiene, and copy the jar into the default Prism test
 ```powershell
 .\scripts\dev_smoke.ps1 -CopyToPrism
 ```
+
+The smoke script reads the jar name from `gradle.properties`, so version bumps do not require editing the script.
+
+## Project Workflow
+
+Emergent targets Minecraft 26.1.x with Java 25, Fabric Loom 1.15.x, and Gradle 9.4.x. Development guidance lives in [CONTRIBUTING.md](CONTRIBUTING.md), and repository maintenance/release settings live in [docs/REPOSITORY_MAINTENANCE.md](docs/REPOSITORY_MAINTENANCE.md).
+
+Current development version: `0.1.0`. Versioning guidance lives in [docs/VERSIONING.md](docs/VERSIONING.md).
+
+GitHub Actions builds every PR to `main`, runs the local smoke checks, uploads the jar artifact, submits Gradle dependencies to GitHub's dependency graph on `main`, and creates releases from annotated `v*` tags.
 
 ## License
 
