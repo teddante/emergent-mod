@@ -70,6 +70,8 @@ Warden summoning behavior can be widened beyond vanilla's default restrictions.
 
 Water and lava sources can be prevented from regenerating infinitely. Fluids move as conserved block-volume units: gravity is preferred, horizontal flow equalizes lower neighboring cells, thin layers settle as puddles, and source water can fill waterloggable blocks through vanilla fluid-container hooks. Lava uses its vanilla slower tick timing and solidifies against water.
 
+Local thermal reactions keep those fluids connected to nearby heat: lava falling into water makes stone, water solidifies lava into obsidian or cobblestone based on the lava state, lava beside water solidifies like vanilla contact, and shallow water evaporates near tagged heat sources.
+
 ### Rain Accumulation
 
 Rain can slowly accumulate water in exposed spaces. Absorbent surfaces such as dirt, grass, mud, and sand collect less readily, while existing shallow water can deepen over time.
@@ -147,6 +149,7 @@ data/emergent/tags/item/volatile_explosives.json
 data/emergent/tags/block/brittle.json
 data/emergent/tags/block/burns_away_in_fire.json
 data/emergent/tags/block/flash_burns_in_fire.json
+data/emergent/tags/block/heat_sources.json
 data/emergent/tags/block/scorches_to_dirt_in_fire.json
 data/emergent/tags/block/sustains_fire.json
 data/emergent/tags/block/washes_away_in_water.json

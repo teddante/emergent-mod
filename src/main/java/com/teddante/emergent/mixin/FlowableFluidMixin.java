@@ -3,6 +3,7 @@ package com.teddante.emergent.mixin;
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.WaterPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -71,13 +72,28 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         int tickDelay = fluid.getTickDelay(world);
 
+        if (WaterPhysics.isWater(fluid)) {
+            int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
+            if (evaporatedLevel != currentLevel) {
+                if (evaporatedLevel <= 0) {
+                    removeWaterAt(world, pos, blockState);
+                } else {
+                    setWaterLevel(world, pos, evaporatedLevel, false);
+                    world.scheduleTick(pos, fluid, tickDelay);
+                }
+                return;
+            }
+        }
+
         // STEP 1: Gravity - try to flow down
         BlockPos below = pos.below();
         BlockState belowBlockState = world.getBlockState(below);
         FluidState belowFluidState = belowBlockState.getFluidState();
 
-        if (tryReactWithOtherFiniteFluid(world, below, belowBlockState, Direction.DOWN)) {
-            world.scheduleTick(pos, fluid, tickDelay);
+        ThermalPhysics.FluidContactResult downwardThermalResult = tryReactWithOtherFiniteFluid(
+                world, pos, currentLevel, below, belowBlockState, Direction.DOWN);
+        if (downwardThermalResult.reacted()) {
+            updateSourceAfterThermalReaction(world, pos, blockState, fluid, tickDelay, downwardThermalResult);
             return;
         }
 
@@ -159,8 +175,6 @@ public abstract class FlowableFluidMixin extends Fluid {
         Direction[] directions = new Direction[4];
         int[] neighborLevels = new int[4];
         boolean[] canFlow = new boolean[4];
-        boolean reactedWithNeighbor = false;
-
         int idx = 0;
         for (Direction dir : Direction.Plane.HORIZONTAL) {
             BlockPos neighborPos = pos.relative(dir);
@@ -168,10 +182,11 @@ public abstract class FlowableFluidMixin extends Fluid {
             neighbors[idx] = neighborPos;
             directions[idx] = dir;
 
-            if (tryReactWithOtherFiniteFluid(world, neighborPos, neighborBlockState, dir)) {
-                reactedWithNeighbor = true;
-                canFlow[idx] = false;
-                neighborLevels[idx] = 0;
+            ThermalPhysics.FluidContactResult thermalResult = tryReactWithOtherFiniteFluid(
+                    world, pos, currentLevel, neighborPos, neighborBlockState, dir);
+            if (thermalResult.reacted()) {
+                updateSourceAfterThermalReaction(world, pos, blockState, fluid, tickDelay, thermalResult);
+                return;
             } else if (canFlowInto(world, neighborPos, neighborBlockState, dir)
                     && !isWaterloggableTarget(world, neighborPos, neighborBlockState)) {
                 FluidState neighborFluidState = neighborBlockState.getFluidState();
@@ -285,7 +300,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         // Schedule next tick if we still have water
         FluidState newState = world.getFluidState(pos);
-        if (reactedWithNeighbor || (!newState.isEmpty() && currentLevel > WaterPhysics.settledThinLayerAmount(fluid))) {
+        if (!newState.isEmpty() && currentLevel > WaterPhysics.settledThinLayerAmount(fluid)) {
             world.scheduleTick(pos, fluid, tickDelay);
         }
     }
@@ -445,27 +460,36 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
-    private boolean tryReactWithOtherFiniteFluid(ServerLevel world, BlockPos pos, BlockState state, Direction direction) {
+    private ThermalPhysics.FluidContactResult tryReactWithOtherFiniteFluid(
+            ServerLevel world,
+            BlockPos sourcePos,
+            int sourceLevel,
+            BlockPos targetPos,
+            BlockState targetState,
+            Direction direction) {
         Fluid fluid = (Fluid) (Object) this;
-        FluidState targetFluidState = state.getFluidState();
-        if (targetFluidState.isEmpty() || WaterPhysics.isSameFluid(fluid, targetFluidState)) {
-            return false;
+        return ThermalPhysics.reactFiniteFluidContact(world, sourcePos, fluid, sourceLevel, targetPos, targetState, direction);
+    }
+
+    @Unique
+    private void updateSourceAfterThermalReaction(
+            ServerLevel world,
+            BlockPos sourcePos,
+            BlockState sourceState,
+            Fluid fluid,
+            int tickDelay,
+            ThermalPhysics.FluidContactResult result) {
+        if (result.sourceBlockChanged()) {
+            return;
         }
 
-        if (WaterPhysics.isLava(fluid) && WaterPhysics.isWater(targetFluidState.getType()) && direction == Direction.DOWN) {
-            world.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
-            world.levelEvent(1501, pos, 0);
-            return true;
+        if (result.remainingSourceAmount() <= 0) {
+            removeWaterAt(world, sourcePos, sourceState);
+            return;
         }
 
-        if (WaterPhysics.isWater(fluid) && WaterPhysics.isLava(targetFluidState.getType())) {
-            Block block = targetFluidState.isSource() ? Blocks.OBSIDIAN : Blocks.COBBLESTONE;
-            world.setBlockAndUpdate(pos, block.defaultBlockState());
-            world.levelEvent(1501, pos, 0);
-            return true;
-        }
-
-        return false;
+        setWaterLevel(world, sourcePos, result.remainingSourceAmount(), false);
+        world.scheduleTick(sourcePos, fluid, tickDelay);
     }
 
     @Unique

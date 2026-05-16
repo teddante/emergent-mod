@@ -15,6 +15,7 @@ public final class MaterialReactionTags {
     public static final TagKey<Block> WASHES_AWAY_IN_WATER = blockTag("washes_away_in_water");
     public static final TagKey<Block> BRITTLE = blockTag("brittle");
     public static final TagKey<Block> CONDUCTIVE = blockTag("conductive");
+    public static final TagKey<Block> HEAT_SOURCES = blockTag("heat_sources");
     public static final TagKey<Block> RAIN_OXIDIZES = blockTag("rain_oxidizes");
     public static final TagKey<Block> RAIN_GROWS = blockTag("rain_grows");
 

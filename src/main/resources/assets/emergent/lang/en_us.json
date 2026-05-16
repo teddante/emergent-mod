@@ -59,6 +59,7 @@
   "tag.block.emergent.conductive": "Conductive",
   "tag.block.emergent.erodes_in_water": "Erodes in Water",
   "tag.block.emergent.flash_burns_in_fire": "Flash Burns in Fire",
+  "tag.block.emergent.heat_sources": "Heat Sources",
   "tag.block.emergent.rain_grows": "Rain Grows",
   "tag.block.emergent.rain_oxidizes": "Rain Oxidizes",
   "tag.block.emergent.scorches_to_dirt_in_fire": "Scorches to Dirt in Fire",

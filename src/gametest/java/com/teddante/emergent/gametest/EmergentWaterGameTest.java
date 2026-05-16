@@ -151,6 +151,86 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 40)
+    public void shallowWaterEvaporatesNextToMagma(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK.defaultBlockState());
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertBlockPresent(Blocks.MAGMA_BLOCK, magmaPos);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void shallowWaterEvaporatesNextToFire(GameTestHelper context) {
+        BlockPos firePos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(firePos.below(), Blocks.NETHERRACK);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(firePos, Blocks.FIRE.defaultBlockState());
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertBlockPresent(Blocks.FIRE, firePos);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void waterSourceQuenchesLavaSourceToObsidian(GameTestHelper context) {
+        BlockPos lavaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(lavaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+        context.setBlock(lavaPos, Blocks.LAVA.defaultBlockState());
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, WATER_POS);
+            context.assertBlockPresent(Blocks.OBSIDIAN, lavaPos);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void waterFlowQuenchesLavaFlowToCobblestone(GameTestHelper context) {
+        BlockPos lavaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(lavaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(6, false).createLegacyBlock());
+        context.setBlock(lavaPos, Fluids.LAVA.getFlowing(4, false).createLegacyBlock());
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, WATER_POS);
+            context.assertBlockPresent(Blocks.COBBLESTONE, lavaPos);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void lavaSourceBesideWaterSolidifiesLikeVanillaContact(GameTestHelper context) {
+        BlockPos waterPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(waterPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.LAVA, Fluids.LAVA.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(40, () -> {
+            context.assertBlockPresent(Blocks.OBSIDIAN, WATER_POS);
+            context.assertBlockPresent(Blocks.WATER, waterPos);
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 20)
     public void erosionDegradesTaggedMaterialUnderHighFlowImpulse(GameTestHelper context) {
         BlockPos waterPos = new BlockPos(1, 2, 1);
