@@ -17,6 +17,9 @@
     - **Mixin Config**: When deleting or renaming a Mixin class, immediately update `mixins.json` to remove or update the reference.
     - **Refmap**: Ensure `refmap` is defined in `mixins.json` to prevent runtime mapping errors.
     - **Entrypoints**: When renaming main classes or client entry points, update `fabric.mod.json`.
+7. **Automated Testing**: Prefer repeatable command-line checks before manual Minecraft validation.
+    - **Smoke Gate**: Run `scripts/dev_smoke.ps1` for build, config hygiene, jar inspection, and server GameTests.
+    - **Physics GameTests**: Put world-tick physics coverage in `src/gametest` so finite water, erosion, fire, and movement interactions can be checked without launching Prism by hand.
 
 # Lessons Learned & Technical Specifics
 

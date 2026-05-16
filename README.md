@@ -175,6 +175,8 @@ Fast local smoke check:
 .\scripts\dev_smoke.ps1
 ```
 
+The smoke check also runs Fabric server GameTests from `src/gametest`. These tests are for physics and interaction behavior that needs a real Minecraft world tick, such as finite water movement, waterlogging hooks, and erosion outcomes.
+
 Build, check mixin-package hygiene, and copy the jar into the default Prism test instance:
 
 ```powershell

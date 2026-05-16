@@ -39,6 +39,16 @@ dependencies {
 	
 }
 
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "emergent-gametest"
+		enableGameTests = true
+		enableClientGameTests = false
+		eula = true
+	}
+}
+
 processResources {
 	inputs.property "version", project.version
 
