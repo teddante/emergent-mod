@@ -14,6 +14,7 @@ $ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
 $McSourceDir = Join-Path $ProjectRoot "mc-src"
 $GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
 $GitHubDir = Join-Path $ProjectRoot ".github"
+$ExtractSourcesScript = Join-Path $ProjectRoot "scripts\extract_sources.ps1"
 $GradleWrapper = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
     Join-Path $ProjectRoot "gradlew.bat"
 } else {
@@ -60,6 +61,48 @@ $JarPath = Join-Path $ProjectRoot "build\libs\$JarFileName"
 function Write-Step {
     param([string]$Message)
     Write-Host "==> $Message"
+}
+
+function Test-MinecraftSourceCache {
+    $requiredSources = @(
+        "net\minecraft\block\Blocks.java",
+        "net\minecraft\block\BlockKeys.java",
+        "net\minecraft\item\Items.java",
+        "net\minecraft\item\ItemKeys.java"
+    )
+
+    foreach ($relativePath in $requiredSources) {
+        if (-not (Test-Path -LiteralPath (Join-Path $McSourceDir $relativePath))) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Ensure-MinecraftSourceCache {
+    if (Test-MinecraftSourceCache) {
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $ExtractSourcesScript)) {
+        throw "Minecraft source cache is missing and extract_sources.ps1 was not found: $ExtractSourcesScript"
+    }
+
+    Write-Step "Generating Minecraft source cache"
+    & $GradleWrapper genSources
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gradle genSources failed."
+    }
+
+    & $ExtractSourcesScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Minecraft source extraction failed."
+    }
+
+    if (-not (Test-MinecraftSourceCache)) {
+        throw "Minecraft source cache is still missing required registry sources after extraction."
+    }
 }
 
 function Assert-MixinConfig {
@@ -297,8 +340,9 @@ function Assert-JarMixinContents {
 Push-Location $ProjectRoot
 try {
     Assert-MixinConfig
-    Assert-ResourceHygiene
     Assert-RepositoryWorkflowHygiene
+    Ensure-MinecraftSourceCache
+    Assert-ResourceHygiene
 
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"

@@ -1,7 +1,8 @@
 $ErrorActionPreference = "Stop"
 
-$ProjectRoot = Get-Location
-$LoomCache = Join-Path $ProjectRoot ".gradle\loom-cache\minecraftMaven"
+$ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+$GradleDir = Join-Path $ProjectRoot ".gradle"
+$LoomCache = Join-Path (Join-Path $GradleDir "loom-cache") "minecraftMaven"
 $DestDir = Join-Path $ProjectRoot "mc-src"
 
 Write-Host "Searching for source JAR in: $LoomCache"
