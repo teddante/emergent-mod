@@ -14,10 +14,14 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 public class ErosionPhysics {
 
     private static final Map<Block, Block> DEGRADATION_MAP = new HashMap<>();
+    private static final Map<ServerLevel, Map<Long, WearEntry>> EROSION_WEAR = new WeakHashMap<>();
+    // Matches the old stochastic roll's expected wear while making erosion cumulative and repeatable.
+    private static final double EXPECTED_RANDOM_ROLL_SCALE = 400.0;
 
     static {
         DEGRADATION_MAP.put(Blocks.STONE, Blocks.COBBLESTONE);
@@ -125,14 +129,25 @@ public class ErosionPhysics {
 
     private static void attemptBlockBreak(ServerLevel world, BlockPos pos, BlockState state, double energy) {
         if (energy <= 0.0 || !canErode(state)) {
+            clearWear(world, pos);
             return;
         }
 
         float hardness = state.getDestroySpeed(world, pos);
         if (hardness < 0.0f) {
+            clearWear(world, pos);
             return;
         }
 
+        double threshold = erosionThreshold(world, pos, state, hardness);
+        double accumulatedWear = addWear(world, pos, state, energy);
+        if (accumulatedWear >= threshold) {
+            clearWear(world, pos);
+            erodeBlock(world, pos, state);
+        }
+    }
+
+    private static double erosionThreshold(ServerLevel world, BlockPos pos, BlockState state, float hardness) {
         double resistance = Math.max(0.1, hardness * hardness);
         if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
             resistance *= 0.35;
@@ -144,10 +159,41 @@ public class ErosionPhysics {
             resistance *= 0.8;
         }
 
-        double probability = 1.0 - Math.exp(-(energy / resistance) * 0.0025);
-        if (world.getRandom().nextDouble() < probability) {
-            erodeBlock(world, pos, state);
+        return resistance * EXPECTED_RANDOM_ROLL_SCALE * thresholdVariance(world, pos, state);
+    }
+
+    private static double addWear(ServerLevel world, BlockPos pos, BlockState state, double energy) {
+        Map<Long, WearEntry> levelWear = EROSION_WEAR.computeIfAbsent(world, ignored -> new HashMap<>());
+        long key = pos.asLong();
+        WearEntry entry = levelWear.get(key);
+        if (entry == null || !entry.state().equals(state)) {
+            entry = new WearEntry(state, 0.0);
         }
+
+        entry = new WearEntry(state, entry.wear() + energy);
+        levelWear.put(key, entry);
+        return entry.wear();
+    }
+
+    private static void clearWear(ServerLevel world, BlockPos pos) {
+        Map<Long, WearEntry> levelWear = EROSION_WEAR.get(world);
+        if (levelWear != null) {
+            levelWear.remove(pos.asLong());
+        }
+    }
+
+    private static double thresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
+        long hash = world.getSeed();
+        hash ^= pos.asLong() * 0x9E3779B97F4A7C15L;
+        hash ^= (long) Block.getId(state) * 0xBF58476D1CE4E5B9L;
+        hash ^= hash >>> 30;
+        hash *= 0xBF58476D1CE4E5B9L;
+        hash ^= hash >>> 27;
+        hash *= 0x94D049BB133111EBL;
+        hash ^= hash >>> 31;
+
+        double unit = (hash >>> 11) * 0x1.0p-53;
+        return 0.85 + (unit * 0.3);
     }
 
     private static boolean canErode(BlockState state) {
@@ -206,5 +252,8 @@ public class ErosionPhysics {
         }
 
         return Blocks.GRAVEL;
+    }
+
+    private record WearEntry(BlockState state, double wear) {
     }
 }

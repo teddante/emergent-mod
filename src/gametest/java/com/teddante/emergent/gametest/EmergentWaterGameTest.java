@@ -250,6 +250,37 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void erosionAccumulatesWearBeforeWashingAwayWeakMaterial(GameTestHelper context) {
+        BlockPos waterPos = new BlockPos(1, 2, 1);
+        BlockPos targetPos = waterPos.relative(Direction.EAST);
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
+
+        applyFlowErosion(context, waterPos, Direction.EAST, 8, 2);
+        context.assertBlockPresent(Blocks.SAND, targetPos);
+
+        applyFlowErosion(context, waterPos, Direction.EAST, 8, 4);
+        context.assertBlockPresent(Blocks.AIR, targetPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void erosionWearResetsWhenTargetBlockChanges(GameTestHelper context) {
+        BlockPos waterPos = new BlockPos(1, 2, 1);
+        BlockPos targetPos = waterPos.relative(Direction.EAST);
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
+
+        applyFlowErosion(context, waterPos, Direction.EAST, 8, 2);
+        context.assertBlockPresent(Blocks.SAND, targetPos);
+
+        context.setBlock(targetPos, Blocks.GLASS.defaultBlockState());
+        applyFlowErosion(context, waterPos, Direction.EAST, 1, 1);
+        context.assertBlockPresent(Blocks.GLASS, targetPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void erosionDoesNotActWithoutMovedWater(GameTestHelper context) {
         BlockPos waterPos = new BlockPos(1, 2, 1);
         BlockPos targetPos = waterPos.relative(Direction.EAST);
@@ -283,6 +314,17 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
 
         context.assertBlockPresent(Blocks.BEDROCK, targetPos);
         context.succeed();
+    }
+
+    private static void applyFlowErosion(GameTestHelper context, BlockPos waterPos, Direction direction, int movedAmount, int repetitions) {
+        for (int i = 0; i < repetitions; i++) {
+            ErosionPhysics.attemptFlowErosion(
+                    context.getLevel(),
+                    context.absolutePos(waterPos),
+                    context.getBlockState(waterPos).getFluidState(),
+                    direction,
+                    movedAmount);
+        }
     }
 
     private static void containCell(GameTestHelper context, BlockPos pos) {
