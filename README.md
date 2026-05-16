@@ -66,9 +66,9 @@ Airborne living entities, off-rail minecarts, boats, falling blocks, and dropped
 
 Warden summoning behavior can be widened beyond vanilla's default restrictions.
 
-### Finite Water Flow
+### Finite Fluid Flow
 
-Water sources can be prevented from regenerating infinitely. Water moves as conserved block-volume units: gravity is preferred, horizontal flow equalizes lower neighboring cells, and source water can fill waterloggable blocks through vanilla fluid-container hooks.
+Water and lava sources can be prevented from regenerating infinitely. Fluids move as conserved block-volume units: gravity is preferred, horizontal flow equalizes lower neighboring cells, thin layers settle as puddles, and source water can fill waterloggable blocks through vanilla fluid-container hooks. Lava uses its vanilla slower tick timing and solidifies against water.
 
 ### Rain Accumulation
 

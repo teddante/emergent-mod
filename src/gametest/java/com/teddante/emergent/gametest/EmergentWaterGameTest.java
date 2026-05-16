@@ -37,6 +37,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 40)
+    public void thinWaterLayerSettlesOnFlatPlane(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7));
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, WATER_POS);
+            for (Direction direction : Direction.Plane.HORIZONTAL) {
+                context.assertBlockPresent(Blocks.AIR, WATER_POS.relative(direction));
+            }
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
     public void sourceWaterUsesVanillaWaterloggingHooks(GameTestHelper context) {
         BlockPos campfirePos = BELOW_WATER_POS;
         context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
@@ -50,6 +65,36 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
             context.assertTrue(campfireState.getValue(BlockStateProperties.WATERLOGGED), "source water should waterlog the campfire");
             context.assertFalse(campfireState.getValue(CampfireBlock.LIT), "campfire waterlogging should use vanilla extinguish behavior");
             context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void finiteLavaUsesSlowerDownwardFlow(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.LAVA, Fluids.LAVA.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(40, () -> {
+            context.assertBlockPresent(Blocks.LAVA, BELOW_WATER_POS);
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(context.getBlockState(BELOW_WATER_POS).getValue(LiquidBlock.LEVEL) == 0,
+                    "finite lava should move a source downward as a conserved source block");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void lavaSolidifiesWhenDroppingIntoWater(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
+        context.setBlock(BELOW_WATER_POS, Blocks.WATER.defaultBlockState());
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.LAVA, Fluids.LAVA.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(40, () -> {
+            context.assertBlockPresent(Blocks.STONE, BELOW_WATER_POS);
+            context.assertBlockPresent(Blocks.LAVA, WATER_POS);
             context.succeed();
         });
     }

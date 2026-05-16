@@ -24,6 +24,7 @@
 		"CreeperTrackerMixin",
 		"ItemEntityAutoPlantMixin",
 		"WaterFluidMixin",
+		"LavaFluidMixin",
 		"FlowableFluidMixin",
 		"ServerWorldMixin",
 		"AnvilMenuMixin",

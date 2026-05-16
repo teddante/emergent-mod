@@ -22,16 +22,15 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
- * Cellular Automata Water Physics.
+ * Cellular automata fluid physics.
  * 
- * Replaces vanilla's flow generation with true volume conservation:
- * 1. Water flows DOWN first (gravity priority)
+ * Replaces vanilla water/lava flow generation with volume conservation:
+ * 1. Fluid flows down first (gravity priority)
  * 2. Then equalizes horizontally with neighbors
- * 3. Total volume is conserved - water moves, never created/destroyed
+ * 3. Thin layers settle instead of spreading forever on flat ground
  */
 @Mixin(FlowingFluid.class)
 public abstract class FlowableFluidMixin extends Fluid {
@@ -42,10 +41,6 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Shadow
     public abstract FluidState getSource(boolean falling);
 
-    // Water tick rate is 5 ticks
-    @Unique
-    private static final int WATER_TICK_RATE = 5;
-
     /**
      * Override the scheduled tick to implement cellular automata water physics.
      * This replaces vanilla's flow generation with volume-conserving equalization.
@@ -53,10 +48,13 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void emergent$cellularAutomataWater(ServerLevel world, BlockPos pos, BlockState blockState,
             FluidState fluidState, CallbackInfo ci) {
-        if (!WaterPhysics.isWater((Fluid) (Object) this))
+        Fluid fluid = (Fluid) (Object) this;
+        if (!WaterPhysics.isFiniteFlowFluid(fluid))
             return;
 
-        if (EmergentConfig.get().hydraulicErosion && !EmergentConfig.get().finiteWaterFlow) {
+        if (EmergentConfig.get().hydraulicErosion
+                && WaterPhysics.canHydraulicallyErode(fluid)
+                && !EmergentConfig.get().finiteWaterFlow) {
             ErosionPhysics.attemptErosion(world, pos, fluidState);
         }
 
@@ -64,21 +62,28 @@ public abstract class FlowableFluidMixin extends Fluid {
             return;
         }
 
-        // Cancel vanilla behavior for water
+        // Cancel vanilla behavior for finite fluids.
         ci.cancel();
 
         int currentLevel = fluidState.getAmount();
         if (currentLevel <= 0)
             return;
 
+        int tickDelay = fluid.getTickDelay(world);
+
         // STEP 1: Gravity - try to flow down
         BlockPos below = pos.below();
         BlockState belowBlockState = world.getBlockState(below);
         FluidState belowFluidState = belowBlockState.getFluidState();
 
+        if (tryReactWithOtherFiniteFluid(world, below, belowBlockState, Direction.DOWN)) {
+            world.scheduleTick(pos, fluid, tickDelay);
+            return;
+        }
+
         boolean belowWaterloggable = isWaterloggableTarget(world, below, belowBlockState);
-        if (canFlowInto(world, below, belowBlockState) && (!belowWaterloggable || currentLevel >= 8)) {
-            int belowLevel = WaterPhysics.isWater(belowFluidState.getType()) ? belowFluidState.getAmount() : 0;
+        if (canFlowInto(world, below, belowBlockState, Direction.DOWN) && (!belowWaterloggable || currentLevel >= 8)) {
+            int belowLevel = WaterPhysics.isSameFluid(fluid, belowFluidState) ? belowFluidState.getAmount() : 0;
             int spaceBelow = 8 - belowLevel;
 
             if (spaceBelow > 0) {
@@ -106,7 +111,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                     int newBelowLevel = belowLevel + transfer;
                     int newCurrentLevel = currentLevel - transfer;
 
-                    if (EmergentConfig.get().hydraulicErosion) {
+                    if (EmergentConfig.get().hydraulicErosion && WaterPhysics.canHydraulicallyErode(fluid)) {
                         ErosionPhysics.attemptFlowErosion(world, pos, fluidState, Direction.DOWN, transfer);
                     }
 
@@ -121,15 +126,21 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
 
                     // Schedule next tick
-                    world.scheduleTick(pos, (Fluid) (Object) this, WATER_TICK_RATE);
-                    world.scheduleTick(below, (Fluid) (Object) this, WATER_TICK_RATE);
+                    world.scheduleTick(pos, fluid, tickDelay);
+                    world.scheduleTick(below, fluid, tickDelay);
                     return;
                 }
             }
         }
 
         // STEP 2: Horizontal equalization
-        if (currentLevel >= 8 && tryMoveSourceIntoWaterloggableNeighbor(world, pos, blockState, fluidState)) {
+        if (WaterPhysics.isWater(fluid)
+                && currentLevel >= 8
+                && tryMoveSourceIntoWaterloggableNeighbor(world, pos, blockState, fluidState, tickDelay)) {
+            return;
+        }
+
+        if (currentLevel <= WaterPhysics.settledThinLayerAmount(fluid)) {
             return;
         }
 
@@ -137,7 +148,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         // drain it horizontally.
         if (blockState.getBlock() instanceof LiquidBlockContainer) {
             // Schedule tick just in case context changes (e.g. block below clears up)
-            world.scheduleTick(pos, (Fluid) (Object) this, WATER_TICK_RATE);
+            world.scheduleTick(pos, fluid, tickDelay);
             return;
         }
 
@@ -148,6 +159,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         Direction[] directions = new Direction[4];
         int[] neighborLevels = new int[4];
         boolean[] canFlow = new boolean[4];
+        boolean reactedWithNeighbor = false;
 
         int idx = 0;
         for (Direction dir : Direction.Plane.HORIZONTAL) {
@@ -156,10 +168,14 @@ public abstract class FlowableFluidMixin extends Fluid {
             neighbors[idx] = neighborPos;
             directions[idx] = dir;
 
-            if (canFlowInto(world, neighborPos, neighborBlockState)
+            if (tryReactWithOtherFiniteFluid(world, neighborPos, neighborBlockState, dir)) {
+                reactedWithNeighbor = true;
+                canFlow[idx] = false;
+                neighborLevels[idx] = 0;
+            } else if (canFlowInto(world, neighborPos, neighborBlockState, dir)
                     && !isWaterloggableTarget(world, neighborPos, neighborBlockState)) {
                 FluidState neighborFluidState = neighborBlockState.getFluidState();
-                int neighborLevel = WaterPhysics.isWater(neighborFluidState.getType())
+                int neighborLevel = WaterPhysics.isSameFluid(fluid, neighborFluidState)
                         ? neighborFluidState.getAmount()
                         : 0;
 
@@ -193,7 +209,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // 1. Find the lowest water level among neighbors.
                 // 2. Fill all neighbors at that lowest level by 1.
                 // 3. Repeat until toDistribute is exhausted.
-                // 4. If we don't have enough to fill all lowest neighbors, Randomize them.
+                // 4. If we don't have enough to fill all lowest neighbors, use a stable
+                // position-based ordering so the same world settles the same way each run.
 
                 while (toDistribute > 0) {
                     // Find current minimum level among valid neighbors that we can flow into
@@ -228,7 +245,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                         }
                     } else {
                         // No, we must choose lucky winners
-                        Collections.shuffle(minLevelIndices);
+                        sortDeterministically(minLevelIndices, pos);
                         for (int i = 0; i < toDistribute; i++) {
                             int chosenIndex = minLevelIndices.get(i);
                             neighborLevels[chosenIndex]++;
@@ -242,16 +259,18 @@ public abstract class FlowableFluidMixin extends Fluid {
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
                         int movedAmount = Math.max(0, neighborLevels[i]
-                                - (WaterPhysics.isWater(world.getFluidState(neighbors[i]).getType())
+                                - (WaterPhysics.isSameFluid(fluid, world.getFluidState(neighbors[i]))
                                         ? world.getFluidState(neighbors[i]).getAmount()
                                         : 0));
-                        if (movedAmount > 0 && EmergentConfig.get().hydraulicErosion) {
+                        if (movedAmount > 0
+                                && EmergentConfig.get().hydraulicErosion
+                                && WaterPhysics.canHydraulicallyErode(fluid)) {
                             ErosionPhysics.attemptFlowErosion(world, pos, fluidState, directions[i], movedAmount);
                         }
 
                         // Optimization: The implementation of setWaterLevel does extensive checks.
                         setWaterLevel(world, neighbors[i], neighborLevels[i], false);
-                        world.scheduleTick(neighbors[i], (Fluid) (Object) this, WATER_TICK_RATE);
+                        world.scheduleTick(neighbors[i], fluid, tickDelay);
                     }
                 }
 
@@ -266,15 +285,15 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         // Schedule next tick if we still have water
         FluidState newState = world.getFluidState(pos);
-        if (!newState.isEmpty()) {
-            world.scheduleTick(pos, (Fluid) (Object) this, WATER_TICK_RATE);
+        if (reactedWithNeighbor || (!newState.isEmpty() && currentLevel > WaterPhysics.settledThinLayerAmount(fluid))) {
+            world.scheduleTick(pos, fluid, tickDelay);
         }
     }
 
     @Unique
     private boolean isValidSourceLevel(BlockState state, int level) {
-        // Waterloggable blocks (Fences, Slabs, etc) used as SOURCE only support binary
-        // water states.
+        // Waterloggable blocks (fences, slabs, etc.) used as sources only support
+        // binary water states.
         if (state.getBlock() instanceof LiquidBlockContainer) {
             return level == 0 || level == 8;
         }
@@ -282,18 +301,27 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
-    private boolean canFlowInto(ServerLevel world, BlockPos pos, BlockState state) {
+    private boolean canFlowInto(ServerLevel world, BlockPos pos, BlockState state, Direction direction) {
+        Fluid fluid = (Fluid) (Object) this;
+        FluidState targetFluidState = state.getFluidState();
+
         if (state.isAir())
             return true;
-        if (WaterPhysics.isWater(state.getFluidState().getType()))
+        if (WaterPhysics.isSameFluid(fluid, targetFluidState))
             return true;
         if (isWaterloggableTarget(world, pos, state))
             return true;
+        if (!targetFluidState.isEmpty())
+            return false;
         return state.canBeReplaced((Fluid) (Object) this);
     }
 
     @Unique
     private boolean isWaterloggableTarget(ServerLevel world, BlockPos pos, BlockState state) {
+        if (!WaterPhysics.isWater((Fluid) (Object) this)) {
+            return false;
+        }
+
         if (state.getBlock() instanceof LiquidBlockContainer container) {
             return state.getFluidState().isEmpty()
                     && container.canPlaceLiquid(null, world, pos, state, (Fluid) (Object) this);
@@ -305,10 +333,11 @@ public abstract class FlowableFluidMixin extends Fluid {
     private boolean setWaterLevel(ServerLevel world, BlockPos pos, int level, boolean falling) {
         BlockState currentState = world.getBlockState(pos);
         FluidState currentFluidState = currentState.getFluidState();
-        boolean isWater = WaterPhysics.isWater(currentFluidState.getType());
+        Fluid fluid = (Fluid) (Object) this;
+        boolean isSameFluid = WaterPhysics.isSameFluid(fluid, currentFluidState);
 
         if (level <= 0) {
-            // Remove water - check if it's a waterlogged block first
+            // Remove fluid - check if it's a waterlogged block first.
             if (currentState.hasProperty(BlockStateProperties.WATERLOGGED) && currentState.getValue(BlockStateProperties.WATERLOGGED)) {
                 world.setBlock(pos, currentState.setValue(BlockStateProperties.WATERLOGGED, false), 3);
             } else if (!currentState.isAir() && currentFluidState.isEmpty()) {
@@ -319,7 +348,8 @@ public abstract class FlowableFluidMixin extends Fluid {
             return true;
         } else if (level >= 8) {
             // Check if target is a waterloggable block
-            if (isWaterloggableTarget(world, pos, currentState)
+            if (WaterPhysics.isWater(fluid)
+                    && isWaterloggableTarget(world, pos, currentState)
                     && currentState.getBlock() instanceof LiquidBlockContainer container) {
                 if (container.placeLiquid(world, pos, currentState, this.getSource(false))) {
                     emergent$afterWaterPlaced(world, pos);
@@ -336,9 +366,9 @@ public abstract class FlowableFluidMixin extends Fluid {
         } else {
             // Partial levels (1-7)
 
-            // Check if we need to destroy a block (Destructive Flow)
-            // If the target is NOT Air and NOT Water, we must break it to place water here.
-            if (!currentState.isAir() && !isWater) {
+            // Check if we need to destroy a block. If the target is neither air nor
+            // the same fluid, we must break it to preserve fluid volume.
+            if (!currentState.isAir() && !isSameFluid) {
                 if (!currentState.canBeReplaced((Fluid) (Object) this)) {
                     return false;
                 }
@@ -361,17 +391,18 @@ public abstract class FlowableFluidMixin extends Fluid {
             ServerLevel world,
             BlockPos pos,
             BlockState blockState,
-            FluidState fluidState) {
+            FluidState fluidState,
+            int tickDelay) {
         List<Direction> directions = new ArrayList<>();
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             directions.add(direction);
         }
-        Collections.shuffle(directions);
+        sortDirectionsDeterministically(directions, pos);
 
         for (Direction direction : directions) {
             BlockPos targetPos = pos.relative(direction);
             BlockState targetState = world.getBlockState(targetPos);
-            if (canFlowInto(world, targetPos, targetState)
+            if (canFlowInto(world, targetPos, targetState, direction)
                     && !isWaterloggableTarget(world, targetPos, targetState)) {
                 return false;
             }
@@ -389,7 +420,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             }
             if (setWaterLevel(world, targetPos, 8, false)) {
                 removeWaterAt(world, pos, blockState);
-                world.scheduleTick(targetPos, (Fluid) (Object) this, WATER_TICK_RATE);
+                world.scheduleTick(targetPos, (Fluid) (Object) this, tickDelay);
                 return true;
             }
         }
@@ -408,8 +439,59 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private void emergent$afterWaterPlaced(ServerLevel world, BlockPos pos) {
-        if (EmergentConfig.get().materialReactions) {
+        if (EmergentConfig.get().materialReactions && WaterPhysics.isWater((Fluid) (Object) this)) {
             MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());
         }
+    }
+
+    @Unique
+    private boolean tryReactWithOtherFiniteFluid(ServerLevel world, BlockPos pos, BlockState state, Direction direction) {
+        Fluid fluid = (Fluid) (Object) this;
+        FluidState targetFluidState = state.getFluidState();
+        if (targetFluidState.isEmpty() || WaterPhysics.isSameFluid(fluid, targetFluidState)) {
+            return false;
+        }
+
+        if (WaterPhysics.isLava(fluid) && WaterPhysics.isWater(targetFluidState.getType()) && direction == Direction.DOWN) {
+            world.setBlockAndUpdate(pos, Blocks.STONE.defaultBlockState());
+            world.levelEvent(1501, pos, 0);
+            return true;
+        }
+
+        if (WaterPhysics.isWater(fluid) && WaterPhysics.isLava(targetFluidState.getType())) {
+            Block block = targetFluidState.isSource() ? Blocks.OBSIDIAN : Blocks.COBBLESTONE;
+            world.setBlockAndUpdate(pos, block.defaultBlockState());
+            world.levelEvent(1501, pos, 0);
+            return true;
+        }
+
+        return false;
+    }
+
+    @Unique
+    private void sortDeterministically(List<Integer> indices, BlockPos pos) {
+        indices.sort((left, right) -> Integer.compare(directionRank(pos, left), directionRank(pos, right)));
+    }
+
+    @Unique
+    private void sortDirectionsDeterministically(List<Direction> directions, BlockPos pos) {
+        directions.sort((left, right) -> Integer.compare(directionRank(pos, directionIndex(left)), directionRank(pos, directionIndex(right))));
+    }
+
+    @Unique
+    private int directionRank(BlockPos pos, int index) {
+        int hash = pos.getX() * 73428767 ^ pos.getY() * 912931 ^ pos.getZ() * 4382893;
+        return Math.floorMod(hash + index * 0x9E3779B9, 4);
+    }
+
+    @Unique
+    private int directionIndex(Direction direction) {
+        return switch (direction) {
+            case NORTH -> 0;
+            case EAST -> 1;
+            case SOUTH -> 2;
+            case WEST -> 3;
+            default -> 0;
+        };
     }
 }
