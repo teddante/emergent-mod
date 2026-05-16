@@ -222,7 +222,7 @@ try {
 
     if ($CopyToPrism) {
         if ([string]::IsNullOrWhiteSpace($PrismMinecraftDir)) {
-            $PrismMinecraftDir = Join-Path $env:APPDATA "PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
+            $PrismMinecraftDir = Join-Path $env:APPDATA "PrismLauncher\instances\Prism Launcher Thing for Emergent mod testing\minecraft"
         }
 
         $modsDir = Join-Path $PrismMinecraftDir "mods"

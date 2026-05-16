@@ -183,6 +183,12 @@ Build, check mixin-package hygiene, and copy the jar into the default Prism test
 .\scripts\dev_smoke.ps1 -CopyToPrism
 ```
 
+By default, `-CopyToPrism` targets:
+
+```text
+C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Prism Launcher Thing for Emergent mod testing\minecraft\mods
+```
+
 ## License
 
 This project is provided under the repository's license.
