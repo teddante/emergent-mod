@@ -20,6 +20,14 @@
 7. **Automated Testing**: Prefer repeatable command-line checks before manual Minecraft validation.
     - **Smoke Gate**: Run `scripts/dev_smoke.ps1` for build, config hygiene, jar inspection, and server GameTests.
     - **Physics GameTests**: Put world-tick physics coverage in `src/gametest` so finite water, erosion, fire, and movement interactions can be checked without launching Prism by hand.
+8. **GitHub, Versioning, and Release Rhythm**: Keep repo operations simple, current, and release-ready without extra process files.
+    - **Start of Work**: Check branch and dirty state first. Use short branches like `fix/fire-grass-spread`, `feature/thermal-fluid-reactions`, or `docs/github-process`; keep `main` buildable.
+    - **Commits**: Commit coherent working chunks after smoke/build checks when practical. Do not tag every commit.
+    - **Pull Requests**: Use PRs as review/change units. Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required in-game validation is done.
+    - **Issues**: Use issues for reproducible bugs and concrete feature ideas with versions, mod list, logs, and reproduction steps when relevant. Do not create issues for every tiny internal cleanup.
+    - **Version Bumps**: Use SemVer in `gradle.properties`: patch for compatible fixes/tuning, minor for meaningful compatible features/systems, major for breaking config/data behavior or dropping a supported Minecraft line. `0.y.z` means early development and may still change.
+    - **Tags and Releases**: Only tag tested public builds. Release by updating version/docs, running `scripts/dev_smoke.ps1`, creating an annotated `vMAJOR.MINOR.PATCH` tag, pushing it, and publishing a GitHub Release from that tag. GitHub Releases are based on tags.
+    - **Safety**: Never rewrite public history, force-push, delete branches, close issues, publish releases, or alter repo settings unless the user clearly asks for that exact action.
 
 # Lessons Learned & Technical Specifics
 
