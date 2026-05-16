@@ -17,7 +17,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
 
+import java.util.HashMap;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 public final class MaterialReactions {
     private static final int CHAR_WEIGHT = 35;
@@ -30,6 +32,7 @@ public final class MaterialReactions {
     private static final float SCORCHED_SURFACE_IGNITION_CHANCE = 0.35f;
     private static final float FLASH_UPWARD_IGNITION_CHANCE = 0.6f;
     private static final float FLASH_SIDE_IGNITION_CHANCE = 0.35f;
+    private static final Map<ServerLevel, Map<Long, HeatEntry>> FIRE_EXPOSURE = new WeakHashMap<>();
 
     private static final Map<Block, Block> CHARRED_LOGS = Map.ofEntries(
             Map.entry(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG),
@@ -68,7 +71,15 @@ public final class MaterialReactions {
     }
 
     public static boolean tryReactToFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        return exposeToFire(world, pos, state, 1.0f, random);
+    }
+
+    public static boolean exposeToFire(ServerLevel world, BlockPos pos, BlockState state, float heat, RandomSource random) {
         trySustainFire(world, pos, state, random);
+
+        if (heat <= 0.0f) {
+            return false;
+        }
 
         int charWeight = state.is(MaterialReactionTags.CHARS_IN_FIRE) && CHARRED_LOGS.containsKey(state.getBlock()) ? CHAR_WEIGHT : 0;
         int scorchWeight = state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE) ? SCORCH_WEIGHT : 0;
@@ -76,33 +87,103 @@ public final class MaterialReactions {
         int burnAwayWeight = state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE) ? BURN_AWAY_WEIGHT : 0;
         int totalWeight = charWeight + scorchWeight + flashWeight + burnAwayWeight;
         if (totalWeight <= 0) {
+            clearFireExposure(world, pos);
             return false;
         }
 
         float wetness = FireWetness.getWetness(world, pos);
-        if (random.nextFloat() < Math.min(MAX_WETNESS_DAMPENING, wetness * WETNESS_REACTION_DAMPENING)) {
-            if (random.nextFloat() < 0.25f) {
+        float dampening = Math.min(MAX_WETNESS_DAMPENING, wetness * WETNESS_REACTION_DAMPENING);
+        if (dampening >= 1.0f) {
+            return true;
+        }
+
+        double effectiveHeat = heat * (1.0f - dampening);
+        if (state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)) {
+            effectiveHeat *= 1.0f - Math.min(0.9f, wetness + LIVING_SURFACE_MOISTURE);
+        }
+
+        if (effectiveHeat <= 0.01) {
+            if (random.nextFloat() < 0.05f) {
                 world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.2f);
             }
             return true;
         }
 
-        int roll = random.nextInt(totalWeight);
-        if (roll < charWeight) {
+        double exposure = addFireExposure(world, pos, state, effectiveHeat);
+        if (exposure < fireReactionThreshold(world, pos, state)) {
+            return true;
+        }
+
+        clearFireExposure(world, pos);
+        return reactAfterSustainedFireExposure(world, pos, state, charWeight, scorchWeight, flashWeight, random);
+    }
+
+    private static boolean reactAfterSustainedFireExposure(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            int charWeight,
+            int scorchWeight,
+            int flashWeight,
+            RandomSource random) {
+        if (flashWeight > 0) {
+            return flashBurnFromFire(world, pos, random);
+        }
+        if (charWeight > 0) {
             return charFromFire(world, pos, state);
         }
-
-        roll -= charWeight;
-        if (roll < scorchWeight) {
-            return tryScorchToDirtFromFire(world, pos, state, random);
+        if (scorchWeight > 0) {
+            return scorchToDirtFromFire(world, pos, random);
         }
 
-        roll -= scorchWeight;
-        if (roll < flashWeight) {
-            return tryFlashBurnFromFire(world, pos, state, random);
+        return burnAwayFromFire(world, pos);
+    }
+
+    private static double fireReactionThreshold(ServerLevel world, BlockPos pos, BlockState state) {
+        double threshold = 5.5;
+        if (state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE)) {
+            threshold = 2.25;
+        } else if (state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE)) {
+            threshold = 4.5;
+        } else if (state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)) {
+            threshold = 6.5;
+        } else if (state.is(MaterialReactionTags.CHARS_IN_FIRE)) {
+            threshold = 8.0;
         }
 
-        return tryBurnAwayFromFire(world, pos, state, random);
+        return threshold * heatThresholdVariance(world, pos, state);
+    }
+
+    private static double addFireExposure(ServerLevel world, BlockPos pos, BlockState state, double heat) {
+        Map<Long, HeatEntry> levelExposure = FIRE_EXPOSURE.computeIfAbsent(world, ignored -> new HashMap<>());
+        long key = pos.asLong();
+        HeatEntry entry = levelExposure.get(key);
+        if (entry == null || !entry.state().equals(state)) {
+            entry = new HeatEntry(state, 0.0);
+        }
+
+        entry = new HeatEntry(state, entry.heat() + heat);
+        levelExposure.put(key, entry);
+        return entry.heat();
+    }
+
+    private static void clearFireExposure(ServerLevel world, BlockPos pos) {
+        Map<Long, HeatEntry> levelExposure = FIRE_EXPOSURE.get(world);
+        if (levelExposure != null) {
+            levelExposure.remove(pos.asLong());
+        }
+    }
+
+    private static double heatThresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
+        long hash = world.getSeed();
+        hash ^= pos.asLong() * 0x9E3779B97F4A7C15L;
+        hash ^= (long) Block.getId(state) * 0xC2B2AE3D27D4EB4FL;
+        hash ^= hash >>> 33;
+        hash *= 0xFF51AFD7ED558CCDL;
+        hash ^= hash >>> 33;
+
+        double unit = (hash >>> 11) * 0x1.0p-53;
+        return 0.85 + (unit * 0.3);
     }
 
     public static boolean tryCharFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
@@ -167,9 +248,7 @@ public final class MaterialReactions {
             return true;
         }
 
-        world.removeBlock(pos, false);
-        world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.6f);
-        return true;
+        return burnAwayFromFire(world, pos);
     }
 
     public static boolean tryFlashBurnFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
@@ -181,9 +260,30 @@ public final class MaterialReactions {
             return true;
         }
 
+        return flashBurnFromFire(world, pos, random);
+    }
+
+    private static boolean scorchToDirtFromFire(ServerLevel world, BlockPos pos, RandomSource random) {
+        world.setBlock(pos, Blocks.DIRT.defaultBlockState(), 3);
+        world.playSound(null, pos, SoundEvents.GRASS_BREAK, SoundSource.BLOCKS, 0.45f, 0.8f);
+        if (random.nextFloat() < SCORCHED_SURFACE_IGNITION_CHANCE) {
+            BlockPos above = pos.above();
+            if (world.getBlockState(above).isAir()) {
+                world.setBlock(above, BaseFireBlock.getState(world, above), 3);
+            }
+        }
+        return true;
+    }
+
+    private static boolean burnAwayFromFire(ServerLevel world, BlockPos pos) {
+        world.removeBlock(pos, false);
+        world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.6f);
+        return true;
+    }
+
+    private static boolean flashBurnFromFire(ServerLevel world, BlockPos pos, RandomSource random) {
         world.removeBlock(pos, false);
         world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.4f, 1.8f);
-
         if (random.nextFloat() < FLASH_UPWARD_IGNITION_CHANCE) {
             tryPlaceFire(world, pos.above());
         }
@@ -194,6 +294,9 @@ public final class MaterialReactions {
         }
 
         return true;
+    }
+
+    private record HeatEntry(BlockState state, double heat) {
     }
 
     public static boolean trySustainFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {

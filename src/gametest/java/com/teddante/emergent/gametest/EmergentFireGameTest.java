@@ -3,6 +3,7 @@ package com.teddante.emergent.gametest;
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.TrafficWearPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -89,16 +90,65 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     public void logsCharWithoutLosingAxis(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.X));
 
-        boolean reacted = MaterialReactions.tryReactToFire(
+        boolean reacted = MaterialReactions.exposeToFire(
                 context.getLevel(),
                 context.absolutePos(TEST_POS),
                 context.getBlockState(TEST_POS),
+                10.0f,
                 RandomSource.create(3));
 
         context.assertTrue(reacted, "char-tagged log should react to fire");
         context.assertBlockPresent(Blocks.STRIPPED_OAK_LOG, TEST_POS);
         context.assertTrue(context.getBlockState(TEST_POS).getValue(RotatedPillarBlock.AXIS) == Direction.Axis.X,
                 "charred log should preserve the original axis");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sustainedFireExposureCharsLogDeterministically(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.Z));
+        RandomSource random = RandomSource.create(12);
+
+        for (int i = 0; i < 4; i++) {
+            MaterialReactions.exposeToFire(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.0f,
+                    random);
+            context.assertBlockPresent(Blocks.OAK_LOG, TEST_POS);
+        }
+
+        MaterialReactions.exposeToFire(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                6.0f,
+                random);
+
+        context.assertBlockPresent(Blocks.STRIPPED_OAK_LOG, TEST_POS);
+        context.assertTrue(context.getBlockState(TEST_POS).getValue(RotatedPillarBlock.AXIS) == Direction.Axis.Z,
+                "deterministic fire exposure should preserve log axis when charring");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void wetSurfaceNeedsMoreHeatBeforeScorching(GameTestHelper context) {
+        BlockPos waterPos = TEST_POS.relative(Direction.EAST);
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        context.setBlock(waterPos, Blocks.WATER);
+        RandomSource random = RandomSource.create(13);
+
+        for (int i = 0; i < 5; i++) {
+            MaterialReactions.exposeToFire(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.5f,
+                    random);
+        }
+
+        context.assertBlockPresent(Blocks.GRASS_BLOCK, TEST_POS);
         context.succeed();
     }
 
@@ -148,6 +198,34 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "coal block should sustain fire");
         context.assertTrue(!MaterialReactions.canReactToFire(Blocks.STONE.defaultBlockState()),
                 "stone should not be treated as a fire-reactive material");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void repeatedTrafficCompactsGrassIntoPath(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        context.setBlock(TEST_POS.above(), Blocks.AIR);
+
+        for (int i = 0; i < 24; i++) {
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS), 1.0);
+        }
+
+        context.assertBlockPresent(Blocks.DIRT_PATH, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void trafficWearResetsWhenGroundChanges(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        context.setBlock(TEST_POS.above(), Blocks.AIR);
+
+        for (int i = 0; i < 12; i++) {
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS), 1.0);
+        }
+
+        context.setBlock(TEST_POS, Blocks.MOSS_BLOCK);
+        TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS), 1.0);
+        context.assertBlockPresent(Blocks.MOSS_BLOCK, TEST_POS);
         context.succeed();
     }
 

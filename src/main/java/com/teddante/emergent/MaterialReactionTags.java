@@ -18,6 +18,7 @@ public final class MaterialReactionTags {
     public static final TagKey<Block> HEAT_SOURCES = blockTag("heat_sources");
     public static final TagKey<Block> RAIN_OXIDIZES = blockTag("rain_oxidizes");
     public static final TagKey<Block> RAIN_GROWS = blockTag("rain_grows");
+    public static final TagKey<Block> COMPACTS_UNDER_TRAFFIC = blockTag("compacts_under_traffic");
 
     private MaterialReactionTags() {
     }
