@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -22,7 +23,7 @@ public final class TrafficWearPhysics {
     private TrafficWearPhysics() {
     }
 
-    public static boolean applyEntityTraffic(ServerLevel world, BlockPos pos, BlockState state, Entity entity) {
+    public static boolean applyEntityTraffic(ServerLevel world, Entity entity) {
         if (entity.isPassenger() || !entity.onGround()) {
             return false;
         }
@@ -33,10 +34,40 @@ public final class TrafficWearPhysics {
             return false;
         }
 
-        double footprint = Math.max(0.25, entity.getBbWidth() * entity.getBbWidth());
         double bodyHeight = Math.max(0.35, entity.getBbHeight());
-        double impulse = horizontalMovement * footprint * bodyHeight;
-        return applyTraffic(world, pos, state, impulse);
+        return applyContactPatchTraffic(world, entity.getBoundingBox(), bodyHeight, horizontalMovement);
+    }
+
+    public static boolean applyContactPatchTraffic(ServerLevel world, AABB contactBox, double bodyHeight, double horizontalMovement) {
+        if (horizontalMovement <= 0.0 || bodyHeight <= 0.0) {
+            return false;
+        }
+
+        AABB patch = contactBox.deflate(1.0E-5, 0.0, 1.0E-5);
+        int minX = (int) Math.floor(patch.minX);
+        int maxX = (int) Math.floor(patch.maxX);
+        int minZ = (int) Math.floor(patch.minZ);
+        int maxZ = (int) Math.floor(patch.maxZ);
+        int y = (int) Math.floor(contactBox.minY - 1.0E-5);
+        boolean changedAny = false;
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                double overlapX = Math.max(0.0, Math.min(patch.maxX, x + 1.0) - Math.max(patch.minX, x));
+                double overlapZ = Math.max(0.0, Math.min(patch.maxZ, z + 1.0) - Math.max(patch.minZ, z));
+                double contactArea = overlapX * overlapZ;
+                if (contactArea <= 1.0E-6) {
+                    continue;
+                }
+
+                BlockPos pos = new BlockPos(x, y, z);
+                BlockState state = world.getBlockState(pos);
+                double impulse = horizontalMovement * Math.max(0.05, contactArea) * bodyHeight;
+                changedAny |= applyTraffic(world, pos, state, impulse);
+            }
+        }
+
+        return changedAny;
     }
 
     public static boolean applyTraffic(ServerLevel world, BlockPos pos, BlockState state, double impulse) {

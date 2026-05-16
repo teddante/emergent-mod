@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.phys.AABB;
 
 import java.lang.reflect.Method;
 
@@ -211,6 +212,38 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         }
 
         context.assertBlockPresent(Blocks.DIRT_PATH, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void wideTrafficCompactsWholeContactPatch(GameTestHelper context) {
+        BlockPos base = TEST_POS;
+        for (int x = 0; x <= 1; x++) {
+            for (int z = 0; z <= 1; z++) {
+                BlockPos pos = base.offset(x, 0, z);
+                context.setBlock(pos, Blocks.GRASS_BLOCK);
+                context.setBlock(pos.above(), Blocks.AIR);
+            }
+        }
+
+        BlockPos absoluteBase = context.absolutePos(base);
+        AABB footprint = new AABB(
+                absoluteBase.getX(),
+                absoluteBase.getY() + 1.0,
+                absoluteBase.getZ(),
+                absoluteBase.getX() + 2.0,
+                absoluteBase.getY() + 2.8,
+                absoluteBase.getZ() + 2.0);
+
+        for (int i = 0; i < 12; i++) {
+            TrafficWearPhysics.applyContactPatchTraffic(context.getLevel(), footprint, 1.8, 1.0);
+        }
+
+        for (int x = 0; x <= 1; x++) {
+            for (int z = 0; z <= 1; z++) {
+                context.assertBlockPresent(Blocks.DIRT_PATH, base.offset(x, 0, z));
+            }
+        }
         context.succeed();
     }
 
