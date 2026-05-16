@@ -56,7 +56,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         if (!WaterPhysics.isWater((Fluid) (Object) this))
             return;
 
-        if (EmergentConfig.get().hydraulicErosion) {
+        if (EmergentConfig.get().hydraulicErosion && !EmergentConfig.get().finiteWaterFlow) {
             ErosionPhysics.attemptErosion(world, pos, fluidState);
         }
 
@@ -76,13 +76,14 @@ public abstract class FlowableFluidMixin extends Fluid {
         BlockState belowBlockState = world.getBlockState(below);
         FluidState belowFluidState = belowBlockState.getFluidState();
 
-        if (canFlowInto(world, below, belowBlockState)) {
+        boolean belowWaterloggable = isWaterloggableTarget(world, below, belowBlockState);
+        if (canFlowInto(world, below, belowBlockState) && (!belowWaterloggable || currentLevel >= 8)) {
             int belowLevel = WaterPhysics.isWater(belowFluidState.getType()) ? belowFluidState.getAmount() : 0;
             int spaceBelow = 8 - belowLevel;
 
             if (spaceBelow > 0) {
                 // Calculate ideal transfer
-                int transfer = Math.min(currentLevel, spaceBelow);
+                int transfer = belowWaterloggable ? 8 : Math.min(currentLevel, spaceBelow);
 
                 // CONSTRAINT: Waterloggable blocks (Source only)
                 // We must ensure the transaction leaves the Source in a valid state.
@@ -105,17 +106,16 @@ public abstract class FlowableFluidMixin extends Fluid {
                     int newBelowLevel = belowLevel + transfer;
                     int newCurrentLevel = currentLevel - transfer;
 
+                    if (EmergentConfig.get().hydraulicErosion) {
+                        ErosionPhysics.attemptFlowErosion(world, pos, fluidState, Direction.DOWN, transfer);
+                    }
+
                     // Update below
                     setWaterLevel(world, below, newBelowLevel, false);
 
                     // Update current position after transferring water down
                     if (newCurrentLevel <= 0) {
-                        // Check if this is a waterlogged block
-                        if (blockState.hasProperty(BlockStateProperties.WATERLOGGED) && blockState.getValue(BlockStateProperties.WATERLOGGED)) {
-                            world.setBlock(pos, blockState.setValue(BlockStateProperties.WATERLOGGED, false), 3);
-                        } else {
-                            world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-                        }
+                        removeWaterAt(world, pos, blockState);
                     } else {
                         setWaterLevel(world, pos, newCurrentLevel, false);
                     }
@@ -129,6 +129,9 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         // STEP 2: Horizontal equalization
+        if (currentLevel >= 8 && tryMoveSourceIntoWaterloggableNeighbor(world, pos, blockState, fluidState)) {
+            return;
+        }
 
         // Constraint: If Source is Waterloggable (restrictive), we cannot partially
         // drain it horizontally.
@@ -142,6 +145,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         int totalLevel = currentLevel;
         int count = 1;
         BlockPos[] neighbors = new BlockPos[4];
+        Direction[] directions = new Direction[4];
         int[] neighborLevels = new int[4];
         boolean[] canFlow = new boolean[4];
 
@@ -150,8 +154,10 @@ public abstract class FlowableFluidMixin extends Fluid {
             BlockPos neighborPos = pos.relative(dir);
             BlockState neighborBlockState = world.getBlockState(neighborPos);
             neighbors[idx] = neighborPos;
+            directions[idx] = dir;
 
-            if (canFlowInto(world, neighborPos, neighborBlockState)) {
+            if (canFlowInto(world, neighborPos, neighborBlockState)
+                    && !isWaterloggableTarget(world, neighborPos, neighborBlockState)) {
                 FluidState neighborFluidState = neighborBlockState.getFluidState();
                 int neighborLevel = WaterPhysics.isWater(neighborFluidState.getType())
                         ? neighborFluidState.getAmount()
@@ -235,6 +241,14 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // Apply changes to world
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
+                        int movedAmount = Math.max(0, neighborLevels[i]
+                                - (WaterPhysics.isWater(world.getFluidState(neighbors[i]).getType())
+                                        ? world.getFluidState(neighbors[i]).getAmount()
+                                        : 0));
+                        if (movedAmount > 0 && EmergentConfig.get().hydraulicErosion) {
+                            ErosionPhysics.attemptFlowErosion(world, pos, fluidState, directions[i], movedAmount);
+                        }
+
                         // Optimization: The implementation of setWaterLevel does extensive checks.
                         setWaterLevel(world, neighbors[i], neighborLevels[i], false);
                         world.scheduleTick(neighbors[i], (Fluid) (Object) this, WATER_TICK_RATE);
@@ -243,12 +257,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
                 // Update current position after horizontal distribution
                 if (currentLevel <= 0) {
-                    // Check if this is a waterlogged block
-                    if (blockState.hasProperty(BlockStateProperties.WATERLOGGED) && blockState.getValue(BlockStateProperties.WATERLOGGED)) {
-                        world.setBlock(pos, blockState.setValue(BlockStateProperties.WATERLOGGED, false), 3);
-                    } else {
-                        world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-                    }
+                    removeWaterAt(world, pos, blockState);
                 } else {
                     setWaterLevel(world, pos, currentLevel, false);
                 }
@@ -278,19 +287,22 @@ public abstract class FlowableFluidMixin extends Fluid {
             return true;
         if (WaterPhysics.isWater(state.getFluidState().getType()))
             return true;
+        if (isWaterloggableTarget(world, pos, state))
+            return true;
         return state.canBeReplaced((Fluid) (Object) this);
     }
 
     @Unique
-    private boolean isWaterloggableTarget(BlockState state) {
-        if (state.getBlock() instanceof LiquidBlockContainer) {
-            return state.hasProperty(BlockStateProperties.WATERLOGGED) && !state.getValue(BlockStateProperties.WATERLOGGED);
+    private boolean isWaterloggableTarget(ServerLevel world, BlockPos pos, BlockState state) {
+        if (state.getBlock() instanceof LiquidBlockContainer container) {
+            return state.getFluidState().isEmpty()
+                    && container.canPlaceLiquid(null, world, pos, state, (Fluid) (Object) this);
         }
         return false;
     }
 
     @Unique
-    private void setWaterLevel(ServerLevel world, BlockPos pos, int level, boolean falling) {
+    private boolean setWaterLevel(ServerLevel world, BlockPos pos, int level, boolean falling) {
         BlockState currentState = world.getBlockState(pos);
         FluidState currentFluidState = currentState.getFluidState();
         boolean isWater = WaterPhysics.isWater(currentFluidState.getType());
@@ -304,16 +316,22 @@ public abstract class FlowableFluidMixin extends Fluid {
             } else {
                 world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
             }
+            return true;
         } else if (level >= 8) {
             // Check if target is a waterloggable block
-            if (isWaterloggableTarget(currentState)) {
-                world.setBlock(pos, currentState.setValue(BlockStateProperties.WATERLOGGED, true), 3);
-                emergent$afterWaterPlaced(world, pos);
+            if (isWaterloggableTarget(world, pos, currentState)
+                    && currentState.getBlock() instanceof LiquidBlockContainer container) {
+                if (container.placeLiquid(world, pos, currentState, this.getSource(false))) {
+                    emergent$afterWaterPlaced(world, pos);
+                    return true;
+                }
+                return false;
             } else {
                 // Use still/source for level 8 so buckets can pick it up
                 FluidState newState = this.getSource(false);
                 world.setBlock(pos, newState.createLegacyBlock(), 3);
                 emergent$afterWaterPlaced(world, pos);
+                return true;
             }
         } else {
             // Partial levels (1-7)
@@ -322,7 +340,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             // If the target is NOT Air and NOT Water, we must break it to place water here.
             if (!currentState.isAir() && !isWater) {
                 if (!currentState.canBeReplaced((Fluid) (Object) this)) {
-                    return;
+                    return false;
                 }
                 Block.dropResources(currentState, world, pos,
                         currentState.hasBlockEntity() ? world.getBlockEntity(pos) : null);
@@ -334,6 +352,57 @@ public abstract class FlowableFluidMixin extends Fluid {
             FluidState newState = this.getFlowing(level, false);
             world.setBlock(pos, newState.createLegacyBlock(), 3);
             emergent$afterWaterPlaced(world, pos);
+            return true;
+        }
+    }
+
+    @Unique
+    private boolean tryMoveSourceIntoWaterloggableNeighbor(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState blockState,
+            FluidState fluidState) {
+        List<Direction> directions = new ArrayList<>();
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            directions.add(direction);
+        }
+        Collections.shuffle(directions);
+
+        for (Direction direction : directions) {
+            BlockPos targetPos = pos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            if (canFlowInto(world, targetPos, targetState)
+                    && !isWaterloggableTarget(world, targetPos, targetState)) {
+                return false;
+            }
+        }
+
+        for (Direction direction : directions) {
+            BlockPos targetPos = pos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            if (!isWaterloggableTarget(world, targetPos, targetState)) {
+                continue;
+            }
+
+            if (EmergentConfig.get().hydraulicErosion) {
+                ErosionPhysics.attemptFlowErosion(world, pos, fluidState, direction, 8);
+            }
+            if (setWaterLevel(world, targetPos, 8, false)) {
+                removeWaterAt(world, pos, blockState);
+                world.scheduleTick(targetPos, (Fluid) (Object) this, WATER_TICK_RATE);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    @Unique
+    private void removeWaterAt(ServerLevel world, BlockPos pos, BlockState blockState) {
+        if (blockState.hasProperty(BlockStateProperties.WATERLOGGED) && blockState.getValue(BlockStateProperties.WATERLOGGED)) {
+            world.setBlock(pos, blockState.setValue(BlockStateProperties.WATERLOGGED, false), 3);
+        } else {
+            world.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
         }
     }
 

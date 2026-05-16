@@ -68,15 +68,15 @@ Warden summoning behavior can be widened beyond vanilla's default restrictions.
 
 ### Finite Water Flow
 
-Water sources can be prevented from regenerating infinitely, making water flow more physical.
+Water sources can be prevented from regenerating infinitely. Water moves as conserved block-volume units: gravity is preferred, horizontal flow equalizes lower neighboring cells, and source water can fill waterloggable blocks through vanilla fluid-container hooks.
 
 ### Rain Accumulation
 
-Rain can accumulate water in exposed spaces.
+Rain can slowly accumulate water in exposed spaces. Absorbent surfaces such as dirt, grass, mud, and sand collect less readily, while existing shallow water can deepen over time.
 
 ### Hydraulic Erosion
 
-Flowing water can erode vulnerable blocks over time. Erosion is driven by block tags and vanilla material properties where possible.
+Flowing water can erode vulnerable blocks over time. Erosion is driven by actual finite-water transfer when finite flow is enabled, with bank impact and bed shear applying bounded probabilities based on block hardness and tags.
 
 ### Auto Planting
 
@@ -104,12 +104,12 @@ Optional brewing changes can extend potion amplifier or duration limits. Brewing
 The config is generated at:
 
 ```text
-config/emergent.json5
+config/emergent.json
 ```
 
 Example:
 
-```json5
+```json
 {
   "volatileContainers": true,
   "volatileDroppedItems": true,

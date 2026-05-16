@@ -9,7 +9,8 @@
     - Avoid `@Redirect` unless absolutely necessary (e.g., when a value must be changed *before* it is used in logic that runs in the same tick).
 4. **Quality**: Use optimal programming paradigms and design patterns. Code must be clean, modular, and performant.
 5. **Source Code Access**: Do not guess method names or rely solely on online searches. The project includes generated Minecraft source code.
-    - **Local Source Cache**: Use the `mc-src` directory in the project root to inspect Minecraft source code. If it is empty or missing, run `scripts/extract_sources.ps1` to populate it.
+    - **Local Source Cache**: Use the `mc-src` directory in the project root to inspect Minecraft source code. If it is empty, missing, or has pre-26.1/Yarn-style packages such as `net/minecraft/fluid`, run `scripts/extract_sources.ps1` to repopulate it from the current official Mojang-name source JAR.
+    - **Minecraft 26.1+ Names**: Fabric for Minecraft 26.1+ uses Mojang official, non-obfuscated names. Expected source paths include `net/minecraft/world/level/material/FlowingFluid.java`, not old Yarn paths.
     - **Verify Signatures**: Always verify method signatures and mapping names by checking `mc-src` or using `javap`.
     - **Generate Sources**: If sources are missing from the Gradle cache, run `./gradlew genSources` first, then run the extraction script.
 6. **Configuration Integrity**: Ensure configuration files are synchronized with codebase changes.

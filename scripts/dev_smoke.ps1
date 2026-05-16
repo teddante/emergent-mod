@@ -1,7 +1,8 @@
 param(
     [switch]$SkipBuild,
     [switch]$CopyToPrism,
-    [string]$PrismMinecraftDir = "C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
+    [switch]$RequireMinecraftSources,
+    [string]$PrismMinecraftDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +13,30 @@ $MixinConfigPath = Join-Path $ProjectRoot "src\main\resources\emergent.mixins.js
 $MixinSourceDir = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\mixin"
 $ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
 $McSourceDir = Join-Path $ProjectRoot "mc-src"
-$JarPath = Join-Path $ProjectRoot "build\libs\emergent-1.0.0.jar"
+$GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
+
+function Read-GradleProperties {
+    $properties = @{}
+    Get-Content -LiteralPath $GradlePropertiesPath | ForEach-Object {
+        if ($_ -match "^\s*([^#][^=]+?)\s*=\s*(.*?)\s*$") {
+            $properties[$Matches[1].Trim()] = $Matches[2].Trim()
+        }
+    }
+
+    return $properties
+}
+
+$GradleProperties = Read-GradleProperties
+$ArchivesBaseName = $GradleProperties["archives_base_name"]
+$ModVersion = $GradleProperties["mod_version"]
+if ([string]::IsNullOrWhiteSpace($ArchivesBaseName) -or [string]::IsNullOrWhiteSpace($ModVersion)) {
+    throw "gradle.properties must define archives_base_name and mod_version."
+}
+if ($ModVersion -notmatch "^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$") {
+    throw "mod_version must follow SemVer-style MAJOR.MINOR.PATCH, with optional pre-release/build metadata."
+}
+
+$JarPath = Join-Path $ProjectRoot "build\libs\$ArchivesBaseName-$ModVersion.jar"
 
 function Write-Step {
     param([string]$Message)
@@ -88,13 +112,19 @@ function Assert-ResourceHygiene {
         }
     }
 
-    $blocksPath = Join-Path $McSourceDir "net\minecraft\block\Blocks.java"
-    $blockKeysPath = Join-Path $McSourceDir "net\minecraft\block\BlockKeys.java"
-    $itemsPath = Join-Path $McSourceDir "net\minecraft\item\Items.java"
-    $itemKeysPath = Join-Path $McSourceDir "net\minecraft\item\ItemKeys.java"
-    foreach ($path in @($blocksPath, $blockKeysPath, $itemsPath, $itemKeysPath)) {
+    $blocksPath = Join-Path $McSourceDir "net\minecraft\world\level\block\Blocks.java"
+    $itemsPath = Join-Path $McSourceDir "net\minecraft\world\item\Items.java"
+    $blockIdsPath = Join-Path $McSourceDir "net\minecraft\references\BlockIds.java"
+    $itemIdsPath = Join-Path $McSourceDir "net\minecraft\references\ItemIds.java"
+    $fluidPath = Join-Path $McSourceDir "net\minecraft\world\level\material\FlowingFluid.java"
+    foreach ($path in @($blocksPath, $itemsPath, $blockIdsPath, $itemIdsPath, $fluidPath)) {
         if (-not (Test-Path -LiteralPath $path)) {
-            throw "Minecraft source cache is missing required registry source: $path"
+            if ($RequireMinecraftSources) {
+                throw "Minecraft source cache is missing required official 26.1+ source: $path. Run scripts/extract_sources.ps1 after ./gradlew genSources."
+            }
+
+            Write-Warning "Minecraft source cache is missing $path; skipping vanilla registry ID validation."
+            return
         }
     }
 
@@ -102,15 +132,15 @@ function Assert-ResourceHygiene {
     foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blocksPath -Raw), 'register\(\s*"([^"]+)"')) {
         $blockIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
-    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blockKeysPath -Raw), 'of\("([^"]+)"\)')) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blockIdsPath -Raw), 'createKey\("([^"]+)"\)')) {
         $blockIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
 
     $itemIds = @{}
-    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemsPath -Raw), 'register\(\s*"([^"]+)"')) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemsPath -Raw), 'register(?:Item|Block)?\(\s*"([^"]+)"')) {
         $itemIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
-    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemKeysPath -Raw), 'of\("([^"]+)"\)')) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemIdsPath -Raw), 'createKey\("([^"]+)"\)')) {
         $itemIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
     foreach ($id in $blockIds.Keys) {
@@ -181,7 +211,8 @@ try {
 
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"
-        & .\gradlew.bat build
+        $gradleWrapper = if ($env:OS -eq "Windows_NT") { ".\gradlew.bat" } else { "./gradlew" }
+        & $gradleWrapper build
         if ($LASTEXITCODE -ne 0) {
             throw "Gradle build failed."
         }
@@ -190,12 +221,16 @@ try {
     Assert-JarMixinContents
 
     if ($CopyToPrism) {
+        if ([string]::IsNullOrWhiteSpace($PrismMinecraftDir)) {
+            $PrismMinecraftDir = Join-Path $env:APPDATA "PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
+        }
+
         $modsDir = Join-Path $PrismMinecraftDir "mods"
         if (-not (Test-Path -LiteralPath $modsDir)) {
             throw "Prism mods folder not found: $modsDir"
         }
 
-        $targetJar = Join-Path $modsDir "emergent-1.0.0.jar"
+        $targetJar = Join-Path $modsDir "$ArchivesBaseName-$ModVersion.jar"
         Write-Step "Copying jar to Prism mods folder"
         Copy-Item -LiteralPath $JarPath -Destination $targetJar -Force
         Write-Host "Copied: $targetJar"

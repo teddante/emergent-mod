@@ -4,12 +4,15 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.MaterialReactionTags;
 import com.teddante.emergent.MaterialReactions;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.material.Fluids;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,6 +21,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerLevel.class)
 public abstract class ServerWorldMixin {
+    @Unique
+    private static final double EMERGENT_RAIN_DEEPEN_CHANCE = 0.04;
+    @Unique
+    private static final double EMERGENT_RAIN_PUDDLE_CHANCE = 0.0125;
+    @Unique
+    private static final double EMERGENT_ABSORBENT_SURFACE_FACTOR = 0.25;
 
     /**
      * @author Antigravity
@@ -28,38 +37,81 @@ public abstract class ServerWorldMixin {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
 
-        if (EmergentConfig.get().rainAccumulation && serverWorld.isRaining()) {
-            BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
-            BlockPos surfacePos = topPos.below();
-            Biome biome = serverWorld.getBiome(topPos).value();
-
-            // Only accumulate in biomes where it actually rains (not freezes)
-            if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) == Biome.Precipitation.RAIN) {
-                BlockState surfaceState = serverWorld.getBlockState(surfacePos);
-                BlockState state = serverWorld.getBlockState(topPos);
-
-                // If the exposed surface is already water, deepen that water instead of
-                // stacking a new water block above it.
-                if (surfaceState.is(Blocks.WATER)) {
-                    if (serverWorld.getRandom().nextDouble() < 0.5) {
-                        int currentLevel = surfaceState.getValue(LiquidBlock.LEVEL);
-                        if (currentLevel > 0) { // If not already a source block
-                            serverWorld.setBlock(surfacePos, surfaceState.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
-                        }
-                    }
-                } else if (state.isAir()) {
-                    if (serverWorld.getRandom().nextDouble() < 0.1) {
-                        // Start with level 1 water
-                        serverWorld.setBlock(topPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
-                    }
-                }
-
-                if (EmergentConfig.get().materialReactions) {
-                    MaterialReactions.tryRainOxidize(serverWorld, surfacePos, surfaceState, serverWorld.getRandom());
-                    emergent$tryRainGrowExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState);
-                }
-            }
+        if (!EmergentConfig.get().rainAccumulation || !serverWorld.isRaining()) {
+            return;
         }
+
+        BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
+        BlockPos surfacePos = topPos.below();
+        Biome biome = serverWorld.getBiome(topPos).value();
+
+        if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) != Biome.Precipitation.RAIN) {
+            return;
+        }
+
+        BlockState surfaceState = serverWorld.getBlockState(surfacePos);
+        BlockState state = serverWorld.getBlockState(topPos);
+
+        if (surfaceState.is(Blocks.WATER)) {
+            emergent$tryDeepenRainWater(serverWorld, surfacePos, surfaceState);
+        } else if (state.isAir() && emergent$canRainCollectOn(serverWorld, surfacePos, surfaceState)) {
+            emergent$tryCreateRainPuddle(serverWorld, topPos, surfaceState);
+        }
+
+        if (EmergentConfig.get().materialReactions) {
+            MaterialReactions.tryRainOxidize(serverWorld, surfacePos, surfaceState, serverWorld.getRandom());
+            emergent$tryRainGrowExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState);
+        }
+    }
+
+    @Unique
+    private void emergent$tryDeepenRainWater(ServerLevel world, BlockPos pos, BlockState state) {
+        if (world.getRandom().nextDouble() >= EMERGENT_RAIN_DEEPEN_CHANCE) {
+            return;
+        }
+
+        int currentLevel = state.getValue(LiquidBlock.LEVEL);
+        if (currentLevel <= 0) {
+            return;
+        }
+
+        world.setBlock(pos, state.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
+        world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
+    }
+
+    @Unique
+    private void emergent$tryCreateRainPuddle(ServerLevel world, BlockPos pos, BlockState surfaceState) {
+        double chance = EMERGENT_RAIN_PUDDLE_CHANCE * emergent$surfaceAbsorptionFactor(surfaceState);
+        if (world.getRandom().nextDouble() >= chance) {
+            return;
+        }
+
+        world.setBlock(pos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
+        world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
+    }
+
+    @Unique
+    private boolean emergent$canRainCollectOn(ServerLevel world, BlockPos surfacePos, BlockState surfaceState) {
+        if (surfaceState.isAir() || !surfaceState.getFluidState().isEmpty()) {
+            return false;
+        }
+        if (surfaceState.is(BlockTags.LEAVES) || surfaceState.is(BlockTags.LOGS)) {
+            return false;
+        }
+
+        return surfaceState.isFaceSturdy(world, surfacePos, Direction.UP);
+    }
+
+    @Unique
+    private double emergent$surfaceAbsorptionFactor(BlockState surfaceState) {
+        if (surfaceState.is(BlockTags.DIRT)
+                || surfaceState.is(BlockTags.GRASS_BLOCKS)
+                || surfaceState.is(BlockTags.MUD)
+                || surfaceState.is(BlockTags.SAND)) {
+            return EMERGENT_ABSORBENT_SURFACE_FACTOR;
+        }
+
+        return 1.0;
     }
 
     @Unique
