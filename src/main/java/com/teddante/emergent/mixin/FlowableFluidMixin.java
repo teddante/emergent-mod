@@ -131,6 +131,11 @@ public abstract class FlowableFluidMixin extends Fluid {
                 }
             }
         }
+        boolean isLava = WaterPhysics.isLava(fluid);
+        if (isLava) {
+            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
+            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
+        }
 
         String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
         if (cachedQuietTickReason != null) {
@@ -146,15 +151,6 @@ public abstract class FlowableFluidMixin extends Fluid {
             return;
         }
 
-        if (WaterPhysics.isLava(fluid)) {
-            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
-            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
-            if (EmergentConfig.get().materialReactions) {
-                EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
-                ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
-            }
-        }
-
         String earlyQuietTickReason = emergent$cheapFiniteFluidQuietReason(world, pos, fluid, currentLevel);
         if (earlyQuietTickReason != null) {
             EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
@@ -165,6 +161,11 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         if (!emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
             return;
+        }
+
+        if (isLava && EmergentConfig.get().materialReactions) {
+            EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
+            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
         }
 
         String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
