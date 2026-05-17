@@ -5,6 +5,7 @@ import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialPhysicsProfiles;
+import com.teddante.emergent.ThermalPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -13,6 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
@@ -208,6 +210,88 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
             context.assertBlockPresent(Blocks.FIRE, firePos);
             context.succeed();
         });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void storedHeatEvaporatesShallowWaterWithoutAdjacentHeatSource(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void storedColdFreezesShallowWaterAsThinFrozenLayer(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.7);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.SNOW, WATER_POS);
+            context.assertTrue(context.getBlockState(WATER_POS).getValue(SnowLayerBlock.LAYERS) == 2,
+                    "a shallow two-amount puddle should freeze into a two-layer surface rather than a full ice block");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 20)
+    public void storedHeatMeltsSnowLayerIntoSurfaceMoisture(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.DIRT);
+        context.setBlock(WATER_POS, Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, 1));
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.3);
+
+        boolean melted = ThermalPhysics.tryMeltFrozenSurface(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        context.assertTrue(melted, "stored heat should melt exposed snow layers");
+        context.assertBlockPresent(Blocks.AIR, WATER_POS);
+        context.assertTrue(EnvironmentalExposure.moisture(
+                context.getLevel(),
+                context.absolutePos(WATER_POS.below()),
+                context.getBlockState(WATER_POS.below())) > 0.0,
+                "melted snow should become stored surface moisture on the supporting block");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void storedHeatMeltsIceToWaterSource(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.ICE.defaultBlockState());
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                1.1);
+
+        boolean melted = ThermalPhysics.tryMeltFrozenSurface(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        context.assertTrue(melted, "stored heat should melt normal ice");
+        context.assertBlockPresent(Blocks.WATER, WATER_POS);
+        context.assertTrue(context.getBlockState(WATER_POS).getValue(LiquidBlock.LEVEL) == 0,
+                "melted ice should become a source-equivalent water block");
+        context.succeed();
     }
 
     @GameTest(maxTicks = 40)

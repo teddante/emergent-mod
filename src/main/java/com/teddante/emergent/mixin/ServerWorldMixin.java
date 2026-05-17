@@ -59,6 +59,7 @@ public abstract class ServerWorldMixin {
                     biome.getBaseTemperature(),
                     skyExposed,
                     ThermalPhysics.neighboringHeat(serverWorld, surfacePos));
+            ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             return;
         }
 
@@ -72,6 +73,9 @@ public abstract class ServerWorldMixin {
         }
 
         EnvironmentalExposure.addRainfall(serverWorld, surfacePos, surfaceState);
+        surfaceState = serverWorld.getBlockState(surfacePos);
+        ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, surfaceState);
+        surfaceState = serverWorld.getBlockState(surfacePos);
 
         if (surfaceState.is(Blocks.WATER)) {
             emergent$tryDeepenRainWater(serverWorld, surfacePos, surfaceState);

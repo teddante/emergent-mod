@@ -5,10 +5,12 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluids;
 
 /**
  * Local heat-transfer rules for interactions that Minecraft already models as
@@ -16,6 +18,14 @@ import net.minecraft.world.level.material.FluidState;
  * evaporating near heat.
  */
 public final class ThermalPhysics {
+    private static final double STORED_HEAT_EVAPORATION_THRESHOLD = 0.35;
+    private static final double STORED_COLD_FREEZE_THRESHOLD = 0.55;
+    private static final double SNOW_LAYER_MELT_HEAT = 0.22;
+    private static final double SNOW_BLOCK_MELT_HEAT = 0.85;
+    private static final double ICE_MELT_HEAT = 1.0;
+    private static final double PACKED_ICE_MELT_HEAT = 2.5;
+    private static final double MELT_WATER_MOISTURE_PER_LAYER = 0.08;
+
     public record FluidContactResult(boolean reacted, int remainingSourceAmount, boolean sourceBlockChanged) {
         public static FluidContactResult none(int sourceAmount) {
             return new FluidContactResult(false, sourceAmount, false);
@@ -81,7 +91,7 @@ public final class ThermalPhysics {
             return amount;
         }
 
-        int heat = neighboringHeat(world, pos);
+        int heat = neighboringHeat(world, pos) + storedHeatEvaporationStrength(world, pos);
         if (heat <= 0) {
             return amount;
         }
@@ -97,6 +107,55 @@ public final class ThermalPhysics {
         }
 
         return amount;
+    }
+
+    public static boolean tryFreezeWaterFromStoredCold(ServerLevel world, BlockPos pos, int amount) {
+        if (amount <= 0 || EnvironmentalExposure.cold(world, pos, world.getBlockState(pos)) < STORED_COLD_FREEZE_THRESHOLD) {
+            return false;
+        }
+        if (EnvironmentalExposure.heat(world, pos, world.getBlockState(pos)) >= STORED_HEAT_EVAPORATION_THRESHOLD) {
+            return false;
+        }
+
+        if (amount >= 8) {
+            world.setBlockAndUpdate(pos, Blocks.ICE.defaultBlockState());
+            EnvironmentalExposure.clearCold(world, pos);
+            return true;
+        }
+
+        if (amount <= WaterPhysics.settledThinLayerAmount(Fluids.WATER)) {
+            BlockState frozenFilm = Blocks.SNOW.defaultBlockState()
+                    .setValue(SnowLayerBlock.LAYERS, Math.max(1, amount));
+            BlockState belowState = world.getBlockState(pos.below());
+            if (!belowState.isAir() && belowState.getFluidState().isEmpty() && frozenFilm.canSurvive(world, pos)) {
+                world.setBlockAndUpdate(pos, frozenFilm);
+                EnvironmentalExposure.clearCold(world, pos);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static boolean tryMeltFrozenSurface(ServerLevel world, BlockPos pos, BlockState state) {
+        double heat = storedAndNeighboringHeat(world, pos, state);
+        if (state.is(Blocks.SNOW) && state.hasProperty(SnowLayerBlock.LAYERS)) {
+            return tryMeltSnowLayer(world, pos, state, heat);
+        }
+        if (state.is(Blocks.SNOW_BLOCK) && heat >= SNOW_BLOCK_MELT_HEAT) {
+            world.setBlockAndUpdate(pos, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+            EnvironmentalExposure.clearHeat(world, pos);
+            fizz(world, pos);
+            return true;
+        }
+        if (state.is(Blocks.ICE) || state.is(Blocks.FROSTED_ICE)) {
+            return tryMeltIce(world, pos, ICE_MELT_HEAT, heat);
+        }
+        if (state.is(Blocks.PACKED_ICE) || state.is(Blocks.BLUE_ICE)) {
+            return tryMeltIce(world, pos, PACKED_ICE_MELT_HEAT, heat);
+        }
+
+        return false;
     }
 
     public static boolean isHeatSource(BlockState state) {
@@ -122,6 +181,61 @@ public final class ThermalPhysics {
             }
         }
         return heat;
+    }
+
+    private static boolean tryMeltSnowLayer(ServerLevel world, BlockPos pos, BlockState state, double heat) {
+        if (heat < SNOW_LAYER_MELT_HEAT) {
+            return false;
+        }
+
+        int layers = state.getValue(SnowLayerBlock.LAYERS);
+        BlockPos supportPos = pos.below();
+        BlockState supportState = world.getBlockState(supportPos);
+        if (!supportState.isAir() && supportState.getFluidState().isEmpty()) {
+            EnvironmentalExposure.addMoisture(
+                    world,
+                    supportPos,
+                    supportState,
+                    layers * MELT_WATER_MOISTURE_PER_LAYER * MaterialPhysicsProfiles.surfaceWaterAbsorption(supportState));
+        }
+
+        if (layers <= 1) {
+            world.removeBlock(pos, false);
+        } else {
+            world.setBlockAndUpdate(pos, state.setValue(SnowLayerBlock.LAYERS, layers - 1));
+        }
+        EnvironmentalExposure.clearHeat(world, pos);
+        fizz(world, pos);
+        return true;
+    }
+
+    private static boolean tryMeltIce(ServerLevel world, BlockPos pos, double threshold, double heat) {
+        if (heat < threshold) {
+            return false;
+        }
+
+        world.setBlockAndUpdate(pos, Blocks.WATER.defaultBlockState());
+        EnvironmentalExposure.clearHeat(world, pos);
+        fizz(world, pos);
+        return true;
+    }
+
+    private static int storedHeatEvaporationStrength(ServerLevel world, BlockPos pos) {
+        double storedHeat = Math.max(
+                EnvironmentalExposure.heat(world, pos, world.getBlockState(pos)),
+                EnvironmentalExposure.heat(world, pos.below(), world.getBlockState(pos.below())));
+        if (storedHeat >= ICE_MELT_HEAT) {
+            return 2;
+        }
+        if (storedHeat >= STORED_HEAT_EVAPORATION_THRESHOLD) {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    private static double storedAndNeighboringHeat(ServerLevel world, BlockPos pos, BlockState state) {
+        return EnvironmentalExposure.heat(world, pos, state) + neighboringHeat(world, pos) * STORED_HEAT_EVAPORATION_THRESHOLD;
     }
 
     private static net.minecraft.world.level.block.Block lavaContactBlock(FluidState lavaState) {

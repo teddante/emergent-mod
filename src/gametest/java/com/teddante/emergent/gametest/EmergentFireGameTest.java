@@ -459,7 +459,7 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
 
     @GameTest(maxTicks = 220)
     public void movingEntityDoesNotCompactCoveredGround(GameTestHelper context) {
-        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        context.setBlock(TEST_POS, Blocks.DIRT);
         context.setBlock(TEST_POS.above(), Blocks.STONE);
         Cow cow = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above(2)));
         cow.setNoGravity(true);
@@ -476,7 +476,7 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         }
 
         context.runAtTickTime(210, () -> {
-            context.assertBlockPresent(Blocks.GRASS_BLOCK, TEST_POS);
+            context.assertBlockPresent(Blocks.DIRT, TEST_POS);
             context.succeed();
         });
     }

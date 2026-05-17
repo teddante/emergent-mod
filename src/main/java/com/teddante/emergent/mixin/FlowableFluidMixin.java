@@ -74,6 +74,10 @@ public abstract class FlowableFluidMixin extends Fluid {
         int tickDelay = fluid.getTickDelay(world);
 
         if (WaterPhysics.isWater(fluid)) {
+            if (ThermalPhysics.tryFreezeWaterFromStoredCold(world, pos, currentLevel)) {
+                return;
+            }
+
             int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
             if (evaporatedLevel != currentLevel) {
                 if (evaporatedLevel <= 0) {
