@@ -7,9 +7,11 @@ import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.ThermalPhysics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -46,7 +48,9 @@ public abstract class ServerWorldMixin {
 
         BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
         BlockPos surfacePos = topPos.below();
-        Biome biome = serverWorld.getBiome(topPos).value();
+        Holder<Biome> biomeHolder = serverWorld.getBiome(topPos);
+        Biome biome = biomeHolder.value();
+        double climateMoistureFactor = emergent$climateMoistureFactor(biomeHolder);
         BlockState surfaceState = serverWorld.getBlockState(surfacePos);
         BlockState state = serverWorld.getBlockState(topPos);
         boolean skyExposed = serverWorld.canSeeSky(topPos);
@@ -58,10 +62,11 @@ public abstract class ServerWorldMixin {
                     surfaceState,
                     biome.getBaseTemperature(),
                     skyExposed,
-                    ThermalPhysics.neighboringHeat(serverWorld, surfacePos));
+                    ThermalPhysics.neighboringHeat(serverWorld, surfacePos),
+                    climateMoistureFactor);
             ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             if (EmergentConfig.get().materialReactions) {
-                emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed);
+                emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed, climateMoistureFactor);
             }
             return;
         }
@@ -75,7 +80,7 @@ public abstract class ServerWorldMixin {
             return;
         }
 
-        EnvironmentalExposure.addRainfall(serverWorld, surfacePos, surfaceState);
+        EnvironmentalExposure.addRainfall(serverWorld, surfacePos, surfaceState, climateMoistureFactor);
         surfaceState = serverWorld.getBlockState(surfacePos);
         ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, surfaceState);
         surfaceState = serverWorld.getBlockState(surfacePos);
@@ -149,6 +154,26 @@ public abstract class ServerWorldMixin {
     }
 
     @Unique
+    private double emergent$climateMoistureFactor(Holder<Biome> biome) {
+        double factor = 1.0;
+        if (biome.is(BiomeTags.IS_JUNGLE) || biome.is(BiomeTags.IS_RIVER) || biome.is(BiomeTags.IS_OCEAN)) {
+            factor *= 1.35;
+        } else if (biome.is(BiomeTags.IS_FOREST) || biome.is(BiomeTags.IS_TAIGA)) {
+            factor *= 1.15;
+        }
+
+        if (biome.is(BiomeTags.IS_BADLANDS)
+                || biome.is(BiomeTags.IS_SAVANNA)
+                || biome.is(BiomeTags.HAS_DESERT_PYRAMID)
+                || biome.is(BiomeTags.HAS_VILLAGE_DESERT)
+                || biome.is(BiomeTags.IS_NETHER)) {
+            factor *= 0.55;
+        }
+
+        return EnvironmentalExposure.climateMoistureFactor(factor);
+    }
+
+    @Unique
     private void emergent$tryRainGrowExposedBlock(
             ServerLevel world,
             BlockPos topPos,
@@ -180,12 +205,13 @@ public abstract class ServerWorldMixin {
             BlockState topState,
             BlockState surfaceState,
             float biomeTemperature,
-            boolean skyExposed) {
-        if (emergent$tryClimateStressAt(world, topPos, topState, biomeTemperature, skyExposed)) {
+            boolean skyExposed,
+            double climateMoistureFactor) {
+        if (emergent$tryClimateStressAt(world, topPos, topState, biomeTemperature, skyExposed, climateMoistureFactor)) {
             return;
         }
 
-        emergent$tryClimateStressAt(world, surfacePos, surfaceState, biomeTemperature, skyExposed);
+        emergent$tryClimateStressAt(world, surfacePos, surfaceState, biomeTemperature, skyExposed, climateMoistureFactor);
     }
 
     @Unique
@@ -194,7 +220,8 @@ public abstract class ServerWorldMixin {
             BlockPos pos,
             BlockState state,
             float biomeTemperature,
-            boolean skyExposed) {
-        return MaterialReactions.tryClimateStress(world, pos, state, biomeTemperature, skyExposed);
+            boolean skyExposed,
+            double climateMoistureFactor) {
+        return MaterialReactions.tryClimateStress(world, pos, state, biomeTemperature, skyExposed, climateMoistureFactor);
     }
 }

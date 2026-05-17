@@ -39,6 +39,8 @@ public final class EnvironmentalExposure {
     private static final double COLD_BIOME_EXPOSURE_PER_SAMPLE = 0.04;
     private static final double SEDIMENT_DEPOSIT_THRESHOLD_KG = 45.0;
     private static final double ASH_RUNOFF_SUSPENDED_SOLIDS_KG_PER_CUBIC_METER = 2.0;
+    private static final double MIN_CLIMATE_MOISTURE_FACTOR = 0.35;
+    private static final double MAX_CLIMATE_MOISTURE_FACTOR = 1.75;
     private static final Map<ServerLevel, Map<Long, ExposureEntry>> EXPOSURES = new WeakHashMap<>();
 
     private EnvironmentalExposure() {
@@ -61,17 +63,25 @@ public final class EnvironmentalExposure {
     }
 
     public static double rainfallSurfaceMoisture(BlockState state, double rainfallDepthMeters) {
+        return rainfallSurfaceMoisture(state, rainfallDepthMeters, 1.0);
+    }
+
+    public static double rainfallSurfaceMoisture(BlockState state, double rainfallDepthMeters, double climateMoistureFactor) {
         double activePoreVolume = ACTIVE_SURFACE_DEPTH_METERS * ACTIVE_SURFACE_PORE_FRACTION;
         if (activePoreVolume <= 0.0) {
             return 0.0;
         }
 
-        double rainfallVolume = Math.max(0.0, rainfallDepthMeters) * BLOCK_VOLUME_CUBIC_METERS;
+        double rainfallVolume = Math.max(0.0, rainfallDepthMeters) * climateMoistureFactor(climateMoistureFactor) * BLOCK_VOLUME_CUBIC_METERS;
         return Math.min(0.25, rainfallVolume / activePoreVolume * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
     }
 
     public static double addRainfall(ServerLevel world, BlockPos pos, BlockState state) {
-        double moisture = addMoisture(world, pos, state, rainfallSurfaceMoisture(state, RAIN_SAMPLE_DEPTH_METERS));
+        return addRainfall(world, pos, state, 1.0);
+    }
+
+    public static double addRainfall(ServerLevel world, BlockPos pos, BlockState state, double climateMoistureFactor) {
+        double moisture = addMoisture(world, pos, state, rainfallSurfaceMoisture(state, RAIN_SAMPLE_DEPTH_METERS, climateMoistureFactor));
         washAshResidue(world, pos, state, RAIN_SAMPLE_DEPTH_METERS * 25.0);
         return moisture;
     }
@@ -171,17 +181,29 @@ public final class EnvironmentalExposure {
             float biomeBaseTemperature,
             boolean skyExposed,
             int localHeat) {
+        applyAmbientSurfaceExchange(world, pos, state, biomeBaseTemperature, skyExposed, localHeat, 1.0);
+    }
+
+    public static void applyAmbientSurfaceExchange(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeBaseTemperature,
+            boolean skyExposed,
+            int localHeat,
+            double climateMoistureFactor) {
         if (state.isAir() || !state.getFluidState().isEmpty()) {
             clear(world, pos);
             return;
         }
 
+        double dryAirMultiplier = 1.0 / climateMoistureFactor(climateMoistureFactor);
         double materialDrying = MaterialPhysicsProfiles.dryingExposure(state);
         double hotBiomeDrying = Math.max(0.0, biomeBaseTemperature - 0.8) * HOT_BIOME_DRYING_PER_SAMPLE;
         double coldBiomeExposure = Math.max(0.0, 0.15 - biomeBaseTemperature) * COLD_BIOME_EXPOSURE_PER_SAMPLE;
         double skyDrying = skyExposed ? SKY_EXPOSURE_DRYING_PER_SAMPLE : 0.0;
         double heatDrying = Math.max(0, localHeat) * LOCAL_HEAT_DRYING_PER_SAMPLE;
-        removeMoisture(world, pos, state, (hotBiomeDrying + skyDrying + heatDrying) * materialDrying);
+        removeMoisture(world, pos, state, (hotBiomeDrying + skyDrying + heatDrying) * materialDrying * dryAirMultiplier);
 
         if (localHeat > 0) {
             addHeat(world, pos, state, localHeat * LOCAL_HEAT_EXPOSURE_PER_SAMPLE);
@@ -325,6 +347,10 @@ public final class EnvironmentalExposure {
 
     public static double ashRunoffCapacityKilograms(int waterAmount) {
         return fluidAmountCubicMeters(waterAmount) * ASH_RUNOFF_SUSPENDED_SOLIDS_KG_PER_CUBIC_METER;
+    }
+
+    public static double climateMoistureFactor(double climateMoistureFactor) {
+        return Math.min(MAX_CLIMATE_MOISTURE_FACTOR, Math.max(MIN_CLIMATE_MOISTURE_FACTOR, climateMoistureFactor));
     }
 
     public static double washAshIntoWater(

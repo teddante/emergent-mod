@@ -178,12 +178,23 @@ public final class MaterialPhysicsProfiles {
     }
 
     public static double vegetationClimateStress(BlockState state, double moisture, double heat, float biomeTemperature, boolean skyExposed) {
+        return vegetationClimateStress(state, moisture, heat, biomeTemperature, skyExposed, 1.0);
+    }
+
+    public static double vegetationClimateStress(
+            BlockState state,
+            double moisture,
+            double heat,
+            float biomeTemperature,
+            boolean skyExposed,
+            double climateMoistureFactor) {
         if (!isVegetation(state)) {
             return 0.0;
         }
 
         double dryness = Math.max(0.0, 1.0 - moisture);
-        double heatPressure = Math.max(0.0, heat * 0.35 + Math.max(0.0F, biomeTemperature - 0.8F) * 0.8);
+        double dryAirMultiplier = 1.0 / EnvironmentalExposure.climateMoistureFactor(climateMoistureFactor);
+        double heatPressure = Math.max(0.0, heat * 0.35 + Math.max(0.0F, biomeTemperature - 0.8F) * 0.8) * dryAirMultiplier;
         double exposure = skyExposed ? 1.0 : 0.45;
         double plantSensitivity = state.is(BlockTags.CROPS) || state.is(MaterialReactionTags.RAIN_GROWS) ? 1.2 : 1.0;
         if (state.is(BlockTags.LEAVES)) {

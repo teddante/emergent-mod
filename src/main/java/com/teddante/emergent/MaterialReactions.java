@@ -388,13 +388,23 @@ public final class MaterialReactions {
             BlockState state,
             float biomeTemperature,
             boolean skyExposed) {
+        return tryClimateStress(world, pos, state, biomeTemperature, skyExposed, 1.0);
+    }
+
+    public static boolean tryClimateStress(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeTemperature,
+            boolean skyExposed,
+            double climateMoistureFactor) {
         double moisture = Math.max(
                 EnvironmentalExposure.moisture(world, pos, state),
                 EnvironmentalExposure.moisture(world, pos.below(), world.getBlockState(pos.below())));
         double heat = Math.max(
                 EnvironmentalExposure.heat(world, pos, state),
                 EnvironmentalExposure.heat(world, pos.below(), world.getBlockState(pos.below())));
-        double stress = MaterialPhysicsProfiles.vegetationClimateStress(state, moisture, heat, biomeTemperature, skyExposed);
+        double stress = MaterialPhysicsProfiles.vegetationClimateStress(state, moisture, heat, biomeTemperature, skyExposed, climateMoistureFactor);
         if (stress <= 0.0) {
             return false;
         }

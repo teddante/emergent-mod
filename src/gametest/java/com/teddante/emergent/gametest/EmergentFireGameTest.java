@@ -198,6 +198,18 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void humidClimateAddsMoreRainMoistureThanAridClimate(GameTestHelper context) {
+        double aridMoisture = EnvironmentalExposure.rainfallSurfaceMoisture(Blocks.GRASS_BLOCK.defaultBlockState(), 0.001, 0.55);
+        double humidMoisture = EnvironmentalExposure.rainfallSurfaceMoisture(Blocks.GRASS_BLOCK.defaultBlockState(), 0.001, 1.35);
+
+        context.assertTrue(humidMoisture > aridMoisture,
+                "humid tagged biomes should let the same rain sample store more surface moisture than arid tagged biomes");
+        context.assertTrue(EnvironmentalExposure.climateMoistureFactor(0.0) > 0.0,
+                "climate moisture factors should clamp instead of allowing impossible zero humidity");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void hotExposedAirDriesStoredSurfaceMoisture(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
         EnvironmentalExposure.addMoisture(
@@ -216,6 +228,39 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
 
         context.assertTrue(EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 0.5,
                 "hot sky-exposed ambient exchange should dry stored surface moisture");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void humidClimateSlowsAmbientDrying(GameTestHelper context) {
+        BlockPos aridPos = TEST_POS;
+        BlockPos humidPos = TEST_POS.relative(Direction.EAST, 2);
+        context.setBlock(aridPos, Blocks.GRASS_BLOCK);
+        context.setBlock(humidPos, Blocks.GRASS_BLOCK);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(aridPos), context.getBlockState(aridPos), 0.5);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(humidPos), context.getBlockState(humidPos), 0.5);
+
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(aridPos),
+                context.getBlockState(aridPos),
+                1.2f,
+                true,
+                0,
+                0.55);
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(humidPos),
+                context.getBlockState(humidPos),
+                1.2f,
+                true,
+                0,
+                1.35);
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(humidPos), context.getBlockState(humidPos))
+                        > EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(aridPos), context.getBlockState(aridPos)),
+                "humid tagged biomes should dry surfaces more slowly than arid tagged biomes");
         context.succeed();
     }
 
@@ -447,6 +492,28 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         }
 
         context.assertBlockPresent(Blocks.DIRT, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void aridClimateIncreasesVegetationHeatStress(GameTestHelper context) {
+        double aridStress = MaterialPhysicsProfiles.vegetationClimateStress(
+                Blocks.GRASS_BLOCK.defaultBlockState(),
+                0.0,
+                1.0,
+                1.2f,
+                true,
+                0.55);
+        double humidStress = MaterialPhysicsProfiles.vegetationClimateStress(
+                Blocks.GRASS_BLOCK.defaultBlockState(),
+                0.0,
+                1.0,
+                1.2f,
+                true,
+                1.35);
+
+        context.assertTrue(aridStress > humidStress,
+                "arid tagged climates should intensify dry heat stress compared with humid tagged climates");
         context.succeed();
     }
 
