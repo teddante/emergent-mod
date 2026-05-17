@@ -33,7 +33,8 @@
 		"EnchantmentMenuMixin",
 		"PotionBrewingMixin",
 		"EnchantmentHelperMixin",
-		"IgniteMixin"
+		"IgniteMixin",
+		"DamageEntityMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

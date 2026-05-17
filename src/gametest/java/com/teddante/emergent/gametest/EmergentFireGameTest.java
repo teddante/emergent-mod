@@ -20,6 +20,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -35,6 +36,7 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.enchantment.LevelBasedValue;
+import net.minecraft.world.item.enchantment.effects.DamageEntity;
 import net.minecraft.world.item.enchantment.effects.Ignite;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
@@ -1410,6 +1412,66 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void boundlessThornsDamageOutputScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        DamageEntity thornsDamage = new DamageEntity(
+                LevelBasedValue.constant(1.0F),
+                LevelBasedValue.constant(5.0F),
+                context.getLevel().registryAccess()
+                        .lookupOrThrow(Registries.DAMAGE_TYPE)
+                        .getOrThrow(DamageTypes.THORNS));
+        ItemStack ordinaryChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(ordinaryChestplate, enchantments -> enchantments.set(thorns, 3));
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+
+        float ordinaryDamage = ExperienceEnergy.damageEntityDamageFromStoredEnergy(ordinaryChestplate, 3, thornsDamage, 5.0F);
+        float energeticDamage = ExperienceEnergy.damageEntityDamageFromStoredEnergy(energeticChestplate, 6, thornsDamage, 5.0F);
+
+        context.assertTrue(Math.abs(ordinaryDamage - 5.0F) < 0.001F,
+                "vanilla-level Thorns should keep vanilla's fixed returned-damage range");
+        context.assertTrue(Math.abs(energeticDamage - 10.0F) < 0.001F,
+                "over-cap Thorns should convert stored work into stronger fixed returned damage");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void damageEntityEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        DamageEntity thornsDamage = new DamageEntity(
+                LevelBasedValue.constant(1.0F),
+                LevelBasedValue.constant(5.0F),
+                context.getLevel().registryAccess()
+                        .lookupOrThrow(Registries.DAMAGE_TYPE)
+                        .getOrThrow(DamageTypes.THORNS));
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticChestplate, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            float vanillaDamage = maxObservedDamageFromEffect(context, thornsDamage, item, 6);
+            context.assertTrue(vanillaDamage <= 5.0F + 0.001F,
+                    "when boundless enchanting is disabled, fixed damage-entity effects should keep vanilla damage");
+
+            EmergentConfig.get().boundlessEnchanting = true;
+            float boundlessDamage = maxObservedDamageFromEffect(context, thornsDamage, item, 6);
+            context.assertTrue(boundlessDamage > 5.0F,
+                    "when boundless enchanting is enabled, fixed damage-entity effects should scale through the real effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void boundlessMendingRepairOutputScalesWithStoredEnergy(GameTestHelper context) {
         Holder<Enchantment> mending = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
@@ -1750,6 +1812,22 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.assertTrue(context.getBlockState(wirePos).getValue(RedStoneWireBlock.POWER) == 0,
                 "water should short powered conductive neighbors");
         context.succeed();
+    }
+
+    private static float maxObservedDamageFromEffect(
+            GameTestHelper context,
+            DamageEntity effect,
+            EnchantedItemInUse item,
+            int enchantmentLevel) {
+        float maxDamage = 0.0F;
+        for (int seed = 0; seed < 128; seed++) {
+            LivingEntity target = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+            target.getRandom().setSeed(seed);
+            effect.apply(context.getLevel(), enchantmentLevel, item, target, target.position());
+            maxDamage = Math.max(maxDamage, target.getMaxHealth() - target.getHealth());
+            target.discard();
+        }
+        return maxDamage;
     }
 
     private static void assertClose(double actual, double expected, String message) {

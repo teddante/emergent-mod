@@ -36,6 +36,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Vanilla level-based damage and protection effects are covered through Mojang's native effect components at over-cap levels, avoiding a second Emergent multiplier on effects that already scale with level.
 - Repair enchantment output above the vanilla cap scales durability repaired per raw XP by stored repair-enchantment work, preserving vanilla-level Mending behavior.
 - Constant ignite enchantments above the vanilla cap scale burn duration by stored ignite-enchantment work, preserving vanilla-level Flame behavior.
+- Fixed returned-damage enchantment effects such as Thorns scale damage output by stored damage-effect work above the vanilla cap while preserving vanilla-level damage and level-based trigger chance.
 - Advanced tooltips expose an enchanted item or book's derived Emergent work budget when Boundless Enchanting is enabled, without adding a new normal-play UI surface.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
@@ -46,7 +47,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
 - Use finite-fluid chunk hotspot output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, or genuinely active fluid movement.
 - Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially larger player-made fluid systems and any Prism logs that do not resemble the current basin/channel stress cases.
-- Extend the experience-energy layer from repair/ignite output scaling into more enchantment effect outputs where vanilla does not already provide a level-based output and there is a clear conserved work or rate interpretation.
+- Extend the experience-energy layer into more enchantment effect outputs where vanilla does not already provide a level-based output and there is a clear conserved work or rate interpretation.
 - Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
 - README/config/PR documentation pass before release.

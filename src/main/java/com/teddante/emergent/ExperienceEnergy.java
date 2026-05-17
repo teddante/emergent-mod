@@ -12,6 +12,8 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.ConditionalEffect;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.enchantment.TargetedConditionalEffect;
+import net.minecraft.world.item.enchantment.effects.AllOf;
+import net.minecraft.world.item.enchantment.effects.DamageEntity;
 import net.minecraft.world.item.enchantment.effects.EnchantmentEntityEffect;
 import net.minecraft.world.item.enchantment.effects.Ignite;
 
@@ -257,6 +259,34 @@ public final class ExperienceEnergy {
         return adjustedSeconds >= Float.MAX_VALUE ? Float.MAX_VALUE : (float) adjustedSeconds;
     }
 
+    public static float damageEntityDamageFromStoredEnergy(
+            ItemStack itemStack,
+            int enchantmentLevel,
+            DamageEntity sourceEffect,
+            float vanillaDamage) {
+        if (itemStack.isEmpty() || enchantmentLevel <= 0 || vanillaDamage <= 0.0F) {
+            return vanillaDamage;
+        }
+
+        double strongestEnergyRatio = 1.0;
+        for (Object2IntMap.Entry<Holder<Enchantment>> entry : EnchantmentHelper.getEnchantmentsForCrafting(itemStack).entrySet()) {
+            Enchantment enchantment = entry.getKey().value();
+            int level = Math.max(0, entry.getIntValue());
+            int vanillaMaxLevel = Math.max(1, enchantment.getMaxLevel());
+            if (level != enchantmentLevel || level <= vanillaMaxLevel
+                    || !hasConstantDamageEntityOutput(enchantment, sourceEffect, level, vanillaMaxLevel, vanillaDamage)) {
+                continue;
+            }
+
+            strongestEnergyRatio = Math.max(
+                    strongestEnergyRatio,
+                    enchantmentOutputEnergyRatio(level, vanillaMaxLevel, enchantment.getAnvilCost()));
+        }
+
+        double adjustedDamage = vanillaDamage * strongestEnergyRatio;
+        return adjustedDamage >= Float.MAX_VALUE ? Float.MAX_VALUE : (float) adjustedDamage;
+    }
+
     private static boolean hasConstantIgniteOutput(Enchantment enchantment, int level, int vanillaMaxLevel, float vanillaSeconds) {
         for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.PROJECTILE_SPAWNED)) {
             if (isMatchingConstantIgnite(effect.effect(), level, vanillaMaxLevel, vanillaSeconds)) {
@@ -294,6 +324,63 @@ public final class ExperienceEnergy {
         float vanillaMaxSeconds = ignite.duration().calculate(vanillaMaxLevel);
         return Math.abs(levelSeconds - vanillaSeconds) < 0.001F
                 && levelSeconds <= vanillaMaxSeconds + 0.001F;
+    }
+
+    private static boolean hasConstantDamageEntityOutput(
+            Enchantment enchantment,
+            DamageEntity sourceEffect,
+            int level,
+            int vanillaMaxLevel,
+            float vanillaDamage) {
+        for (TargetedConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_ATTACK)) {
+            if (isMatchingConstantDamageEntity(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaDamage)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_PIERCING_ATTACK)) {
+            if (isMatchingConstantDamageEntity(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaDamage)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.PROJECTILE_SPAWNED)) {
+            if (isMatchingConstantDamageEntity(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaDamage)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.HIT_BLOCK)) {
+            if (isMatchingConstantDamageEntity(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaDamage)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isMatchingConstantDamageEntity(
+            EnchantmentEntityEffect effect,
+            DamageEntity sourceEffect,
+            int level,
+            int vanillaMaxLevel,
+            float vanillaDamage) {
+        if (effect instanceof AllOf.EntityEffects allOf) {
+            for (EnchantmentEntityEffect childEffect : allOf.effects()) {
+                if (isMatchingConstantDamageEntity(childEffect, sourceEffect, level, vanillaMaxLevel, vanillaDamage)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (!(effect instanceof DamageEntity damageEntity) || !damageEntity.equals(sourceEffect)) {
+            return false;
+        }
+
+        float minDamage = damageEntity.minDamage().calculate(level);
+        float maxDamage = damageEntity.maxDamage().calculate(level);
+        float vanillaMaxMinDamage = damageEntity.minDamage().calculate(vanillaMaxLevel);
+        float vanillaMaxMaxDamage = damageEntity.maxDamage().calculate(vanillaMaxLevel);
+        return Math.abs(minDamage - vanillaMaxMinDamage) < 0.001F
+                && Math.abs(maxDamage - vanillaMaxMaxDamage) < 0.001F
+                && vanillaDamage + 0.001F >= Math.min(minDamage, maxDamage)
+                && vanillaDamage <= Math.max(minDamage, maxDamage) + 0.001F;
     }
 
     public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {
