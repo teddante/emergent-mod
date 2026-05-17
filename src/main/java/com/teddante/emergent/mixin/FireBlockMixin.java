@@ -47,6 +47,17 @@ public abstract class FireBlockMixin {
         }
     }
 
+    @Inject(method = "onPlace", at = @At("TAIL"))
+    private void emergent$reactWhenFireIsPlaced(BlockState state, Level world, BlockPos pos, BlockState oldState,
+            boolean movedByPiston, CallbackInfo ci) {
+        if (!EmergentConfig.get().materialReactions || !(world instanceof ServerLevel serverWorld)) {
+            return;
+        }
+
+        int age = state.hasProperty(FireBlock.AGE) ? state.getValue(FireBlock.AGE) : 0;
+        emergent$reactAroundFire(serverWorld, pos, serverWorld.getRandom(), Math.max(age, 5));
+    }
+
     @Inject(method = "checkBurnOut", at = @At("HEAD"), cancellable = true)
     private void checkVolatileDestruction(Level world, BlockPos pos, int spreadChance, RandomSource random, int age,
             CallbackInfo ci) {

@@ -10,13 +10,18 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.CropBlock;
+import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Method;
 
@@ -202,6 +207,30 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 80)
+    public void tickingFireDoesNotScorchDisconnectedGrass(GameTestHelper context) {
+        BlockPos firePos = TEST_POS;
+        BlockPos grassPos = firePos.relative(Direction.EAST, 2);
+        context.setBlock(firePos.below(), Blocks.OAK_LOG);
+        context.setBlock(firePos, Blocks.FIRE.defaultBlockState().setValue(FireBlock.AGE, 15));
+        context.setBlock(firePos.relative(Direction.EAST), Blocks.AIR);
+        context.setBlock(grassPos, Blocks.GRASS_BLOCK);
+
+        for (int tick = 1; tick <= 36; tick++) {
+            context.runAtTickTime(tick, () -> {
+                if (!context.getBlockState(firePos).is(Blocks.FIRE)) {
+                    context.setBlock(firePos, Blocks.FIRE.defaultBlockState().setValue(FireBlock.AGE, 15));
+                }
+                context.getLevel().scheduleTick(context.absolutePos(firePos), Blocks.FIRE, 1);
+            });
+        }
+
+        context.runAtTickTime(40, () -> {
+            context.assertBlockPresent(Blocks.GRASS_BLOCK, grassPos);
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 20)
     public void repeatedTrafficCompactsGrassIntoPath(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
@@ -213,6 +242,30 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
 
         context.assertBlockPresent(Blocks.DIRT_PATH, TEST_POS);
         context.succeed();
+    }
+
+    @GameTest(maxTicks = 220)
+    public void movingEntityDoesNotCompactCoveredGround(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        context.setBlock(TEST_POS.above(), Blocks.STONE);
+        Cow cow = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above(2)));
+        cow.setNoGravity(true);
+
+        for (int tick = 1; tick <= 200; tick++) {
+            final int step = tick;
+            context.runAtTickTime(tick, () -> {
+                double direction = step % 2 == 0 ? 1.0 : -1.0;
+                Vec3 movement = new Vec3(direction * 0.35, 0.0, 0.0);
+                cow.setOnGround(true);
+                cow.setDeltaMovement(movement);
+                cow.move(MoverType.SELF, movement);
+            });
+        }
+
+        context.runAtTickTime(210, () -> {
+            context.assertBlockPresent(Blocks.GRASS_BLOCK, TEST_POS);
+            context.succeed();
+        });
     }
 
     @GameTest(maxTicks = 20)

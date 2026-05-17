@@ -29,7 +29,7 @@ public final class TrafficWearPhysics {
         }
 
         Vec3 movement = entity.getKnownMovement();
-        double horizontalMovement = movement.horizontalDistance();
+        double horizontalMovement = Math.max(movement.horizontalDistance(), entity.getKnownSpeed().horizontalDistance());
         if (horizontalMovement < 0.015) {
             return false;
         }
