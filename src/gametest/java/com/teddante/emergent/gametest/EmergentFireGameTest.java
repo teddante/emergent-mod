@@ -1272,6 +1272,62 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void storedSoilMoistureIncreasesRainGrowthChance(GameTestHelper context) {
+        BlockPos dryCropPos = TEST_POS;
+        BlockPos wetCropPos = TEST_POS.relative(Direction.EAST, 2);
+        context.setBlock(dryCropPos.below(), Blocks.FARMLAND);
+        context.setBlock(wetCropPos.below(), Blocks.FARMLAND);
+        context.setBlock(dryCropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0));
+        context.setBlock(wetCropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0));
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(wetCropPos.below()),
+                context.getBlockState(wetCropPos.below()),
+                1.0);
+
+        float dryChance = MaterialReactions.rainGrowthChance(
+                context.getLevel(),
+                context.absolutePos(dryCropPos),
+                context.getBlockState(dryCropPos));
+        float wetChance = MaterialReactions.rainGrowthChance(
+                context.getLevel(),
+                context.absolutePos(wetCropPos),
+                context.getBlockState(wetCropPos));
+
+        context.assertTrue(wetChance > dryChance,
+                "stored soil moisture should make rain-assisted crop growth more likely");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void successfulRainGrowthConsumesStoredSoilMoisture(GameTestHelper context) {
+        BlockPos soilPos = TEST_POS.below();
+        context.setBlock(soilPos, Blocks.FARMLAND);
+        context.setBlock(TEST_POS, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0));
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(soilPos),
+                context.getBlockState(soilPos),
+                1.0);
+
+        RandomSource random = RandomSource.create(17);
+        for (int attempt = 0; attempt < 512 && context.getBlockState(TEST_POS).getValue(CropBlock.AGE) == 0; attempt++) {
+            MaterialReactions.tryRainGrow(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    random);
+        }
+
+        context.assertTrue(context.getBlockState(TEST_POS).getValue(CropBlock.AGE) > 0,
+                "test setup should force at least one rain-growth event");
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(soilPos), context.getBlockState(soilPos)) < 1.0,
+                "successful growth should draw from stored soil moisture instead of treating it as a free permanent bonus");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void waterShortsPoweredConductiveNeighbors(GameTestHelper context) {
         BlockPos wirePos = TEST_POS.relative(Direction.EAST);
         context.setBlock(TEST_POS, Blocks.WATER);

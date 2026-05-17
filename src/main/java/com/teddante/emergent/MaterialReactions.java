@@ -29,6 +29,8 @@ public final class MaterialReactions {
     private static final float SCORCHED_SURFACE_IGNITION_CHANCE = 0.35f;
     private static final float FLASH_UPWARD_IGNITION_CHANCE = 0.6f;
     private static final float FLASH_SIDE_IGNITION_CHANCE = 0.35f;
+    private static final double GROWTH_MOISTURE_MULTIPLIER = 0.65;
+    private static final double GROWTH_MOISTURE_UPTAKE = 0.05;
 
     private static final Map<Block, Block> CHARRED_LOGS = Map.ofEntries(
             Map.entry(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG),
@@ -375,40 +377,40 @@ public final class MaterialReactions {
                 && growable.isValidBonemealTarget(world, pos, state)
                 && growable.isBonemealSuccess(world, random, pos, state)) {
             growable.performBonemeal(world, random, pos, state);
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
 
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_1)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_2)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_3)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_4)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_5)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_7)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_15)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_25)) {
-            consumeGrowthAsh(world, pos, state);
+            consumeGrowthResources(world, pos, state);
         }
     }
 
@@ -488,17 +490,24 @@ public final class MaterialReactions {
         return MaterialPhysicsProfiles.vegetationStressThreshold(state) * heatThresholdVariance(world, pos, state);
     }
 
-    private static float rainGrowthChance(ServerLevel world, BlockPos pos, BlockState state) {
+    public static float rainGrowthChance(ServerLevel world, BlockPos pos, BlockState state) {
         double bonus = EnvironmentalExposure.ashGrowthBonus(world, pos, state);
         BlockPos belowPos = pos.below();
         bonus = Math.max(bonus, EnvironmentalExposure.ashGrowthBonus(world, belowPos, world.getBlockState(belowPos)));
-        return (float) Math.min(0.28, 0.12 + bonus);
+        double moisture = Math.max(
+                EnvironmentalExposure.moisture(world, pos, state),
+                EnvironmentalExposure.moisture(world, belowPos, world.getBlockState(belowPos)));
+        double waterFactor = 1.0 + Math.min(1.0, moisture) * GROWTH_MOISTURE_MULTIPLIER;
+        return (float) Math.min(1.0, (0.12 + bonus) * waterFactor);
     }
 
-    private static void consumeGrowthAsh(ServerLevel world, BlockPos pos, BlockState state) {
+    private static void consumeGrowthResources(ServerLevel world, BlockPos pos, BlockState state) {
         EnvironmentalExposure.consumeAshResidue(world, pos, state, 0.2);
         BlockPos belowPos = pos.below();
-        EnvironmentalExposure.consumeAshResidue(world, belowPos, world.getBlockState(belowPos), 0.2);
+        BlockState belowState = world.getBlockState(belowPos);
+        EnvironmentalExposure.consumeAshResidue(world, belowPos, belowState, 0.2);
+        EnvironmentalExposure.removeMoisture(world, pos, state, GROWTH_MOISTURE_UPTAKE * 0.25);
+        EnvironmentalExposure.removeMoisture(world, belowPos, belowState, GROWTH_MOISTURE_UPTAKE);
     }
 
     private static boolean tryIncrementAge(ServerLevel world, BlockPos pos, BlockState state, IntegerProperty property) {
