@@ -1,5 +1,6 @@
 package com.teddante.emergent;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -16,6 +17,7 @@ public final class EmergentProfiler {
     private static final boolean ENABLED = Boolean.getBoolean("emergent.profiler");
     private static final long SLOW_TICK_NANOS = Long.getLong("emergent.profiler.slowMs", 25L) * 1_000_000L;
     private static final int TOP_HEATED_BLOCKS = 4;
+    private static final int TOP_HOT_CHUNKS = 4;
     private static final Map<ServerLevel, TickStats> STATS = new WeakHashMap<>();
 
     private EmergentProfiler() {
@@ -55,6 +57,17 @@ public final class EmergentProfiler {
         }
 
         statsFor(world).counters.merge(counter, (long) amount, Long::sum);
+    }
+
+    public static void recordChunk(ServerLevel world, String category, BlockPos pos) {
+        if (!ENABLED) {
+            return;
+        }
+
+        int chunkX = pos.getX() >> 4;
+        int chunkZ = pos.getZ() >> 4;
+        String key = category + "@" + chunkX + "," + chunkZ;
+        statsFor(world).chunks.merge(key, 1L, Long::sum);
     }
 
     public static void recordHeat(ServerLevel world, BlockState state, double heat) {
@@ -104,6 +117,7 @@ public final class EmergentProfiler {
         private long totalNanos;
         private final Map<String, CategoryStats> categories = new HashMap<>();
         private final Map<String, Long> counters = new HashMap<>();
+        private final Map<String, Long> chunks = new HashMap<>();
         private final Map<String, Double> heatByBlock = new HashMap<>();
 
         private TickStats(long gameTime) {
@@ -127,6 +141,14 @@ public final class EmergentProfiler {
                 builder.append("counters=");
                 counters.entrySet().stream()
                         .sorted(Map.Entry.comparingByKey())
+                        .forEach(entry -> builder.append(entry.getKey()).append(":").append(entry.getValue()).append(" "));
+            }
+
+            if (!chunks.isEmpty()) {
+                builder.append("chunks=");
+                chunks.entrySet().stream()
+                        .sorted((left, right) -> Long.compare(right.getValue(), left.getValue()))
+                        .limit(TOP_HOT_CHUNKS)
                         .forEach(entry -> builder.append(entry.getKey()).append(":").append(entry.getValue()).append(" "));
             }
 

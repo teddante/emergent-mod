@@ -223,7 +223,7 @@ Headless profiler run:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev_perf.ps1 -SlowMs 10 -Top 12
 ```
 
-This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, or `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks.
+This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals and chunk hotspots. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, or `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks.
 
 The opt-in stress scenarios currently exercise stable finite-fluid wakeups, queued surface-weather samples, and repeated fire-reaction scans.
 
@@ -235,7 +235,7 @@ For lag investigations, add these JVM arguments to the Prism instance:
 -Demergent.profiler=true -Demergent.profiler.slowMs=25
 ```
 
-When an Emergent tick exceeds the threshold, the log reports subsystem timings and counters such as finite fluid ticks, surface-weather jobs, fire scans, traffic events, pending weather jobs, and the top heated block types. If Minecraft still logs `Can't keep up!` but Emergent does not log a matching slow profiler line, the spike is probably outside the instrumented Emergent systems.
+When an Emergent tick exceeds the threshold, the log reports subsystem timings and counters such as finite fluid ticks, water/lava split, surface-weather jobs, fire scans, traffic events, pending weather jobs, the hottest finite-fluid chunks, and the top heated block types. If Minecraft still logs `Can't keep up!` but Emergent does not log a matching slow profiler line, the spike is probably outside the instrumented Emergent systems.
 
 See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.
 

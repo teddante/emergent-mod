@@ -70,6 +70,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         long emergent$profileStart = EmergentProfiler.start();
         try {
         EmergentProfiler.count(world, "finite_fluid_ticks", 1);
+        EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_FLUIDS, pos);
 
         int currentLevel = fluidState.getAmount();
         if (currentLevel <= 0)
@@ -79,6 +80,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         int tickDelay = fluid.getTickDelay(world);
 
         if (WaterPhysics.isWater(fluid)) {
+            EmergentProfiler.count(world, "finite_fluid_water_ticks", 1);
             int evaporatedByEnvironment = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(world, pos, currentLevel);
             if (evaporatedByEnvironment <= 0) {
                 EmergentProfiler.count(world, "finite_fluid_environment_evaporations", 1);
@@ -110,9 +112,12 @@ public abstract class FlowableFluidMixin extends Fluid {
             return;
         }
 
-        if (WaterPhysics.isLava(fluid) && EmergentConfig.get().materialReactions) {
-            EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
-            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
+        if (WaterPhysics.isLava(fluid)) {
+            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
+            if (EmergentConfig.get().materialReactions) {
+                EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
+                ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
+            }
         }
 
         // STEP 1: Gravity - try to flow down

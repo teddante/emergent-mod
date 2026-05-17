@@ -31,7 +31,7 @@ function Get-ProfilerTick($Line) {
 }
 
 function Add-Counters($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "counters=([^)]*)") {
+    if ($Line -notmatch "counters=(.*?)(?= chunks=| heat=|\))") {
         return
     }
 
@@ -39,6 +39,22 @@ function Add-Counters($Line, [hashtable]$Totals) {
     foreach ($match in [regex]::Matches($counterText, "([A-Za-z0-9_]+):([0-9]+)")) {
         $name = $match.Groups[1].Value
         $value = [long]$match.Groups[2].Value
+        if (!$Totals.ContainsKey($name)) {
+            $Totals[$name] = 0L
+        }
+        $Totals[$name] += $value
+    }
+}
+
+function Add-Chunks($Line, [hashtable]$Totals) {
+    if ($Line -notmatch "chunks=(.*?)(?= heat=|\))") {
+        return
+    }
+
+    $chunkText = $Matches[1]
+    foreach ($match in [regex]::Matches($chunkText, "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+):([0-9]+)")) {
+        $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
+        $value = [long]$match.Groups[3].Value
         if (!$Totals.ContainsKey($name)) {
             $Totals[$name] = 0L
         }
@@ -85,8 +101,10 @@ $failureLines = @($logLines | Where-Object {
 } | Select-Object -First 12)
 
 $counterTotals = @{}
+$chunkTotals = @{}
 foreach ($line in $profilerLines) {
     Add-Counters $line $counterTotals
+    Add-Chunks $line $chunkTotals
 }
 
 $worstProfilerLines = @($profilerLines |
@@ -119,6 +137,17 @@ if ($counterTotals.Count -eq 0) {
 } else {
     $counterTotals.GetEnumerator() |
         Sort-Object -Property Name |
+        ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
+}
+
+$summary.Add("")
+$summary.Add("Top chunk hotspots:")
+if ($chunkTotals.Count -eq 0) {
+    $summary.Add("  none")
+} else {
+    $chunkTotals.GetEnumerator() |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First $Top |
         ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
 }
 
