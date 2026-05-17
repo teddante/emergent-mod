@@ -84,6 +84,9 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $quietSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_schedule_skips"
     $budgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_claims"
     $budgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_deferrals"
+    $chunkBudgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_claims"
+    $globalBudgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_global_deferrals"
+    $chunkBudgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_deferrals"
     $horizontalMoves = Get-CounterTotal $CounterTotals "finite_fluid_horizontal_moves"
     $downwardMoves = Get-CounterTotal $CounterTotals "finite_fluid_downward_moves"
     $thermalReactions = Get-CounterTotal $CounterTotals "finite_fluid_thermal_reactions"
@@ -105,7 +108,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $Summary.Add("Finite fluid diagnosis:")
     $Summary.Add(("  ticks={0} water={1} lava={2} activeSchedules={3} quietSkips={4} quietRatio={5:N1}% workEvents={6} workPerTick={7:N1}%" -f `
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
-    $Summary.Add(("  budgetClaims={0} budgetDeferrals={1}" -f $budgetClaims, $budgetDeferrals))
+    $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
+                $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
     $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} thermalQuietSkips={4} horizontalMoves={5} downwardMoves={6} thermalReactions={7}" -f `
                 $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $thermalQuietSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if (!$hasScheduleCounters) {

@@ -12,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlockContainer;
@@ -44,6 +45,8 @@ import java.util.WeakHashMap;
 public abstract class FlowableFluidMixin extends Fluid {
     @Unique
     private static final int emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET = FiniteFluidBudgetSettings.activeTickBudget();
+    @Unique
+    private static final int emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET = FiniteFluidBudgetSettings.activeChunkTickBudget();
     @Unique
     private static final int emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS = FiniteFluidBudgetSettings.budgetDeferSpreadTicks();
     @Unique
@@ -422,7 +425,8 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private boolean emergent$claimFiniteFluidWorkSlot(ServerLevel world, BlockPos pos, Fluid fluid, int tickDelay) {
-        if (emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET <= 0) {
+        if (emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET <= 0
+                && emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET <= 0) {
             return true;
         }
 
@@ -433,20 +437,45 @@ public abstract class FlowableFluidMixin extends Fluid {
             budget.gameTime = world.getGameTime();
             budget.claimed = 0;
             budget.deferred = 0;
+            budget.chunkClaims.clear();
         }
 
-        if (budget.claimed < emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET) {
-            budget.claimed++;
-            EmergentProfiler.count(world, "finite_fluid_budget_claims", 1);
-            return true;
+        if (emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET > 0
+                && budget.claimed >= emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET) {
+            emergent$deferFiniteFluidWork(world, pos, fluid, tickDelay, budget, "global");
+            return false;
         }
 
+        long chunkKey = ChunkPos.pack(pos);
+        int chunkClaimed = budget.chunkClaims.getOrDefault(chunkKey, 0);
+        if (emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET > 0
+                && chunkClaimed >= emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET) {
+            emergent$deferFiniteFluidWork(world, pos, fluid, tickDelay, budget, "chunk");
+            return false;
+        }
+
+        budget.claimed++;
+        budget.chunkClaims.put(chunkKey, chunkClaimed + 1);
+        EmergentProfiler.count(world, "finite_fluid_budget_claims", 1);
+        EmergentProfiler.count(world, "finite_fluid_budget_chunk_claims", 1);
+        return true;
+    }
+
+    @Unique
+    private void emergent$deferFiniteFluidWork(
+            ServerLevel world,
+            BlockPos pos,
+            Fluid fluid,
+            int tickDelay,
+            EmergentFiniteFluidBudget budget,
+            String reason) {
         budget.deferred++;
         EmergentProfiler.count(world, "finite_fluid_budget_deferrals", 1);
+        EmergentProfiler.count(world, "finite_fluid_budget_" + reason + "_deferrals", 1);
         int spread = Math.max(1, emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS);
-        int phaseDelay = 1 + Math.floorMod(directionRank(pos, 0) + pos.getY(), spread);
+        int chunkPhase = Math.floorMod(ChunkPos.pack(pos), spread);
+        int phaseDelay = 1 + Math.floorMod(directionRank(pos, 0) + pos.getY() + chunkPhase, spread);
         world.scheduleTick(pos, fluid, Math.max(1, tickDelay + phaseDelay));
-        return false;
     }
 
     @Unique
@@ -909,6 +938,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         private long gameTime;
         private int claimed;
         private int deferred;
+        private final Map<Long, Integer> chunkClaims = new LinkedHashMap<>();
 
         private EmergentFiniteFluidBudget(long gameTime) {
             this.gameTime = gameTime;
