@@ -50,7 +50,10 @@ public class ErosionPhysics {
         }
 
         double heightDrop = Math.max(0.0, fluidState.getOwnHeight() - world.getFluidState(fluidPos.relative(direction)).getOwnHeight());
-        double impulse = fluidState.getAmount() * Math.max(0.25, heightDrop);
+        BlockState sourceState = world.getBlockState(fluidPos);
+        double impulse = fluidState.getAmount()
+                * Math.max(0.25, heightDrop)
+                * EnvironmentalExposure.hydraulicAbrasionMultiplier(world, fluidPos, sourceState, fluidState.getAmount());
         attemptDirectionalErosion(world, fluidPos, direction, impulse);
     }
 
@@ -70,7 +73,9 @@ public class ErosionPhysics {
 
         double gravityFactor = direction == Direction.DOWN ? 1.75 : 1.0;
         double sourcePressure = fluidState.isSource() ? 1.25 : 1.0;
-        double impulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, gravityFactor, sourcePressure);
+        BlockState sourceState = world.getBlockState(fluidPos);
+        double impulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, gravityFactor, sourcePressure)
+                * EnvironmentalExposure.hydraulicAbrasionMultiplier(world, fluidPos, sourceState, fluidState.getAmount());
         attemptDirectionalErosion(world, fluidPos, direction, impulse);
     }
 

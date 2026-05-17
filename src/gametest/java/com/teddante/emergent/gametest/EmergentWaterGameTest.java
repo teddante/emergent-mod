@@ -147,6 +147,40 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 20)
+    public void suspendedSedimentConcentrationScalesWithFiniteWaterVolume(GameTestHelper context) {
+        assertClose(
+                EnvironmentalExposure.sedimentConcentrationKilogramsPerCubicMeter(100.0, 8),
+                100.0,
+                "one hundred kilograms in a full cubic metre should be one hundred kilograms per cubic metre");
+        assertClose(
+                EnvironmentalExposure.sedimentConcentrationKilogramsPerCubicMeter(100.0, 4),
+                200.0,
+                "the same sediment in half the water volume should double concentration");
+        assertClose(
+                EnvironmentalExposure.sedimentMassFraction(50.0, 8),
+                0.05,
+                "fifty kilograms of sediment in one cubic metre of water should be a five percent mass fraction");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sedimentLoadIncreasesHydraulicAbrasionSmoothly(GameTestHelper context) {
+        assertClose(
+                EnvironmentalExposure.hydraulicAbrasionMultiplier(0.0, 8),
+                1.0,
+                "clear water should keep baseline hydraulic wear");
+        context.assertTrue(
+                EnvironmentalExposure.hydraulicAbrasionMultiplier(5.0, 8)
+                        < EnvironmentalExposure.hydraulicAbrasionMultiplier(50.0, 8),
+                "heavier suspended sediment should increase abrasion more than light suspended sediment");
+        assertClose(
+                EnvironmentalExposure.hydraulicAbrasionMultiplier(50.0, 8),
+                1.75,
+                "a five percent sediment mass fraction should reach half of the modeled abrasion saturation");
+        context.succeed();
+    }
+
     @GameTest(maxTicks = 40)
     public void fallingFiniteWaterCarriesSuspendedSedimentDownstream(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
@@ -650,6 +684,40 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 0);
 
         context.assertBlockPresent(Blocks.STONE, targetPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sedimentLadenWaterAbradesStoneThatClearWaterCannot(GameTestHelper context) {
+        BlockPos clearWaterPos = new BlockPos(1, 2, 1);
+        BlockPos clearTargetPos = clearWaterPos.relative(Direction.EAST);
+        BlockPos abrasiveWaterPos = new BlockPos(1, 4, 1);
+        BlockPos abrasiveTargetPos = abrasiveWaterPos.relative(Direction.EAST);
+        context.setBlock(clearWaterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(clearTargetPos, Blocks.STONE.defaultBlockState());
+        context.setBlock(abrasiveWaterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(abrasiveTargetPos, Blocks.STONE.defaultBlockState());
+
+        double sedimentKilograms = 250.0;
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(abrasiveWaterPos),
+                context.getBlockState(abrasiveWaterPos),
+                sedimentKilograms);
+
+        int movedAmount = 8;
+        double clearWear = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, 1.0, 1.25);
+        double abrasiveMultiplier = EnvironmentalExposure.hydraulicAbrasionMultiplier(sedimentKilograms, 8);
+        int repetitions = Math.max(1, (int) Math.ceil(ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(abrasiveTargetPos),
+                context.getBlockState(abrasiveTargetPos)) / (clearWear * abrasiveMultiplier)));
+
+        applyFlowErosion(context, clearWaterPos, Direction.EAST, movedAmount, repetitions);
+        applyFlowErosion(context, abrasiveWaterPos, Direction.EAST, movedAmount, repetitions);
+
+        context.assertBlockPresent(Blocks.STONE, clearTargetPos);
+        context.assertBlockPresent(Blocks.COBBLESTONE, abrasiveTargetPos);
         context.succeed();
     }
 

@@ -40,6 +40,8 @@ public final class EnvironmentalExposure {
     private static final double COLD_BIOME_EXPOSURE_PER_SAMPLE = 0.04;
     private static final double SEDIMENT_DEPOSIT_THRESHOLD_KG = 45.0;
     private static final double ASH_RUNOFF_SUSPENDED_SOLIDS_KG_PER_CUBIC_METER = 2.0;
+    private static final double ABRASIVE_LOAD_REFERENCE_MASS_FRACTION = 0.05;
+    private static final double MAX_SEDIMENT_ABRASION_BOOST = 1.5;
     private static final double MIN_CLIMATE_MOISTURE_FACTOR = 0.35;
     private static final double MAX_CLIMATE_MOISTURE_FACTOR = 1.75;
     private static final Map<ServerLevel, Map<Long, ExposureEntry>> EXPOSURES = new WeakHashMap<>();
@@ -94,6 +96,38 @@ public final class EnvironmentalExposure {
 
     public static double hydraulicWearFromMovedWater(int movedAmount, double gravityFactor, double pressureFactor) {
         return fluidAmountCubicMeters(movedAmount) * HYDRAULIC_WEAR_PER_CUBIC_METER * gravityFactor * pressureFactor;
+    }
+
+    public static double sedimentConcentrationKilogramsPerCubicMeter(double sedimentKilograms, int fluidAmount) {
+        double volume = fluidAmountCubicMeters(fluidAmount);
+        if (sedimentKilograms <= 0.0 || volume <= 0.0) {
+            return 0.0;
+        }
+
+        return sedimentKilograms / volume;
+    }
+
+    public static double sedimentMassFraction(double sedimentKilograms, int fluidAmount) {
+        double waterMassKilograms = fluidAmountCubicMeters(fluidAmount) * LITERS_PER_CUBIC_METER;
+        if (sedimentKilograms <= 0.0 || waterMassKilograms <= 0.0) {
+            return 0.0;
+        }
+
+        return sedimentKilograms / waterMassKilograms;
+    }
+
+    public static double hydraulicAbrasionMultiplier(double sedimentKilograms, int fluidAmount) {
+        double massFraction = sedimentMassFraction(sedimentKilograms, fluidAmount);
+        if (massFraction <= 0.0) {
+            return 1.0;
+        }
+
+        double abrasiveLoad = massFraction / (massFraction + ABRASIVE_LOAD_REFERENCE_MASS_FRACTION);
+        return 1.0 + abrasiveLoad * MAX_SEDIMENT_ABRASION_BOOST;
+    }
+
+    public static double hydraulicAbrasionMultiplier(ServerLevel world, BlockPos fluidPos, BlockState fluidState, int fluidAmount) {
+        return hydraulicAbrasionMultiplier(suspendedSediment(world, fluidPos, fluidState), fluidAmount);
     }
 
     public static double surfaceMoistureFromHydraulicWear(double hydraulicWear) {
