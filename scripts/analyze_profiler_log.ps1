@@ -122,7 +122,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     if (!$hasScheduleCounters) {
         $Summary.Add("  interpretation=older profiler format; retest with the latest jar before deciding whether wakeups are stale or active.")
     } elseif ($budgetDeferrals -gt 0) {
-        $Summary.Add("  interpretation=active fluid work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
+        $Summary.Add("  interpretation=finite-fluid neighbour-scan/active work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
     } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
     } elseif ($quietPercent -ge 65.0 -and $activeSchedules -gt 0) {

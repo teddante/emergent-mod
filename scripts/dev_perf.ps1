@@ -124,7 +124,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     }
 
     if ($budgetDeferrals -gt 0) {
-        $Summary.Add("  interpretation=active fluid work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
+        $Summary.Add("  interpretation=finite-fluid neighbour-scan/active work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
     } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
     } elseif ($quietPercent -ge 65.0 -and $activeSchedules -gt 0) {
@@ -193,7 +193,7 @@ $summary.Add("Profiler slowMs: $SlowMs")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("Stress scenarios: $stressScenariosEnabled")
 if ($ActiveFluidBudget -gt 0) {
-    $summary.Add("Forced active fluid budget: $ActiveFluidBudget")
+    $summary.Add("Forced finite fluid work budget: $ActiveFluidBudget")
 }
 if ($RequireBudgetDeferrals) {
     $summary.Add("Required budget deferrals: True")

@@ -130,7 +130,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             }
         }
 
-        String earlyQuietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
+        String earlyQuietTickReason = emergent$cheapFiniteFluidQuietReason(world, pos, fluid, currentLevel);
         if (earlyQuietTickReason != null) {
             EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
             EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + earlyQuietTickReason + "_skips", 1);
@@ -138,6 +138,13 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         if (!emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
+            return;
+        }
+
+        String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (quietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + quietTickReason + "_skips", 1);
             return;
         }
 
@@ -231,13 +238,6 @@ public abstract class FlowableFluidMixin extends Fluid {
         // drain it horizontally.
         if (blockState.getBlock() instanceof LiquidBlockContainer) {
             EmergentProfiler.count(world, "finite_fluid_waterloggable_quiet", 1);
-            return;
-        }
-
-        String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
-        if (quietTickReason != null) {
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + quietTickReason + "_skips", 1);
             return;
         }
 
@@ -704,6 +704,25 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         EmergentProfiler.count(world, "finite_fluid_active_schedules", 1);
         world.scheduleTick(pos, fluid, tickDelay);
+    }
+
+    @Unique
+    private String emergent$cheapFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
+            if (WaterPhysics.isWater(fluid)
+                    && EmergentConfig.get().hydraulicErosion
+                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
+                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
+            }
+            return "thin";
+        }
+
+        BlockState state = world.getBlockState(pos);
+        if (state.getBlock() instanceof LiquidBlockContainer) {
+            return "waterloggable";
+        }
+
+        return null;
     }
 
     @Unique
