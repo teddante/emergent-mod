@@ -16,10 +16,7 @@ import net.minecraft.world.level.block.WeatheringCopper;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.IntegerProperty;
-
-import java.util.HashMap;
 import java.util.Map;
-import java.util.WeakHashMap;
 
 public final class MaterialReactions {
     private static final int CHAR_WEIGHT = 35;
@@ -32,7 +29,6 @@ public final class MaterialReactions {
     private static final float SCORCHED_SURFACE_IGNITION_CHANCE = 0.35f;
     private static final float FLASH_UPWARD_IGNITION_CHANCE = 0.6f;
     private static final float FLASH_SIDE_IGNITION_CHANCE = 0.35f;
-    private static final Map<ServerLevel, Map<Long, HeatEntry>> FIRE_EXPOSURE = new WeakHashMap<>();
 
     private static final Map<Block, Block> CHARRED_LOGS = Map.ofEntries(
             Map.entry(Blocks.OAK_LOG, Blocks.STRIPPED_OAK_LOG),
@@ -109,12 +105,12 @@ public final class MaterialReactions {
             return true;
         }
 
-        double exposure = addFireExposure(world, pos, state, effectiveHeat);
+        double exposure = EnvironmentalExposure.addHeat(world, pos, state, effectiveHeat);
         if (exposure < fireReactionThreshold(world, pos, state)) {
             return true;
         }
 
-        clearFireExposure(world, pos);
+        EnvironmentalExposure.clearHeat(world, pos);
         return reactAfterSustainedFireExposure(world, pos, state, charWeight, scorchWeight, flashWeight, random);
     }
 
@@ -154,24 +150,8 @@ public final class MaterialReactions {
         return threshold * heatThresholdVariance(world, pos, state);
     }
 
-    private static double addFireExposure(ServerLevel world, BlockPos pos, BlockState state, double heat) {
-        Map<Long, HeatEntry> levelExposure = FIRE_EXPOSURE.computeIfAbsent(world, ignored -> new HashMap<>());
-        long key = pos.asLong();
-        HeatEntry entry = levelExposure.get(key);
-        if (entry == null || !entry.state().equals(state)) {
-            entry = new HeatEntry(state, 0.0);
-        }
-
-        entry = new HeatEntry(state, entry.heat() + heat);
-        levelExposure.put(key, entry);
-        return entry.heat();
-    }
-
     private static void clearFireExposure(ServerLevel world, BlockPos pos) {
-        Map<Long, HeatEntry> levelExposure = FIRE_EXPOSURE.get(world);
-        if (levelExposure != null) {
-            levelExposure.remove(pos.asLong());
-        }
+        EnvironmentalExposure.clearHeat(world, pos);
     }
 
     private static double heatThresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
@@ -294,9 +274,6 @@ public final class MaterialReactions {
         }
 
         return true;
-    }
-
-    private record HeatEntry(BlockState state, double heat) {
     }
 
     public static boolean trySustainFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {

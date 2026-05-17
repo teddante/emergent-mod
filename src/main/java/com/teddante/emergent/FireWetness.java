@@ -34,6 +34,8 @@ public final class FireWetness {
             wetness = Math.max(wetness, 0.75f);
         }
 
+        wetness = Math.max(wetness, (float) EnvironmentalExposure.moisture(world, pos));
+
         for (Direction direction : Direction.values()) {
             BlockPos neighborPos = pos.relative(direction);
             BlockState neighbor = world.getBlockState(neighborPos);

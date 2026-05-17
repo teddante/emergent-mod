@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.ThermalPhysics;
@@ -455,6 +456,23 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Unique
     private void emergent$afterWaterPlaced(ServerLevel world, BlockPos pos) {
         if (EmergentConfig.get().materialReactions && WaterPhysics.isWater((Fluid) (Object) this)) {
+            int waterAmount = world.getFluidState(pos).getAmount();
+            if (waterAmount > 0) {
+                EnvironmentalExposure.addMoisture(
+                        world,
+                        pos,
+                        world.getBlockState(pos),
+                        Math.min(0.95, waterAmount / 8.0));
+                BlockPos surfacePos = pos.below();
+                BlockState surfaceState = world.getBlockState(surfacePos);
+                if (!surfaceState.isAir() && surfaceState.getFluidState().isEmpty()) {
+                    EnvironmentalExposure.addMoisture(
+                            world,
+                            surfacePos,
+                            surfaceState,
+                            Math.min(0.75, waterAmount / 10.0));
+                }
+            }
             MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());
         }
     }

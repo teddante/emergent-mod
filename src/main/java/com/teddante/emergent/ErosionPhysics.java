@@ -14,12 +14,10 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.WeakHashMap;
 
 public class ErosionPhysics {
 
     private static final Map<Block, Block> DEGRADATION_MAP = new HashMap<>();
-    private static final Map<ServerLevel, Map<Long, WearEntry>> EROSION_WEAR = new WeakHashMap<>();
     // Matches the old stochastic roll's expected wear while making erosion cumulative and repeatable.
     private static final double EXPECTED_RANDOM_ROLL_SCALE = 400.0;
 
@@ -139,6 +137,7 @@ public class ErosionPhysics {
             return;
         }
 
+        EnvironmentalExposure.addMoisture(world, pos, state, Math.min(0.35, energy / 32.0));
         double threshold = erosionThreshold(world, pos, state, hardness);
         double accumulatedWear = addWear(world, pos, state, energy);
         if (accumulatedWear >= threshold) {
@@ -163,23 +162,11 @@ public class ErosionPhysics {
     }
 
     private static double addWear(ServerLevel world, BlockPos pos, BlockState state, double energy) {
-        Map<Long, WearEntry> levelWear = EROSION_WEAR.computeIfAbsent(world, ignored -> new HashMap<>());
-        long key = pos.asLong();
-        WearEntry entry = levelWear.get(key);
-        if (entry == null || !entry.state().equals(state)) {
-            entry = new WearEntry(state, 0.0);
-        }
-
-        entry = new WearEntry(state, entry.wear() + energy);
-        levelWear.put(key, entry);
-        return entry.wear();
+        return EnvironmentalExposure.addHydraulicWear(world, pos, state, energy);
     }
 
     private static void clearWear(ServerLevel world, BlockPos pos) {
-        Map<Long, WearEntry> levelWear = EROSION_WEAR.get(world);
-        if (levelWear != null) {
-            levelWear.remove(pos.asLong());
-        }
+        EnvironmentalExposure.clearHydraulicWear(world, pos);
     }
 
     private static double thresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
@@ -254,6 +241,4 @@ public class ErosionPhysics {
         return Blocks.GRAVEL;
     }
 
-    private record WearEntry(BlockState state, double wear) {
-    }
 }

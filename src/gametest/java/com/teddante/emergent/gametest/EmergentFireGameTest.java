@@ -1,6 +1,7 @@
 package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.TrafficWearPhysics;
@@ -159,6 +160,31 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void storedMoistureDampensLaterFireExposure(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.75);
+        context.assertTrue(FireWetness.getWetness(context.getLevel(), context.absolutePos(TEST_POS)) >= 0.74f,
+                "stored surface moisture should feed the same wetness model used by fire");
+
+        RandomSource random = RandomSource.create(14);
+        for (int i = 0; i < 5; i++) {
+            MaterialReactions.exposeToFire(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.5f,
+                    random);
+        }
+
+        context.assertBlockPresent(Blocks.GRASS_BLOCK, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void denseFuelCanSustainFireAboveIt(GameTestHelper context) {
         BlockPos firePos = TEST_POS.above();
         context.setBlock(TEST_POS, Blocks.COAL_BLOCK);
@@ -241,6 +267,30 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         }
 
         context.assertBlockPresent(Blocks.DIRT_PATH, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void wetTrafficCompactsSoonerThanDryTraffic(GameTestHelper context) {
+        BlockPos wetPos = TEST_POS;
+        BlockPos dryPos = TEST_POS.relative(Direction.EAST, 2);
+        context.setBlock(wetPos, Blocks.GRASS_BLOCK);
+        context.setBlock(wetPos.above(), Blocks.AIR);
+        context.setBlock(dryPos, Blocks.GRASS_BLOCK);
+        context.setBlock(dryPos.above(), Blocks.AIR);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(wetPos),
+                context.getBlockState(wetPos),
+                1.0);
+
+        for (int i = 0; i < 16; i++) {
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(wetPos), context.getBlockState(wetPos), 1.0);
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(dryPos), context.getBlockState(dryPos), 1.0);
+        }
+
+        context.assertBlockPresent(Blocks.DIRT_PATH, wetPos);
+        context.assertBlockPresent(Blocks.GRASS_BLOCK, dryPos);
         context.succeed();
     }
 

@@ -2,6 +2,7 @@ package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.FireWetness;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -54,6 +55,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                     "gravity should fill the lower cell before leaving water above it");
             context.assertTrue(totalFluidAmount(context, WATER_POS, 1, Fluids.WATER) == 3,
                     "remaining water volume should be conserved in the upper local basin");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void finiteWaterWetsSurfaceUnderSettledPuddle(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, BELOW_WATER_POS);
+            context.assertTrue(FireWetness.getWetness(context.getLevel(), context.absolutePos(BELOW_WATER_POS.below())) >= 0.74f,
+                    "finite water should leave the contacted surface wet for later fire/traffic physics");
             context.succeed();
         });
     }

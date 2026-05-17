@@ -12,12 +12,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.WeakHashMap;
-
 public final class TrafficWearPhysics {
-    private static final Map<ServerLevel, Map<Long, WearEntry>> TRAFFIC_WEAR = new WeakHashMap<>();
     private static final double FOOTSTEP_TO_PATH_SCALE = 42.0;
 
     private TrafficWearPhysics() {
@@ -132,27 +127,33 @@ public final class TrafficWearPhysics {
             resistance *= 0.75;
         }
 
+        double moisture = EnvironmentalExposure.moisture(world, pos, state);
+        if (moisture > 0.0 && canBeSoftenedByMoisture(state)) {
+            resistance *= 1.0 - Math.min(0.4, moisture * 0.35);
+        }
+
         return resistance * FOOTSTEP_TO_PATH_SCALE * thresholdVariance(world, pos, state);
     }
 
     private static double addWear(ServerLevel world, BlockPos pos, BlockState state, double impulse) {
-        Map<Long, WearEntry> levelWear = TRAFFIC_WEAR.computeIfAbsent(world, ignored -> new HashMap<>());
-        long key = pos.asLong();
-        WearEntry entry = levelWear.get(key);
-        if (entry == null || !entry.state().equals(state)) {
-            entry = new WearEntry(state, 0.0);
-        }
-
-        entry = new WearEntry(state, entry.wear() + impulse);
-        levelWear.put(key, entry);
-        return entry.wear();
+        return EnvironmentalExposure.addTrafficWear(world, pos, state, impulse);
     }
 
     private static void clearWear(ServerLevel world, BlockPos pos) {
-        Map<Long, WearEntry> levelWear = TRAFFIC_WEAR.get(world);
-        if (levelWear != null) {
-            levelWear.remove(pos.asLong());
-        }
+        EnvironmentalExposure.clearTrafficWear(world, pos);
+    }
+
+    private static boolean canBeSoftenedByMoisture(BlockState state) {
+        return state.is(Blocks.GRASS_BLOCK)
+                || state.is(Blocks.DIRT)
+                || state.is(Blocks.COARSE_DIRT)
+                || state.is(Blocks.ROOTED_DIRT)
+                || state.is(Blocks.PODZOL)
+                || state.is(Blocks.MYCELIUM)
+                || state.is(Blocks.MOSS_BLOCK)
+                || state.is(Blocks.PALE_MOSS_BLOCK)
+                || state.is(Blocks.MUD)
+                || state.getBlock() instanceof FarmlandBlock;
     }
 
     private static double thresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
@@ -167,6 +168,4 @@ public final class TrafficWearPhysics {
         return 0.9 + (unit * 0.2);
     }
 
-    private record WearEntry(BlockState state, double wear) {
-    }
 }
