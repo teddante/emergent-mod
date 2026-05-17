@@ -28,10 +28,13 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.EnchantedItemInUse;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.enchantment.LevelBasedValue;
+import net.minecraft.world.item.enchantment.effects.Ignite;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
@@ -1407,6 +1410,37 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "vanilla-level Flame should keep vanilla's projectile burn duration");
         context.assertTrue(energeticSeconds == vanillaSeconds * 4.0F,
                 "boundless Flame should turn stored enchantment work into longer projectile ignition");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void igniteEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> flame = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FLAME);
+        ItemStack energeticBow = new ItemStack(Items.BOW);
+        EnchantmentHelper.updateEnchantments(energeticBow, enchantments -> enchantments.set(flame, 4));
+        LivingEntity target = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        Ignite ignite = new Ignite(LevelBasedValue.constant(100.0F));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticBow, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            ignite.apply(context.getLevel(), 4, item, target, target.position());
+            context.assertTrue(target.getRemainingFireTicks() == 2000,
+                    "when boundless enchanting is disabled, constant ignite effects should keep vanilla duration");
+
+            target.setRemainingFireTicks(0);
+            EmergentConfig.get().boundlessEnchanting = true;
+            ignite.apply(context.getLevel(), 4, item, target, target.position());
+            context.assertTrue(target.getRemainingFireTicks() == 8000,
+                    "when boundless enchanting is enabled, constant ignite effects should scale through the real vanilla effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
         context.succeed();
     }
 
