@@ -65,6 +65,24 @@ public final class EnvironmentalExposure {
         return Math.min(MAX_CONTACT_SURFACE_MOISTURE, fluidAmountCubicMeters(waterAmount) / BLOCK_VOLUME_CUBIC_METERS * 0.8);
     }
 
+    public static void applyStandingWaterContact(ServerLevel world, BlockPos waterPos, int waterAmount) {
+        if (waterAmount <= 0) {
+            return;
+        }
+
+        BlockState waterState = world.getBlockState(waterPos);
+        addMoisture(world, waterPos, waterState, standingWaterMoisture(waterAmount));
+
+        BlockPos surfacePos = waterPos.below();
+        BlockState surfaceState = world.getBlockState(surfacePos);
+        if (surfaceState.isAir() || !surfaceState.getFluidState().isEmpty()) {
+            return;
+        }
+
+        addMoisture(world, surfacePos, surfaceState, contactSurfaceMoisture(waterAmount));
+        washAshIntoWater(world, surfacePos, surfaceState, waterPos, waterState, waterAmount);
+    }
+
     public static double rainfallSurfaceMoisture(BlockState state, double rainfallDepthMeters) {
         return rainfallSurfaceMoisture(state, rainfallDepthMeters, 1.0);
     }

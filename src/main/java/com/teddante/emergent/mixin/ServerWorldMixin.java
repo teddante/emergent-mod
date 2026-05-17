@@ -110,6 +110,7 @@ public abstract class ServerWorldMixin {
         }
 
         world.setBlock(pos, state.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
+        EnvironmentalExposure.applyStandingWaterContact(world, pos, world.getFluidState(pos).getAmount());
         world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
     }
 
@@ -127,6 +128,7 @@ public abstract class ServerWorldMixin {
         }
 
         world.setBlock(pos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
+        EnvironmentalExposure.applyStandingWaterContact(world, pos, world.getFluidState(pos).getAmount());
         world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
     }
 

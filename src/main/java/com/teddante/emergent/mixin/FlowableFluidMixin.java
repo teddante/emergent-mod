@@ -479,27 +479,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         if (EmergentConfig.get().materialReactions && WaterPhysics.isWater((Fluid) (Object) this)) {
             int waterAmount = world.getFluidState(pos).getAmount();
             if (waterAmount > 0) {
-                EnvironmentalExposure.addMoisture(
-                        world,
-                        pos,
-                        world.getBlockState(pos),
-                        EnvironmentalExposure.standingWaterMoisture(waterAmount));
-                BlockPos surfacePos = pos.below();
-                BlockState surfaceState = world.getBlockState(surfacePos);
-                if (!surfaceState.isAir() && surfaceState.getFluidState().isEmpty()) {
-                    EnvironmentalExposure.addMoisture(
-                            world,
-                            surfacePos,
-                            surfaceState,
-                            EnvironmentalExposure.contactSurfaceMoisture(waterAmount));
-                    EnvironmentalExposure.washAshIntoWater(
-                            world,
-                            surfacePos,
-                            surfaceState,
-                            pos,
-                            world.getBlockState(pos),
-                            waterAmount);
-                }
+                EnvironmentalExposure.applyStandingWaterContact(world, pos, waterAmount);
             }
             MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());
         }

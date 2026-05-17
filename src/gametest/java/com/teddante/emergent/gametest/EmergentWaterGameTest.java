@@ -116,6 +116,48 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void standingWaterContactWetsSupportingSurface(GameTestHelper context) {
+        BlockPos surfacePos = WATER_POS.below();
+        context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7));
+
+        EnvironmentalExposure.applyStandingWaterContact(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS).getFluidState().getAmount());
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) > 0.0,
+                "thin standing water should store contact moisture on the block it rests on");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void rainPuddleContactWashesAshIntoSuspendedSediment(GameTestHelper context) {
+        BlockPos surfacePos = WATER_POS.below();
+        context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7));
+        EnvironmentalExposure.addAshResidue(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                context.getBlockState(surfacePos),
+                1.0);
+
+        EnvironmentalExposure.applyStandingWaterContact(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS).getFluidState().getAmount());
+
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) < 1.0,
+                "a rain-created puddle should consume some surface ash residue");
+        context.assertTrue(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) > 0.0,
+                "washed ash should enter the same suspended sediment store used by erosion and deposition");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void suspendedSedimentTransfersProportionallyWithMovedWater(GameTestHelper context) {
         BlockPos targetPos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
