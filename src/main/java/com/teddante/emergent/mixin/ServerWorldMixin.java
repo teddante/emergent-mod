@@ -64,7 +64,8 @@ public abstract class ServerWorldMixin {
                     skyExposed,
                     ThermalPhysics.neighboringHeat(serverWorld, surfacePos),
                     climateMoistureFactor,
-                    serverWorld.isBrightOutside() ? 1.0 : 0.0);
+                    serverWorld.isBrightOutside() ? 1.0 : 0.0,
+                    emergent$surfaceAirExposureFactor(serverWorld, surfacePos, skyExposed));
             ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             if (EmergentConfig.get().materialReactions) {
                 emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed, climateMoistureFactor);
@@ -154,6 +155,19 @@ public abstract class ServerWorldMixin {
         }
 
         return 1.0;
+    }
+
+    @Unique
+    private double emergent$surfaceAirExposureFactor(ServerLevel world, BlockPos surfacePos, boolean skyExposed) {
+        int openHorizontalFaces = 0;
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockState adjacentState = world.getBlockState(surfacePos.relative(direction));
+            if (adjacentState.isAir() || !adjacentState.getFluidState().isEmpty()) {
+                openHorizontalFaces++;
+            }
+        }
+
+        return EnvironmentalExposure.airExposureFactor(skyExposed, openHorizontalFaces);
     }
 
     @Unique

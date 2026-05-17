@@ -20,6 +20,7 @@ public final class EnvironmentalExposure {
     private static final double MAX_CONTACT_SURFACE_MOISTURE = 0.75;
     private static final double ACTIVE_SURFACE_DEPTH_METERS = 0.05;
     private static final double ACTIVE_SURFACE_PORE_FRACTION = 0.35;
+    private static final double BLOCK_FACE_AREA_SQUARE_METERS = 1.0;
     private static final double RAIN_SAMPLE_DEPTH_METERS = 0.001;
     private static final double MOISTURE_DECAY_PER_TICK = 0.001;
     private static final double HEAT_DECAY_PER_TICK = 0.02;
@@ -95,6 +96,16 @@ public final class EnvironmentalExposure {
 
         double rainfallVolume = Math.max(0.0, rainfallDepthMeters) * climateMoistureFactor(climateMoistureFactor) * BLOCK_VOLUME_CUBIC_METERS;
         return Math.min(0.25, rainfallVolume / activePoreVolume * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
+    }
+
+    public static double airExposureAreaSquareMeters(boolean topOpen, int openHorizontalFaces) {
+        int sideFaces = Math.min(4, Math.max(0, openHorizontalFaces));
+        return (topOpen ? BLOCK_FACE_AREA_SQUARE_METERS : 0.0)
+                + sideFaces * ACTIVE_SURFACE_DEPTH_METERS;
+    }
+
+    public static double airExposureFactor(boolean topOpen, int openHorizontalFaces) {
+        return airExposureAreaSquareMeters(topOpen, openHorizontalFaces) / BLOCK_FACE_AREA_SQUARE_METERS;
     }
 
     public static double addRainfall(ServerLevel world, BlockPos pos, BlockState state) {
@@ -279,6 +290,28 @@ public final class EnvironmentalExposure {
             int localHeat,
             double climateMoistureFactor,
             double daylightStrength) {
+        applyAmbientSurfaceExchange(
+                world,
+                pos,
+                state,
+                biomeBaseTemperature,
+                skyExposed,
+                localHeat,
+                climateMoistureFactor,
+                daylightStrength,
+                skyExposed ? 1.0 : 0.0);
+    }
+
+    public static void applyAmbientSurfaceExchange(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeBaseTemperature,
+            boolean skyExposed,
+            int localHeat,
+            double climateMoistureFactor,
+            double daylightStrength,
+            double airExposureFactor) {
         if (state.isAir() || !state.getFluidState().isEmpty()) {
             clear(world, pos);
             return;
@@ -288,7 +321,7 @@ public final class EnvironmentalExposure {
         double materialDrying = MaterialPhysicsProfiles.dryingExposure(state);
         double hotBiomeDrying = Math.max(0.0, biomeBaseTemperature - 0.8) * HOT_BIOME_DRYING_PER_SAMPLE;
         double coldBiomeExposure = Math.max(0.0, 0.15 - biomeBaseTemperature) * COLD_BIOME_EXPOSURE_PER_SAMPLE;
-        double skyDrying = skyExposed ? SKY_EXPOSURE_DRYING_PER_SAMPLE : 0.0;
+        double skyDrying = Math.max(0.0, airExposureFactor) * SKY_EXPOSURE_DRYING_PER_SAMPLE;
         double heatDrying = Math.max(0, localHeat) * LOCAL_HEAT_DRYING_PER_SAMPLE;
         removeMoisture(world, pos, state, (hotBiomeDrying + skyDrying + heatDrying) * materialDrying * dryAirMultiplier);
 

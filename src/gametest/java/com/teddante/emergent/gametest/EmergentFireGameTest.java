@@ -267,6 +267,55 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void airExposureUsesBlockScaleSurfaceArea(GameTestHelper context) {
+        assertClose(EnvironmentalExposure.airExposureAreaSquareMeters(true, 0), 1.0,
+                "a sky-open top surface should expose one square metre of active surface");
+        assertClose(EnvironmentalExposure.airExposureAreaSquareMeters(false, 4), 0.2,
+                "four open sides should expose the one metre perimeter times the five centimetre active surface depth");
+        context.assertTrue(EnvironmentalExposure.airExposureFactor(true, 4)
+                        > EnvironmentalExposure.airExposureFactor(true, 0),
+                "edge-exposed surfaces should exchange slightly more air than a flat open surface");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sideExposedAirDriesShelteredSurface(GameTestHelper context) {
+        BlockPos sealedPos = TEST_POS;
+        BlockPos sideExposedPos = TEST_POS.relative(Direction.EAST, 2);
+        context.setBlock(sealedPos, Blocks.GRASS_BLOCK);
+        context.setBlock(sideExposedPos, Blocks.GRASS_BLOCK);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(sealedPos), context.getBlockState(sealedPos), 0.5);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(sideExposedPos), context.getBlockState(sideExposedPos), 0.5);
+
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(sealedPos),
+                context.getBlockState(sealedPos),
+                0.7f,
+                false,
+                0,
+                1.0,
+                0.0,
+                EnvironmentalExposure.airExposureFactor(false, 0));
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(sideExposedPos),
+                context.getBlockState(sideExposedPos),
+                0.7f,
+                false,
+                0,
+                1.0,
+                0.0,
+                EnvironmentalExposure.airExposureFactor(false, 4));
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(sideExposedPos), context.getBlockState(sideExposedPos))
+                        < EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(sealedPos), context.getBlockState(sealedPos)),
+                "side-open air exposure should dry a sheltered active surface more than a sealed surface");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void humidClimateSlowsAmbientDrying(GameTestHelper context) {
         BlockPos aridPos = TEST_POS;
         BlockPos humidPos = TEST_POS.relative(Direction.EAST, 2);
