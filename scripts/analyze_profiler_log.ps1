@@ -61,6 +61,17 @@ function Get-CounterTotal([hashtable]$Totals, [string]$Name) {
     return 0L
 }
 
+function Add-TopChunkSummary([System.Collections.Generic.List[string]]$Summary, [hashtable]$ChunkTotals, [string]$Prefix, [string]$Label, [int]$Top) {
+    $topChunks = @($ChunkTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "$Prefix@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First ([Math]::Min(3, $Top)))
+    if ($topChunks.Count -gt 0) {
+        $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+        $Summary.Add("  ${Label}=$chunkText")
+    }
+}
+
 function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summary, [hashtable]$CounterTotals, [hashtable]$ChunkTotals, [int]$Top) {
     $finiteTicks = Get-CounterTotal $CounterTotals "finite_fluid_ticks"
     if ($finiteTicks -le 0) {
@@ -111,14 +122,9 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
         $Summary.Add("  topQuietReason=$($topQuiet.Name):$($topQuiet.Value)")
     }
 
-    $topChunks = @($ChunkTotals.GetEnumerator() |
-        Where-Object { $_.Name -like "finite_fluids@*" } |
-        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
-        Select-Object -First ([Math]::Min(3, $Top)))
-    if ($topChunks.Count -gt 0) {
-        $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
-        $Summary.Add("  hottestFiniteFluidChunks=$chunkText")
-    }
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_fluids" "hottestFiniteFluidChunks" $Top
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_water" "hottestFiniteWaterChunks" $Top
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_lava" "hottestFiniteLavaChunks" $Top
 
     if (!$hasScheduleCounters) {
         $Summary.Add("  interpretation=older profiler format; retest with the latest jar before deciding whether wakeups are stale or active.")

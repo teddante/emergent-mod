@@ -92,6 +92,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         if (WaterPhysics.isWater(fluid)) {
             EmergentProfiler.count(world, "finite_fluid_water_ticks", 1);
+            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_WATER, pos);
             if (!ThermalPhysics.finiteWaterMayChangeThermally(world, pos, currentLevel)) {
                 EmergentProfiler.count(world, "finite_fluid_water_thermal_quiet_skips", 1);
             } else {
@@ -129,6 +130,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         if (WaterPhysics.isLava(fluid)) {
             EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
+            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
             if (EmergentConfig.get().materialReactions) {
                 EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
                 ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);

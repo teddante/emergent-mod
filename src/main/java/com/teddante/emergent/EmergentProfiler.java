@@ -11,6 +11,8 @@ import java.util.WeakHashMap;
 public final class EmergentProfiler {
     public static final String WEATHER = "surface_weather";
     public static final String FINITE_FLUIDS = "finite_fluids";
+    public static final String FINITE_WATER = "finite_water";
+    public static final String FINITE_LAVA = "finite_lava";
     public static final String FIRE_REACTIONS = "fire_reactions";
     public static final String TRAFFIC = "traffic_wear";
 
@@ -18,7 +20,7 @@ public final class EmergentProfiler {
     private static final long SLOW_TICK_MILLIS = Long.getLong("emergent.profiler.slowMs", 25L);
     private static final long SLOW_TICK_NANOS = SLOW_TICK_MILLIS * 1_000_000L;
     private static final int TOP_HEATED_BLOCKS = 4;
-    private static final int TOP_HOT_CHUNKS = 4;
+    private static final int TOP_HOT_CHUNKS = 8;
     private static final Map<ServerLevel, TickStats> STATS = new WeakHashMap<>();
 
     private EmergentProfiler() {
