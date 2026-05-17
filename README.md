@@ -111,7 +111,7 @@ Sculk shrieker summoning can also be widened beyond vanilla's default restrictio
 Optional systems can relax selected vanilla limits:
 
 - Anvil prior-work penalties and the Too Expensive cap can be removed.
-- Matching enchantments can combine past vanilla max levels.
+- Matching enchantments can combine past vanilla max levels by combining both inputs' stored enchantment work budget.
 - Mutually exclusive enchantments can coexist.
 - Redstone can repeatedly extend potion duration.
 - Glowstone can repeatedly raise potion strength.

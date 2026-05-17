@@ -17,6 +17,7 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
  * levels remain the player-facing storage/display curve.
  */
 public final class ExperienceEnergy {
+    public static final int MAX_ENCHANTMENT_LEVEL = 255;
     private static final double HEALTH_ENERGY_PER_POINT = 0.25;
     private static final double MASS_ENERGY_SCALE = 1.75;
     private static final double ARMOR_RESILIENCE_SCALE = 0.65;
@@ -139,6 +140,11 @@ public final class ExperienceEnergy {
         return enchantmentApplicationLevelCost(enchantments, false);
     }
 
+    public static int enchantmentLevelBudget(int enchantmentLevel, int anvilCost) {
+        long budget = (long) Math.max(0, enchantmentLevel) * Math.max(0, anvilCost);
+        return budget >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) budget;
+    }
+
     public static int enchantmentApplicationLevelCost(ItemStack stack) {
         return enchantmentApplicationLevelCost(
                 EnchantmentHelper.getEnchantmentsForCrafting(stack),
@@ -172,6 +178,20 @@ public final class ExperienceEnergy {
 
     public static int enchantmentApplicationEnergyCostPoints(ItemStack stack, int currentLevel) {
         return rawPointsForWholeLevelCost(currentLevel, enchantmentApplicationLevelCost(stack));
+    }
+
+    public static int mergedEnchantmentLevelFromEnergy(int existingLevel, int incomingLevel, int anvilCost) {
+        int safeExisting = Math.max(0, existingLevel);
+        int safeIncoming = Math.max(0, incomingLevel);
+        int safeAnvilCost = Math.max(0, anvilCost);
+        if (safeAnvilCost <= 0) {
+            return Math.min(MAX_ENCHANTMENT_LEVEL, Math.max(safeExisting, safeIncoming));
+        }
+
+        long combinedBudget = (long) enchantmentLevelBudget(safeExisting, safeAnvilCost)
+                + enchantmentLevelBudget(safeIncoming, safeAnvilCost);
+        long mergedLevel = combinedBudget / safeAnvilCost;
+        return (int) Math.min(MAX_ENCHANTMENT_LEVEL, mergedLevel);
     }
 
     public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {

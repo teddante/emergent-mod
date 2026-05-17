@@ -24,12 +24,15 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.CropBlock;
@@ -1310,6 +1313,51 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.assertTrue(ExperienceEnergy.enchantmentApplicationEnergyCostPoints(book, 30)
                 == ExperienceEnergy.rawPointsForWholeLevelCost(30, bookCost),
                 "book application work should convert through the same raw-XP energy curve");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void mergedEnchantmentLevelsConserveStoredEnergyBudget(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        int anvilCost = sharpness.value().getAnvilCost();
+
+        int equalLevelMerge = ExperienceEnergy.mergedEnchantmentLevelFromEnergy(5, 5, anvilCost);
+        int unevenLevelMerge = ExperienceEnergy.mergedEnchantmentLevelFromEnergy(4, 5, anvilCost);
+        int cappedMerge = ExperienceEnergy.mergedEnchantmentLevelFromEnergy(
+                ExperienceEnergy.MAX_ENCHANTMENT_LEVEL,
+                1,
+                anvilCost);
+
+        context.assertTrue(equalLevelMerge == 10,
+                "two equal enchantment levels should combine their stored work budget rather than only adding one level");
+        context.assertTrue(unevenLevelMerge == 9,
+                "uneven enchantment levels should preserve both stored budgets instead of only keeping the larger level");
+        context.assertTrue(cappedMerge == ExperienceEnergy.MAX_ENCHANTMENT_LEVEL,
+                "energy-conserving enchantment merges should still respect Minecraft's component level range");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void anvilMergesEnchantmentEnergyBudgets(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Player player = context.makeMockPlayer(GameType.CREATIVE);
+        AnvilMenu menu = new AnvilMenu(0, player.getInventory());
+        ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
+        EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
+
+        menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+        menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+        ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+        int resultLevel = EnchantmentHelper.getEnchantmentsForCrafting(result).getLevel(sharpness);
+
+        context.assertTrue(resultLevel == 10,
+                "anvil output should merge both inputs' stored enchantment work budget through the real menu path");
         context.succeed();
     }
 

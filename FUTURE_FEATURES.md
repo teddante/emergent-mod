@@ -57,8 +57,8 @@ Proposed shared flow:
 - Vanilla XP orbs and sculk catalyst charge read that same energy through the central living-entity reward path.
 - Enchanting tables and anvils spend raw XP energy for whole-level costs when boundless enchanting is enabled, while still presenting vanilla-compatible levels in the UI.
 - Enchanted books and items expose an energy budget derived from their enchantment levels and vanilla anvil-cost rarity.
+- Merging enchanted items combines stored enchantment work budgets into the resulting level while preserving Minecraft's component level cap.
 - Stronger enchantment effects should have explainable output: added damage, protection, duration, speed, durability savings, or utility work should scale from stored energy and use rate.
-- Merging enchanted items should combine stored energy and resolve levels from that budget, rather than only applying a hard max-level rule.
 
 Design constraints:
 
