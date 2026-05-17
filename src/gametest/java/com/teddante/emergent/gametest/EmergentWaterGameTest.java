@@ -36,6 +36,34 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 20)
+    public void environmentEvaporationRemovesAnyFiniteWaterAmount(GameTestHelper context) {
+        context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 8) == 0,
+                "a water-evaporating environment should remove source water like vanilla Nether bucket placement");
+        context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 4) == 0,
+                "a water-evaporating environment should remove partial finite water");
+        context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 1) == 0,
+                "a water-evaporating environment should remove thin finite water films");
+        context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(false, 4) == 4,
+                "ordinary environments should leave finite water to normal heat, cold, and flow rules");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void overworldEnvironmentDoesNotForceWaterEvaporation(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+
+        int remaining = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS).getFluidState().getAmount());
+
+        context.assertTrue(remaining == 8,
+                "the default GameTest overworld should not use Nether-style environmental water evaporation");
+        context.assertBlockPresent(Blocks.WATER, WATER_POS);
+        context.succeed();
+    }
+
     @GameTest(maxTicks = 40)
     public void finiteWaterPrefersDownwardFlow(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());

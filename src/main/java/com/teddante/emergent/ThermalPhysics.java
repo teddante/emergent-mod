@@ -5,6 +5,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
@@ -109,6 +110,20 @@ public final class ThermalPhysics {
         }
 
         return amount;
+    }
+
+    public static int evaporateWaterInEvaporatingEnvironment(boolean waterEvaporates, int amount) {
+        return waterEvaporates && amount > 0 ? 0 : amount;
+    }
+
+    public static int evaporateWaterInEvaporatingEnvironment(ServerLevel world, BlockPos pos, int amount) {
+        int remainingAmount = evaporateWaterInEvaporatingEnvironment(
+                world.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos),
+                amount);
+        if (remainingAmount != amount) {
+            fizz(world, pos);
+        }
+        return remainingAmount;
     }
 
     public static boolean tryFreezeWaterFromStoredCold(ServerLevel world, BlockPos pos, int amount) {
