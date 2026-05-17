@@ -90,29 +90,33 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         if (WaterPhysics.isWater(fluid)) {
             EmergentProfiler.count(world, "finite_fluid_water_ticks", 1);
-            int evaporatedByEnvironment = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(world, pos, currentLevel);
-            if (evaporatedByEnvironment <= 0) {
-                EmergentProfiler.count(world, "finite_fluid_environment_evaporations", 1);
-                removeWaterAt(world, pos, blockState);
-                return;
-            }
-            currentLevel = evaporatedByEnvironment;
-
-            if (ThermalPhysics.tryFreezeWaterFromStoredCold(world, pos, currentLevel)) {
-                EmergentProfiler.count(world, "finite_fluid_freezes", 1);
-                return;
-            }
-
-            int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
-            if (evaporatedLevel != currentLevel) {
-                EmergentProfiler.count(world, "finite_fluid_heat_evaporations", 1);
-                if (evaporatedLevel <= 0) {
+            if (!ThermalPhysics.finiteWaterMayChangeThermally(world, pos, currentLevel)) {
+                EmergentProfiler.count(world, "finite_fluid_water_thermal_quiet_skips", 1);
+            } else {
+                int evaporatedByEnvironment = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(world, pos, currentLevel);
+                if (evaporatedByEnvironment <= 0) {
+                    EmergentProfiler.count(world, "finite_fluid_environment_evaporations", 1);
                     removeWaterAt(world, pos, blockState);
-                } else {
-                    setWaterLevel(world, pos, evaporatedLevel, false);
-                    emergent$scheduleFiniteFluidIfActive(world, pos, fluid, evaporatedLevel, tickDelay);
+                    return;
                 }
-                return;
+                currentLevel = evaporatedByEnvironment;
+
+                if (ThermalPhysics.tryFreezeWaterFromStoredCold(world, pos, currentLevel)) {
+                    EmergentProfiler.count(world, "finite_fluid_freezes", 1);
+                    return;
+                }
+
+                int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
+                if (evaporatedLevel != currentLevel) {
+                    EmergentProfiler.count(world, "finite_fluid_heat_evaporations", 1);
+                    if (evaporatedLevel <= 0) {
+                        removeWaterAt(world, pos, blockState);
+                    } else {
+                        setWaterLevel(world, pos, evaporatedLevel, false);
+                        emergent$scheduleFiniteFluidIfActive(world, pos, fluid, evaporatedLevel, tickDelay);
+                    }
+                    return;
+                }
             }
         }
 

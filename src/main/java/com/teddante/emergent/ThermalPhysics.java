@@ -118,6 +118,35 @@ public final class ThermalPhysics {
         return amount;
     }
 
+    public static boolean finiteWaterMayChangeThermally(ServerLevel world, BlockPos pos, int amount) {
+        if (amount <= 0) {
+            return false;
+        }
+
+        if (world.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos)) {
+            return true;
+        }
+
+        BlockState state = world.getBlockState(pos);
+        double storedHeat = EnvironmentalExposure.heat(world, pos, state);
+        if (EnvironmentalExposure.cold(world, pos, state) >= STORED_COLD_FREEZE_THRESHOLD
+                && storedHeat < STORED_HEAT_EVAPORATION_THRESHOLD) {
+            return true;
+        }
+
+        if (amount > 4) {
+            return false;
+        }
+
+        BlockPos supportPos = pos.below();
+        if (Math.max(storedHeat, EnvironmentalExposure.heat(world, supportPos, world.getBlockState(supportPos)))
+                >= STORED_HEAT_EVAPORATION_THRESHOLD) {
+            return true;
+        }
+
+        return neighboringHeat(world, pos) > 0;
+    }
+
     public static int evaporateWaterInEvaporatingEnvironment(boolean waterEvaporates, int amount) {
         return waterEvaporates && amount > 0 ? 0 : amount;
     }

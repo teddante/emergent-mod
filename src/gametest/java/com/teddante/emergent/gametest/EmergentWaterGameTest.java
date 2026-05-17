@@ -564,6 +564,57 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void finiteWaterThermalWorkPredicateIgnoresOrdinaryQuietWater(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        boolean mayChange = ThermalPhysics.finiteWaterMayChangeThermally(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertFalse(mayChange,
+                "quiet shallow water without heat, cold, or evaporating environment should skip thermal work");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void finiteWaterThermalWorkPredicateKeepsRealThermalContacts(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK);
+
+        boolean mayChange = ThermalPhysics.finiteWaterMayChangeThermally(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertTrue(mayChange,
+                "shallow water beside a heat source should still run the thermal pass");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sourceWaterThermalWorkPredicateIgnoresAdjacentHeatEvaporation(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER);
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK);
+
+        boolean mayChange = ThermalPhysics.finiteWaterMayChangeThermally(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertFalse(mayChange,
+                "source-equivalent water should not scan heat evaporation that cannot affect a full cubic metre");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
         BlockPos stonePos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
