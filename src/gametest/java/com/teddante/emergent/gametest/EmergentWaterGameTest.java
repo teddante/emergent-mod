@@ -524,6 +524,36 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 80)
+    public void cachedQuietFiniteWaterWakesAfterNeighborChange(GameTestHelper context) {
+        BlockPos sourcePos = WATER_POS;
+        BlockPos targetPos = sourcePos.relative(Direction.EAST);
+
+        context.setBlock(sourcePos.below(), Blocks.STONE);
+        context.setBlock(targetPos.below(), Blocks.STONE);
+        context.setBlock(sourcePos, Fluids.WATER.getFlowing(4, false).createLegacyBlock());
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            context.setBlock(sourcePos.relative(direction), Blocks.STONE);
+        }
+
+        context.getLevel().scheduleTick(context.absolutePos(sourcePos), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, sourcePos);
+            context.assertBlockPresent(Blocks.STONE, targetPos);
+
+            context.setBlock(targetPos, Blocks.AIR);
+            context.getLevel().scheduleTick(context.absolutePos(sourcePos), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+        });
+
+        context.runAfterDelay(35, () -> {
+            context.assertTrue(
+                    fluidAmount(context, targetPos, Fluids.WATER) > 0,
+                    "finite water cached as quiet should flow once a neighboring block changes");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
     public void finiteLavaUsesSlowerDownwardFlow(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
         context.setBlock(BELOW_WATER_POS, Blocks.AIR);
