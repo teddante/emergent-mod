@@ -237,6 +237,12 @@ For lag investigations, add these JVM arguments to the Prism instance:
 
 When an Emergent tick exceeds the threshold, the log reports subsystem timings and counters such as finite fluid ticks, active fluid reschedules, quiet-skip reasons, water/lava split, surface-weather jobs, fire scans, traffic events, pending weather jobs, the hottest finite-fluid chunks, and the top heated block types. If Minecraft still logs `Can't keep up!` but Emergent does not log a matching slow profiler line, the spike is probably outside the instrumented Emergent systems.
 
+Saved Prism or launcher logs can be summarized without relaunching Minecraft:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\analyze_profiler_log.ps1 -Path "C:\path\to\latest.log" -Top 12
+```
+
 See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.
 
 ## License

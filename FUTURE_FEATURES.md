@@ -28,7 +28,7 @@ No more unrelated features should be added to either PR. New gameplay systems sh
 - Moisture/ash-assisted rain growth.
 - Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
 - Opt-in Emergent tick profiler with finite-fluid water/lava counters, active-schedule and quiet-skip reason counters, heated block summaries, finite-fluid chunk hotspots, and traffic contact-cell hotspots when traffic becomes a slow contributor.
-- Headless stress/perf GameTests and compact `scripts/dev_perf.ps1` summaries covering stable fluids, multi-chunk finite water, sloped finite-water channels, surface weather, fire scans, traffic contact patches, lava/water thermal reactions, and finite-fluid active/quiet diagnosis.
+- Headless stress/perf GameTests, compact `scripts/dev_perf.ps1` summaries, and saved-log analysis via `scripts/analyze_profiler_log.ps1` covering stable fluids, multi-chunk finite water, sloped finite-water channels, surface weather, fire scans, traffic contact patches, lava/water thermal reactions, and finite-fluid active/quiet diagnosis.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
