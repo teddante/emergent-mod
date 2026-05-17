@@ -93,7 +93,9 @@ public final class MaterialReactions {
             return true;
         }
 
-        double effectiveHeat = heat * (1.0f - dampening);
+        double storedHeat = EnvironmentalExposure.heat(world, pos, state);
+        double effectiveHeat = heat * (1.0f - dampening)
+                * MaterialPhysicsProfiles.dryFireExposureMultiplier(state, wetness, storedHeat);
         if (state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)) {
             effectiveHeat *= 1.0f - Math.min(0.9f, wetness + LIVING_SURFACE_MOISTURE);
         }

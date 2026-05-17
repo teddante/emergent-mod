@@ -18,12 +18,19 @@ public final class EnvironmentalExposure {
     private static final double MAX_MOISTURE = 1.0;
     private static final double MAX_STANDING_WATER_MOISTURE = 0.95;
     private static final double MAX_CONTACT_SURFACE_MOISTURE = 0.75;
+    private static final double ACTIVE_SURFACE_DEPTH_METERS = 0.05;
+    private static final double ACTIVE_SURFACE_PORE_FRACTION = 0.35;
+    private static final double RAIN_SAMPLE_DEPTH_METERS = 0.001;
     private static final double MOISTURE_DECAY_PER_TICK = 0.001;
     private static final double HEAT_DECAY_PER_TICK = 0.02;
     private static final double HEAT_DRYING_RATE = 0.08;
     private static final double WATER_COOLING_RATE = 1.5;
     private static final double HYDRAULIC_WEAR_PER_CUBIC_METER = FULL_FLUID_BLOCK_AMOUNT;
     private static final double HYDRAULIC_MOISTURE_PER_WEAR_UNIT = 1.0 / 32.0;
+    private static final double HOT_BIOME_DRYING_PER_SAMPLE = 0.025;
+    private static final double SKY_EXPOSURE_DRYING_PER_SAMPLE = 0.006;
+    private static final double LOCAL_HEAT_DRYING_PER_SAMPLE = 0.08;
+    private static final double LOCAL_HEAT_EXPOSURE_PER_SAMPLE = 0.12;
     private static final Map<ServerLevel, Map<Long, ExposureEntry>> EXPOSURES = new WeakHashMap<>();
 
     private EnvironmentalExposure() {
@@ -43,6 +50,20 @@ public final class EnvironmentalExposure {
 
     public static double contactSurfaceMoisture(int waterAmount) {
         return Math.min(MAX_CONTACT_SURFACE_MOISTURE, fluidAmountCubicMeters(waterAmount) / BLOCK_VOLUME_CUBIC_METERS * 0.8);
+    }
+
+    public static double rainfallSurfaceMoisture(BlockState state, double rainfallDepthMeters) {
+        double activePoreVolume = ACTIVE_SURFACE_DEPTH_METERS * ACTIVE_SURFACE_PORE_FRACTION;
+        if (activePoreVolume <= 0.0) {
+            return 0.0;
+        }
+
+        double rainfallVolume = Math.max(0.0, rainfallDepthMeters) * BLOCK_VOLUME_CUBIC_METERS;
+        return Math.min(0.25, rainfallVolume / activePoreVolume * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
+    }
+
+    public static double addRainfall(ServerLevel world, BlockPos pos, BlockState state) {
+        return addMoisture(world, pos, state, rainfallSurfaceMoisture(state, RAIN_SAMPLE_DEPTH_METERS));
     }
 
     public static double hydraulicWearFromMovedWater(int movedAmount, double gravityFactor, double pressureFactor) {
@@ -90,6 +111,40 @@ public final class EnvironmentalExposure {
         return entry.moisture();
     }
 
+    public static double removeMoisture(ServerLevel world, BlockPos pos, BlockState state, double moisture) {
+        if (moisture <= 0.0) {
+            return moisture(world, pos, state);
+        }
+
+        ExposureEntry entry = entryFor(world, pos, state);
+        entry = entry.withMoisture(Math.max(0.0, entry.moisture() - moisture)).withLastTick(world.getGameTime());
+        put(world, pos, entry);
+        return entry.moisture();
+    }
+
+    public static void applyAmbientSurfaceExchange(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeBaseTemperature,
+            boolean skyExposed,
+            int localHeat) {
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            clear(world, pos);
+            return;
+        }
+
+        double materialDrying = MaterialPhysicsProfiles.dryingExposure(state);
+        double hotBiomeDrying = Math.max(0.0, biomeBaseTemperature - 0.8) * HOT_BIOME_DRYING_PER_SAMPLE;
+        double skyDrying = skyExposed ? SKY_EXPOSURE_DRYING_PER_SAMPLE : 0.0;
+        double heatDrying = Math.max(0, localHeat) * LOCAL_HEAT_DRYING_PER_SAMPLE;
+        removeMoisture(world, pos, state, (hotBiomeDrying + skyDrying + heatDrying) * materialDrying);
+
+        if (localHeat > 0) {
+            addHeat(world, pos, state, localHeat * LOCAL_HEAT_EXPOSURE_PER_SAMPLE);
+        }
+    }
+
     public static double addHydraulicWear(ServerLevel world, BlockPos pos, BlockState state, double wear) {
         if (wear <= 0.0) {
             return hydraulicWear(world, pos, state);
@@ -125,6 +180,11 @@ public final class EnvironmentalExposure {
         return entry == null ? 0.0 : entry.moisture();
     }
 
+    public static double heat(ServerLevel world, BlockPos pos, BlockState state) {
+        ExposureEntry entry = currentEntry(world, pos, state);
+        return entry == null ? 0.0 : entry.heat();
+    }
+
     public static void clearHeat(ServerLevel world, BlockPos pos) {
         update(world, pos, entry -> entry.withHeat(0.0));
     }
@@ -142,11 +202,6 @@ public final class EnvironmentalExposure {
         if (levelExposure != null) {
             levelExposure.remove(pos.asLong());
         }
-    }
-
-    private static double heat(ServerLevel world, BlockPos pos, BlockState state) {
-        ExposureEntry entry = currentEntry(world, pos, state);
-        return entry == null ? 0.0 : entry.heat();
     }
 
     private static double hydraulicWear(ServerLevel world, BlockPos pos, BlockState state) {

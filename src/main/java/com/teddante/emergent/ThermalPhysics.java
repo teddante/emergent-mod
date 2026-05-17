@@ -111,7 +111,7 @@ public final class ThermalPhysics {
         return true;
     }
 
-    private static int neighboringHeat(ServerLevel world, BlockPos pos) {
+    public static int neighboringHeat(ServerLevel world, BlockPos pos) {
         int heat = 0;
         for (Direction direction : Direction.values()) {
             BlockState state = world.getBlockState(pos.relative(direction));

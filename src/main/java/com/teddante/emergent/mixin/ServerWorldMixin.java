@@ -1,8 +1,10 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.MaterialReactionTags;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.ThermalPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -37,20 +39,33 @@ public abstract class ServerWorldMixin {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
 
-        if (!EmergentConfig.get().rainAccumulation || !serverWorld.isRaining()) {
+        if (!EmergentConfig.get().rainAccumulation) {
             return;
         }
 
         BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
         BlockPos surfacePos = topPos.below();
         Biome biome = serverWorld.getBiome(topPos).value();
+        BlockState surfaceState = serverWorld.getBlockState(surfacePos);
+        BlockState state = serverWorld.getBlockState(topPos);
+        boolean skyExposed = serverWorld.canSeeSky(topPos);
+
+        if (!serverWorld.isRaining()) {
+            EnvironmentalExposure.applyAmbientSurfaceExchange(
+                    serverWorld,
+                    surfacePos,
+                    surfaceState,
+                    biome.getBaseTemperature(),
+                    skyExposed,
+                    ThermalPhysics.neighboringHeat(serverWorld, surfacePos));
+            return;
+        }
 
         if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) != Biome.Precipitation.RAIN) {
             return;
         }
 
-        BlockState surfaceState = serverWorld.getBlockState(surfacePos);
-        BlockState state = serverWorld.getBlockState(topPos);
+        EnvironmentalExposure.addRainfall(serverWorld, surfacePos, surfaceState);
 
         if (surfaceState.is(Blocks.WATER)) {
             emergent$tryDeepenRainWater(serverWorld, surfacePos, surfaceState);

@@ -185,6 +185,64 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void rainfallMoistureUsesSurfaceMaterialAbsorption(GameTestHelper context) {
+        double grassMoisture = EnvironmentalExposure.rainfallSurfaceMoisture(Blocks.GRASS_BLOCK.defaultBlockState(), 0.001);
+        double stoneMoisture = EnvironmentalExposure.rainfallSurfaceMoisture(Blocks.STONE.defaultBlockState(), 0.001);
+
+        context.assertTrue(grassMoisture > stoneMoisture,
+                "absorbent soil should store more rainwater than stone at the same rainfall depth");
+        context.assertTrue(grassMoisture > 0.04 && grassMoisture < 0.06,
+                "one millimetre of rain should wet the active soil surface by a small physical amount");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void hotExposedAirDriesStoredSurfaceMoisture(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.5);
+
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                2.0f,
+                true,
+                0);
+
+        context.assertTrue(EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 0.5,
+                "hot sky-exposed ambient exchange should dry stored surface moisture");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void localHeatPreheatsAndDriesSurfaceExposure(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.OAK_LOG);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.5);
+
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.8f,
+                false,
+                2);
+
+        context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "local heat should add stored heat exposure");
+        context.assertTrue(EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 0.5,
+                "local heat should dry stored moisture");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void denseFuelCanSustainFireAboveIt(GameTestHelper context) {
         BlockPos firePos = TEST_POS.above();
         context.setBlock(TEST_POS, Blocks.COAL_BLOCK);
