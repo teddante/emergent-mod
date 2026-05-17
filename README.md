@@ -243,8 +243,8 @@ Saved Prism or launcher logs can be summarized without relaunching Minecraft:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\analyze_profiler_log.ps1 -Path "C:\path\to\latest.log" -Top 12
 ```
 
-The saved-log analyzer also summarizes vanilla `Can't keep up!` warnings and compares them with the largest Emergent profiler spike in that log.
-If the finite-fluid diagnosis says schedule counters are missing, the log was captured with an older test jar; launch the current copied jar once and analyze the new `latest.log` before making scheduler decisions.
+The saved-log analyzer accepts Prism's plain `.log` files and archived `.log.gz` files. It also summarizes vanilla `Can't keep up!` warnings and compares them with the largest Emergent profiler spike in that log.
+If the finite-fluid diagnosis says schedule, budget, or quiet-cache counters are missing, the log was captured with an older test jar; launch the current copied jar once and analyze the new `latest.log` before making scheduler decisions.
 
 See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.
 

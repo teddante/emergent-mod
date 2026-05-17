@@ -100,6 +100,11 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
             $CounterTotals.ContainsKey("finite_fluid_active_schedules") -or
             $CounterTotals.ContainsKey("finite_fluid_quiet_schedule_skips")
+    $hasBudgetCounters = $CounterTotals.ContainsKey("finite_fluid_budget_claims") -or
+            $CounterTotals.ContainsKey("finite_fluid_budget_deferrals") -or
+            $CounterTotals.ContainsKey("finite_fluid_budget_chunk_claims") -or
+            $CounterTotals.ContainsKey("finite_fluid_budget_chunk_deferrals")
+    $hasQuietCacheCounters = $CounterTotals.ContainsKey("finite_fluid_quiet_cache_hits")
     $quietDenominator = [Math]::Max(1L, $activeSchedules + $quietSkips)
     $quietPercent = ($quietSkips * 100.0) / $quietDenominator
     $workPercent = ($workEvents * 100.0) / [Math]::Max(1L, $finiteTicks)
@@ -114,6 +119,12 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $thermalQuietSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if (!$hasScheduleCounters) {
         $Summary.Add("  scheduleCounters=missing; this log was probably captured before active/quiet schedule counters were added.")
+    }
+    if (!$hasBudgetCounters) {
+        $Summary.Add("  budgetCounters=missing; this log was probably captured before finite-fluid active work budgets were added.")
+    }
+    if (!$hasQuietCacheCounters) {
+        $Summary.Add("  quietCacheCounters=missing; this log was probably captured before repeated quiet-state caching was added.")
     }
 
     $quietReasons = @(
@@ -133,6 +144,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
 
     if (!$hasScheduleCounters) {
         $Summary.Add("  interpretation=older profiler format; retest with the latest jar before deciding whether wakeups are stale or active.")
+    } elseif (!$hasBudgetCounters) {
+        $Summary.Add("  interpretation=pre-budget profiler format; retest with the latest copied jar before tuning active fluid budgets.")
     } elseif ($budgetDeferrals -gt 0) {
         $Summary.Add("  interpretation=finite-fluid neighbour-scan/active work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
     } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
@@ -180,8 +193,39 @@ function Add-LagCorrelation([System.Collections.Generic.List[string]]$Summary, [
     }
 }
 
+function Get-LogLines([string]$ResolvedPath) {
+    if (!$ResolvedPath.EndsWith(".gz", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return @(Get-Content -LiteralPath $ResolvedPath)
+    }
+
+    $fileStream = [IO.File]::OpenRead($ResolvedPath)
+    try {
+        $gzipStream = [IO.Compression.GzipStream]::new($fileStream, [IO.Compression.CompressionMode]::Decompress)
+        try {
+            $reader = [IO.StreamReader]::new($gzipStream)
+            try {
+                $lines = New-Object System.Collections.Generic.List[string]
+                while (!$reader.EndOfStream) {
+                    $lines.Add($reader.ReadLine())
+                }
+                return @($lines)
+            } finally {
+                $reader.Dispose()
+            }
+        } finally {
+            if ($gzipStream) {
+                $gzipStream.Dispose()
+            }
+        }
+    } finally {
+        if ($fileStream) {
+            $fileStream.Dispose()
+        }
+    }
+}
+
 $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
-$logLines = Get-Content -LiteralPath $resolvedPath
+$logLines = Get-LogLines $resolvedPath
 $allProfilerLines = @($logLines | Where-Object { $_ -like "*Emergent profiler:*" })
 $profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt $WarmupTicks })
 $lagLines = @($logLines | Where-Object { $_ -like "*Can't keep up!*" })
