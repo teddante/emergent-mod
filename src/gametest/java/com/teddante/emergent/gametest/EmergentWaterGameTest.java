@@ -133,6 +133,46 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void rainPuddleReadinessDependsOnSurfaceAbsorption(GameTestHelper context) {
+        double stoneThreshold = EnvironmentalExposure.rainPuddleSaturationThreshold(Blocks.STONE.defaultBlockState());
+        double dirtThreshold = EnvironmentalExposure.rainPuddleSaturationThreshold(Blocks.DIRT.defaultBlockState());
+
+        context.assertTrue(stoneThreshold < dirtThreshold,
+                "hard low-absorption surfaces should be able to release visible puddles before soil saturates");
+        context.assertTrue(EnvironmentalExposure.rainPuddleReadiness(Blocks.STONE.defaultBlockState(), stoneThreshold) > 0.0,
+                "hard surfaces should become puddle-ready once their thin surface film is saturated");
+        context.assertTrue(EnvironmentalExposure.rainPuddleReadiness(Blocks.DIRT.defaultBlockState(), stoneThreshold) == 0.0,
+                "absorbent soil should keep soaking rain at the same stored moisture level");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void rainPuddleReleaseConsumesStoredMoisture(GameTestHelper context) {
+        BlockPos surfacePos = WATER_POS.below();
+        context.setBlock(surfacePos, Blocks.STONE.defaultBlockState());
+        double moisture = EnvironmentalExposure.rainPuddleSaturationThreshold(context.getBlockState(surfacePos))
+                + EnvironmentalExposure.rainPuddleMoistureCost(context.getBlockState(surfacePos), 1);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                context.getBlockState(surfacePos),
+                moisture);
+
+        boolean released = EnvironmentalExposure.tryReleaseRainPuddleMoisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                context.getBlockState(surfacePos),
+                1);
+
+        context.assertTrue(released, "a saturated hard surface should be able to release a shallow rain puddle");
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)),
+                moisture - EnvironmentalExposure.rainPuddleMoistureCost(context.getBlockState(surfacePos), 1),
+                "forming a rain puddle should draw down stored surface moisture instead of creating free water memory");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void rainPuddleContactWashesAshIntoSuspendedSediment(GameTestHelper context) {
         BlockPos surfacePos = WATER_POS.below();
         context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());

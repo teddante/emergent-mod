@@ -22,6 +22,9 @@ public final class EnvironmentalExposure {
     private static final double ACTIVE_SURFACE_PORE_FRACTION = 0.35;
     private static final double BLOCK_FACE_AREA_SQUARE_METERS = 1.0;
     private static final double RAIN_SAMPLE_DEPTH_METERS = 0.001;
+    private static final double ABSORBENT_PUDDLE_SATURATION_THRESHOLD = 0.65;
+    private static final double MIN_HARD_SURFACE_PUDDLE_SATURATION_THRESHOLD = 0.04;
+    private static final double RAIN_PUDDLE_MOISTURE_COST_FLOOR = 0.04;
     private static final double MOISTURE_DECAY_PER_TICK = 0.001;
     private static final double HEAT_DECAY_PER_TICK = 0.02;
     private static final double COLD_DECAY_PER_TICK = 0.01;
@@ -96,6 +99,41 @@ public final class EnvironmentalExposure {
 
         double rainfallVolume = Math.max(0.0, rainfallDepthMeters) * climateMoistureFactor(climateMoistureFactor) * BLOCK_VOLUME_CUBIC_METERS;
         return Math.min(0.25, rainfallVolume / activePoreVolume * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
+    }
+
+    public static double rainPuddleSaturationThreshold(BlockState state) {
+        double absorption = MaterialPhysicsProfiles.surfaceWaterAbsorption(state);
+        if (absorption > 0.5) {
+            return ABSORBENT_PUDDLE_SATURATION_THRESHOLD;
+        }
+
+        return Math.max(MIN_HARD_SURFACE_PUDDLE_SATURATION_THRESHOLD, absorption * 0.75);
+    }
+
+    public static double rainPuddleReadiness(BlockState state, double saturation) {
+        double threshold = rainPuddleSaturationThreshold(state);
+        if (threshold <= 0.0 || saturation < threshold) {
+            return 0.0;
+        }
+
+        double absorption = MaterialPhysicsProfiles.surfaceWaterAbsorption(state);
+        double runoffFactor = 1.0 - Math.min(0.7, absorption * 0.5);
+        return Math.min(1.0, saturation / threshold) * runoffFactor;
+    }
+
+    public static double rainPuddleMoistureCost(BlockState state, int waterAmount) {
+        double absorption = MaterialPhysicsProfiles.surfaceWaterAbsorption(state);
+        return Math.min(0.2, Math.max(RAIN_PUDDLE_MOISTURE_COST_FLOOR,
+                contactSurfaceMoisture(waterAmount) * Math.max(0.35, absorption)));
+    }
+
+    public static boolean tryReleaseRainPuddleMoisture(ServerLevel world, BlockPos surfacePos, BlockState surfaceState, int waterAmount) {
+        if (rainPuddleReadiness(surfaceState, moisture(world, surfacePos, surfaceState)) <= 0.0) {
+            return false;
+        }
+
+        removeMoisture(world, surfacePos, surfaceState, rainPuddleMoistureCost(surfaceState, waterAmount));
+        return true;
     }
 
     public static double airExposureAreaSquareMeters(boolean topOpen, int openHorizontalFaces) {
