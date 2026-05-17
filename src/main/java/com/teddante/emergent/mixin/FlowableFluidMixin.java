@@ -187,8 +187,6 @@ public abstract class FlowableFluidMixin extends Fluid {
         // Constraint: If Source is Waterloggable (restrictive), we cannot partially
         // drain it horizontally.
         if (blockState.getBlock() instanceof LiquidBlockContainer) {
-            // Schedule tick just in case context changes (e.g. block below clears up)
-            world.scheduleTick(pos, fluid, tickDelay);
             return;
         }
 
@@ -294,6 +292,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
                 }
 
+                boolean movedHorizontally = false;
                 // Apply changes to world
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
@@ -301,6 +300,10 @@ public abstract class FlowableFluidMixin extends Fluid {
                                 - (WaterPhysics.isSameFluid(fluid, world.getFluidState(neighbors[i]))
                                         ? world.getFluidState(neighbors[i]).getAmount()
                                         : 0));
+                        if (movedAmount <= 0) {
+                            continue;
+                        }
+
                         if (movedAmount > 0
                                 && EmergentConfig.get().hydraulicErosion
                                 && WaterPhysics.canHydraulicallyErode(fluid)) {
@@ -311,22 +314,22 @@ public abstract class FlowableFluidMixin extends Fluid {
                         setWaterLevel(world, neighbors[i], neighborLevels[i], false);
                         emergent$transferSuspendedSediment(world, pos, blockState, neighbors[i], movedAmount, startingLevel);
                         world.scheduleTick(neighbors[i], fluid, tickDelay);
+                        movedHorizontally = true;
                     }
                 }
 
-                // Update current position after horizontal distribution
-                if (currentLevel <= 0) {
-                    removeWaterAt(world, pos, blockState);
-                } else {
-                    setWaterLevel(world, pos, currentLevel, false);
+                if (movedHorizontally) {
+                    // Update current position after horizontal distribution.
+                    if (currentLevel <= 0) {
+                        removeWaterAt(world, pos, blockState);
+                    } else {
+                        setWaterLevel(world, pos, currentLevel, false);
+                        if (currentLevel > WaterPhysics.settledThinLayerAmount(fluid)) {
+                            world.scheduleTick(pos, fluid, tickDelay);
+                        }
+                    }
                 }
             }
-        }
-
-        // Schedule next tick if we still have water
-        FluidState newState = world.getFluidState(pos);
-        if (!newState.isEmpty() && currentLevel > WaterPhysics.settledThinLayerAmount(fluid)) {
-            world.scheduleTick(pos, fluid, tickDelay);
         }
         } finally {
             EmergentProfiler.record(world, EmergentProfiler.FINITE_FLUIDS, emergent$profileStart);
