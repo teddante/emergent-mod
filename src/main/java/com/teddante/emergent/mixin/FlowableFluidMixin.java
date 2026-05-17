@@ -486,6 +486,13 @@ public abstract class FlowableFluidMixin extends Fluid {
                             surfacePos,
                             surfaceState,
                             EnvironmentalExposure.contactSurfaceMoisture(waterAmount));
+                    EnvironmentalExposure.washAshIntoWater(
+                            world,
+                            surfacePos,
+                            surfaceState,
+                            pos,
+                            world.getBlockState(pos),
+                            waterAmount);
                 }
             }
             MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());

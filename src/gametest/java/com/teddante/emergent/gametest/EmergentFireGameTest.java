@@ -316,6 +316,48 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void waterContactCarriesAshAsSuspendedSediment(GameTestHelper context) {
+        BlockPos waterPos = TEST_POS.above();
+        context.setBlock(TEST_POS, Blocks.DIRT);
+        context.setBlock(waterPos, Blocks.WATER);
+        EnvironmentalExposure.addAshResidue(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                2.0);
+
+        double washedAsh = EnvironmentalExposure.washAshIntoWater(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                context.absolutePos(waterPos),
+                context.getBlockState(waterPos),
+                8);
+
+        context.assertTrue(washedAsh > 0.0,
+                "water contacting ash should pick up some residue as suspended fine sediment");
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 2.0,
+                "ash runoff should consume residue from the surface it contacted");
+        context.assertTrue(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(waterPos), context.getBlockState(waterPos)) == washedAsh,
+                "washed ash mass should enter the same suspended sediment memory used by hydraulic erosion");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void ashRunoffScalesWithWaterVolume(GameTestHelper context) {
+        double thinFilmCapacity = EnvironmentalExposure.ashRunoffCapacityKilograms(1);
+        double sourceCapacity = EnvironmentalExposure.ashRunoffCapacityKilograms(8);
+
+        context.assertTrue(sourceCapacity > thinFilmCapacity,
+                "larger water volumes should carry more ash residue than thin films");
+        assertClose(sourceCapacity, EnvironmentalExposure.fluidAmountCubicMeters(8) * 2.0,
+                "ash runoff should be expressed as suspended-solids mass per cubic metre of water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void moistureRelievesAccumulatedVegetationStress(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 2));
         EnvironmentalExposure.addVegetationStress(

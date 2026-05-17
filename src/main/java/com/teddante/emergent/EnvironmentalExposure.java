@@ -38,6 +38,7 @@ public final class EnvironmentalExposure {
     private static final double LOCAL_HEAT_EXPOSURE_PER_SAMPLE = 0.12;
     private static final double COLD_BIOME_EXPOSURE_PER_SAMPLE = 0.04;
     private static final double SEDIMENT_DEPOSIT_THRESHOLD_KG = 45.0;
+    private static final double ASH_RUNOFF_SUSPENDED_SOLIDS_KG_PER_CUBIC_METER = 2.0;
     private static final Map<ServerLevel, Map<Long, ExposureEntry>> EXPOSURES = new WeakHashMap<>();
 
     private EnvironmentalExposure() {
@@ -320,6 +321,27 @@ public final class EnvironmentalExposure {
 
     public static void washAshResidue(ServerLevel world, BlockPos pos, BlockState state, double washAmount) {
         consumeAshResidue(world, pos, state, washAmount);
+    }
+
+    public static double ashRunoffCapacityKilograms(int waterAmount) {
+        return fluidAmountCubicMeters(waterAmount) * ASH_RUNOFF_SUSPENDED_SOLIDS_KG_PER_CUBIC_METER;
+    }
+
+    public static double washAshIntoWater(
+            ServerLevel world,
+            BlockPos ashPos,
+            BlockState ashState,
+            BlockPos waterPos,
+            BlockState waterState,
+            int waterAmount) {
+        double washedAsh = Math.min(ashResidue(world, ashPos, ashState), ashRunoffCapacityKilograms(waterAmount));
+        if (washedAsh <= 0.0) {
+            return 0.0;
+        }
+
+        consumeAshResidue(world, ashPos, ashState, washedAsh);
+        addSuspendedSediment(world, waterPos, waterState, washedAsh);
+        return washedAsh;
     }
 
     public static void clearHeat(ServerLevel world, BlockPos pos) {
