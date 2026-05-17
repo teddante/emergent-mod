@@ -177,11 +177,76 @@ public final class MaterialPhysicsProfiles {
         return 1.0 + dryness * 0.12 + heatReadiness;
     }
 
+    public static double vegetationClimateStress(BlockState state, double moisture, double heat, float biomeTemperature, boolean skyExposed) {
+        if (!isVegetation(state)) {
+            return 0.0;
+        }
+
+        double dryness = Math.max(0.0, 1.0 - moisture);
+        double heatPressure = Math.max(0.0, heat * 0.35 + Math.max(0.0F, biomeTemperature - 0.8F) * 0.8);
+        double exposure = skyExposed ? 1.0 : 0.45;
+        double plantSensitivity = state.is(BlockTags.CROPS) || state.is(MaterialReactionTags.RAIN_GROWS) ? 1.2 : 1.0;
+        if (state.is(BlockTags.LEAVES)) {
+            plantSensitivity = 0.55;
+        }
+
+        double stress = dryness * heatPressure * exposure * plantSensitivity;
+        return stress < 0.03 ? 0.0 : stress;
+    }
+
+    public static double vegetationStressThreshold(BlockState state) {
+        if (state.is(BlockTags.CROPS) || state.is(MaterialReactionTags.RAIN_GROWS)) {
+            return 0.85;
+        }
+        if (state.is(Blocks.MOSS_BLOCK) || state.is(Blocks.PALE_MOSS_BLOCK) || state.is(BlockTags.GRASS_BLOCKS)) {
+            return 1.15;
+        }
+        if (state.is(BlockTags.FLOWERS) || state.is(BlockTags.LEAVES)) {
+            return 0.7;
+        }
+        if (state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE) || state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE)) {
+            return 0.75;
+        }
+
+        return 1.0;
+    }
+
+    public static BlockState droughtDegradedState(BlockState state) {
+        if (state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.MYCELIUM) || state.is(Blocks.PODZOL)) {
+            return Blocks.DIRT.defaultBlockState();
+        }
+        if (state.is(Blocks.MOSS_BLOCK) || state.is(Blocks.PALE_MOSS_BLOCK)) {
+            return Blocks.DIRT.defaultBlockState();
+        }
+        if (state.is(BlockTags.CROPS) || state.is(MaterialReactionTags.RAIN_GROWS)) {
+            return Blocks.DEAD_BUSH.defaultBlockState();
+        }
+        if (state.is(BlockTags.FLOWERS) || state.is(Blocks.SHORT_GRASS) || state.is(Blocks.FERN)) {
+            return Blocks.DEAD_BUSH.defaultBlockState();
+        }
+        if (state.is(BlockTags.LEAVES)) {
+            return Blocks.LEAF_LITTER.defaultBlockState();
+        }
+
+        return null;
+    }
+
     private static boolean isFireReactive(BlockState state) {
         return state.is(MaterialReactionTags.CHARS_IN_FIRE)
                 || state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)
                 || state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE)
                 || state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE)
                 || state.is(MaterialReactionTags.SUSTAINS_FIRE);
+    }
+
+    private static boolean isVegetation(BlockState state) {
+        return state.is(BlockTags.CROPS)
+                || state.is(BlockTags.GRASS_BLOCKS)
+                || state.is(BlockTags.LEAVES)
+                || state.is(BlockTags.FLOWERS)
+                || state.is(MaterialReactionTags.RAIN_GROWS)
+                || state.is(MaterialReactionTags.SCORCHES_TO_DIRT_IN_FIRE)
+                || state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE)
+                || state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE);
     }
 }

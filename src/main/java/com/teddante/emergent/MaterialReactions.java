@@ -382,6 +382,72 @@ public final class MaterialReactions {
         }
     }
 
+    public static boolean tryClimateStress(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeTemperature,
+            boolean skyExposed) {
+        double moisture = Math.max(
+                EnvironmentalExposure.moisture(world, pos, state),
+                EnvironmentalExposure.moisture(world, pos.below(), world.getBlockState(pos.below())));
+        double heat = Math.max(
+                EnvironmentalExposure.heat(world, pos, state),
+                EnvironmentalExposure.heat(world, pos.below(), world.getBlockState(pos.below())));
+        double stress = MaterialPhysicsProfiles.vegetationClimateStress(state, moisture, heat, biomeTemperature, skyExposed);
+        if (stress <= 0.0) {
+            return false;
+        }
+
+        double accumulatedStress = EnvironmentalExposure.addVegetationStress(world, pos, state, stress);
+        if (accumulatedStress < climateStressThreshold(world, pos, state)) {
+            return false;
+        }
+
+        EnvironmentalExposure.clearVegetationStress(world, pos);
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_1)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_2)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_3)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_4)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_5)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_7)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_15)) {
+            return true;
+        }
+        if (state.is(MaterialReactionTags.RAIN_GROWS) && tryDecrementAge(world, pos, state, BlockStateProperties.AGE_25)) {
+            return true;
+        }
+
+        BlockState degradedState = MaterialPhysicsProfiles.droughtDegradedState(state);
+        if (degradedState == null) {
+            return false;
+        }
+
+        if (degradedState.canSurvive(world, pos)) {
+            world.setBlock(pos, degradedState, 3);
+        } else {
+            world.removeBlock(pos, false);
+        }
+        world.playSound(null, pos, SoundEvents.GRASS_BREAK, SoundSource.BLOCKS, 0.35f, 0.8f);
+        return true;
+    }
+
+    private static double climateStressThreshold(ServerLevel world, BlockPos pos, BlockState state) {
+        return MaterialPhysicsProfiles.vegetationStressThreshold(state) * heatThresholdVariance(world, pos, state);
+    }
+
     private static float rainGrowthChance(ServerLevel world, BlockPos pos, BlockState state) {
         double bonus = EnvironmentalExposure.ashGrowthBonus(world, pos, state);
         BlockPos belowPos = pos.below();
@@ -407,6 +473,20 @@ public final class MaterialReactions {
         }
 
         world.setBlock(pos, state.setValue(property, age + 1), 3);
+        return true;
+    }
+
+    private static boolean tryDecrementAge(ServerLevel world, BlockPos pos, BlockState state, IntegerProperty property) {
+        if (!state.hasProperty(property)) {
+            return false;
+        }
+
+        int age = state.getValue(property);
+        if (age <= 0) {
+            return false;
+        }
+
+        world.setBlock(pos, state.setValue(property, age - 1), 3);
         return true;
     }
 

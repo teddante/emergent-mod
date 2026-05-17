@@ -316,6 +316,99 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void moistureRelievesAccumulatedVegetationStress(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 2));
+        EnvironmentalExposure.addVegetationStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.6);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.5);
+
+        context.assertTrue(
+                EnvironmentalExposure.vegetationStress(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 0.6,
+                "stored moisture should relieve accumulated vegetation stress");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void dryHeatCanRegressCropGrowth(GameTestHelper context) {
+        context.setBlock(TEST_POS.below(), Blocks.FARMLAND);
+        context.setBlock(TEST_POS, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3));
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                2.0);
+
+        MaterialReactions.tryClimateStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.2f,
+                true);
+
+        context.assertTrue(context.getBlockState(TEST_POS).getValue(CropBlock.AGE) < 3,
+                "dry heat should be able to regress crop growth before killing the plant outright");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void wetCropResistsDryHeatStress(GameTestHelper context) {
+        context.setBlock(TEST_POS.below(), Blocks.FARMLAND);
+        context.setBlock(TEST_POS, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3));
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS.below()),
+                context.getBlockState(TEST_POS.below()),
+                1.0);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                2.0);
+
+        for (int i = 0; i < 4; i++) {
+            MaterialReactions.tryClimateStress(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.2f,
+                    true);
+        }
+
+        context.assertTrue(context.getBlockState(TEST_POS).getValue(CropBlock.AGE) == 3,
+                "nearby stored soil moisture should stop dry heat from stressing the crop");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void repeatedDryHeatCanTurnGrassBlockToDirt(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+
+        for (int i = 0; i < 4 && context.getBlockState(TEST_POS).is(Blocks.GRASS_BLOCK); i++) {
+            EnvironmentalExposure.addHeat(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    2.0);
+            MaterialReactions.tryClimateStress(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.2f,
+                    true);
+        }
+
+        context.assertBlockPresent(Blocks.DIRT, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void structuralStressAccumulatesInExposureMemory(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.GLASS);
         double threshold = MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(TEST_POS));

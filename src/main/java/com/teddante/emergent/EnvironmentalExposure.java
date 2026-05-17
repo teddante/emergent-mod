@@ -26,6 +26,7 @@ public final class EnvironmentalExposure {
     private static final double COLD_DECAY_PER_TICK = 0.01;
     private static final double HEAT_DRYING_RATE = 0.08;
     private static final double WATER_COOLING_RATE = 1.5;
+    private static final double MOISTURE_VEGETATION_STRESS_RELIEF = 0.8;
     private static final double COLD_COOLING_RATE = 1.25;
     private static final double SNOW_SAMPLE_COLD = 0.18;
     private static final double SNOW_SAMPLE_MOISTURE = 0.08;
@@ -140,6 +141,7 @@ public final class EnvironmentalExposure {
         double removedHeat = Math.min(entry.heat(), moisture * WATER_COOLING_RATE);
         entry = entry.withMoisture(Math.min(MAX_MOISTURE, entry.moisture() + moisture))
                 .withHeat(entry.heat() - removedHeat)
+                .withVegetationStress(Math.max(0.0, entry.vegetationStress() - moisture * MOISTURE_VEGETATION_STRESS_RELIEF))
                 .withLastTick(world.getGameTime());
         double thermalStress = MaterialPhysicsProfiles.thermalShockStress(state, removedHeat);
         entry = entry.withStructuralStress(entry.structuralStress() + thermalStress);
@@ -210,6 +212,17 @@ public final class EnvironmentalExposure {
         return entry.trafficWear();
     }
 
+    public static double addVegetationStress(ServerLevel world, BlockPos pos, BlockState state, double stress) {
+        if (stress <= 0.0) {
+            return vegetationStress(world, pos, state);
+        }
+
+        ExposureEntry entry = entryFor(world, pos, state);
+        entry = entry.withVegetationStress(entry.vegetationStress() + stress).withLastTick(world.getGameTime());
+        put(world, pos, entry);
+        return entry.vegetationStress();
+    }
+
     public static double addStructuralStress(ServerLevel world, BlockPos pos, BlockState state, double stress) {
         if (stress <= 0.0) {
             return structuralStress(world, pos, state);
@@ -272,6 +285,11 @@ public final class EnvironmentalExposure {
         return entry == null ? 0.0 : entry.structuralStress();
     }
 
+    public static double vegetationStress(ServerLevel world, BlockPos pos, BlockState state) {
+        ExposureEntry entry = currentEntry(world, pos, state);
+        return entry == null ? 0.0 : entry.vegetationStress();
+    }
+
     public static double suspendedSediment(ServerLevel world, BlockPos pos, BlockState state) {
         ExposureEntry entry = currentEntry(world, pos, state);
         return entry == null ? 0.0 : entry.suspendedSedimentKilograms();
@@ -320,6 +338,10 @@ public final class EnvironmentalExposure {
         update(world, pos, entry -> entry.withTrafficWear(0.0));
     }
 
+    public static void clearVegetationStress(ServerLevel world, BlockPos pos) {
+        update(world, pos, entry -> entry.withVegetationStress(0.0));
+    }
+
     public static void clearStructuralStress(ServerLevel world, BlockPos pos) {
         update(world, pos, entry -> entry.withStructuralStress(0.0));
     }
@@ -343,7 +365,7 @@ public final class EnvironmentalExposure {
 
     private static ExposureEntry entryFor(ServerLevel world, BlockPos pos, BlockState state) {
         ExposureEntry entry = currentEntry(world, pos, state);
-        return entry == null ? new ExposureEntry(state, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, world.getGameTime()) : entry;
+        return entry == null ? new ExposureEntry(state, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, world.getGameTime()) : entry;
     }
 
     private static ExposureEntry currentEntry(ServerLevel world, BlockPos pos, BlockState state) {
@@ -427,6 +449,7 @@ public final class EnvironmentalExposure {
             double moisture,
             double hydraulicWear,
             double trafficWear,
+            double vegetationStress,
             double structuralStress,
             double suspendedSedimentKilograms,
             double ashResidueKilograms,
@@ -437,45 +460,50 @@ public final class EnvironmentalExposure {
                     && moisture <= 0.0
                     && hydraulicWear <= 0.0
                     && trafficWear <= 0.0
+                    && vegetationStress <= 0.0
                     && structuralStress <= 0.0
                     && suspendedSedimentKilograms <= 0.0
                     && ashResidueKilograms <= 0.0;
         }
 
         ExposureEntry withHeat(double heat) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withCold(double cold) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withMoisture(double moisture) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withHydraulicWear(double hydraulicWear) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withTrafficWear(double trafficWear) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+        }
+
+        ExposureEntry withVegetationStress(double vegetationStress) {
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withStructuralStress(double structuralStress) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withSuspendedSedimentKilograms(double suspendedSedimentKilograms) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withAshResidueKilograms(double ashResidueKilograms) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
 
         ExposureEntry withLastTick(long lastTick) {
-            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
+            return new ExposureEntry(state, heat, cold, moisture, hydraulicWear, trafficWear, vegetationStress, structuralStress, suspendedSedimentKilograms, ashResidueKilograms, lastTick);
         }
     }
 }

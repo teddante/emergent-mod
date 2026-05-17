@@ -60,6 +60,9 @@ public abstract class ServerWorldMixin {
                     skyExposed,
                     ThermalPhysics.neighboringHeat(serverWorld, surfacePos));
             ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
+            if (EmergentConfig.get().materialReactions) {
+                emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed);
+            }
             return;
         }
 
@@ -167,5 +170,31 @@ public abstract class ServerWorldMixin {
 
         MaterialReactions.tryRainGrow(world, pos, state, world.getRandom());
         return true;
+    }
+
+    @Unique
+    private void emergent$tryClimateStressExposedBlock(
+            ServerLevel world,
+            BlockPos topPos,
+            BlockPos surfacePos,
+            BlockState topState,
+            BlockState surfaceState,
+            float biomeTemperature,
+            boolean skyExposed) {
+        if (emergent$tryClimateStressAt(world, topPos, topState, biomeTemperature, skyExposed)) {
+            return;
+        }
+
+        emergent$tryClimateStressAt(world, surfacePos, surfaceState, biomeTemperature, skyExposed);
+    }
+
+    @Unique
+    private boolean emergent$tryClimateStressAt(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeTemperature,
+            boolean skyExposed) {
+        return MaterialReactions.tryClimateStress(world, pos, state, biomeTemperature, skyExposed);
     }
 }
