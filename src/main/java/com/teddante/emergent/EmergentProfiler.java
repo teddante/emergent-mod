@@ -15,7 +15,8 @@ public final class EmergentProfiler {
     public static final String TRAFFIC = "traffic_wear";
 
     private static final boolean ENABLED = Boolean.getBoolean("emergent.profiler");
-    private static final long SLOW_TICK_NANOS = Long.getLong("emergent.profiler.slowMs", 25L) * 1_000_000L;
+    private static final long SLOW_TICK_MILLIS = Long.getLong("emergent.profiler.slowMs", 25L);
+    private static final long SLOW_TICK_NANOS = SLOW_TICK_MILLIS * 1_000_000L;
     private static final int TOP_HEATED_BLOCKS = 4;
     private static final int TOP_HOT_CHUNKS = 4;
     private static final Map<ServerLevel, TickStats> STATS = new WeakHashMap<>();
@@ -25,6 +26,10 @@ public final class EmergentProfiler {
 
     public static boolean enabled() {
         return ENABLED;
+    }
+
+    public static long slowTickMillis() {
+        return SLOW_TICK_MILLIS;
     }
 
     public static long start() {

@@ -101,7 +101,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                     removeWaterAt(world, pos, blockState);
                 } else {
                     setWaterLevel(world, pos, evaporatedLevel, false);
-                    world.scheduleTick(pos, fluid, tickDelay);
+                    emergent$scheduleFiniteFluidIfActive(world, pos, fluid, evaporatedLevel, tickDelay);
                 }
                 return;
             }
@@ -179,9 +179,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                         setWaterLevel(world, pos, newCurrentLevel, false);
                     }
 
-                    // Schedule next tick
-                    world.scheduleTick(pos, fluid, tickDelay);
-                    world.scheduleTick(below, fluid, tickDelay);
+                    emergent$scheduleFiniteFluidIfActive(world, pos, fluid, newCurrentLevel, tickDelay);
+                    emergent$scheduleFiniteFluidIfActive(world, below, fluid, newBelowLevel, tickDelay);
                     return;
                 }
             }
@@ -336,7 +335,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                         // Optimization: The implementation of setWaterLevel does extensive checks.
                         setWaterLevel(world, neighbors[i], neighborLevels[i], false);
                         emergent$transferSuspendedSediment(world, pos, blockState, neighbors[i], movedAmount, startingLevel);
-                        world.scheduleTick(neighbors[i], fluid, tickDelay);
+                        emergent$scheduleFiniteFluidIfActive(world, neighbors[i], fluid, neighborLevels[i], tickDelay);
                         movedHorizontally = true;
                     }
                 }
@@ -348,9 +347,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                         removeWaterAt(world, pos, blockState);
                     } else {
                         setWaterLevel(world, pos, currentLevel, false);
-                        if (currentLevel > WaterPhysics.settledThinLayerAmount(fluid)) {
-                            world.scheduleTick(pos, fluid, tickDelay);
-                        }
+                        emergent$scheduleFiniteFluidIfActive(world, pos, fluid, currentLevel, tickDelay);
                     }
                 }
             }
@@ -544,7 +541,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             if (setWaterLevel(world, targetPos, 8, false)) {
                 emergent$transferSuspendedSediment(world, pos, blockState, targetPos, 8, 8);
                 removeWaterAt(world, pos, blockState);
-                world.scheduleTick(targetPos, (Fluid) (Object) this, tickDelay);
+                emergent$scheduleFiniteFluidIfActive(world, targetPos, (Fluid) (Object) this, 8, tickDelay);
                 return true;
             }
         }
@@ -624,7 +621,72 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         setWaterLevel(world, sourcePos, result.remainingSourceAmount(), false);
-        world.scheduleTick(sourcePos, fluid, tickDelay);
+        emergent$scheduleFiniteFluidIfActive(world, sourcePos, fluid, result.remainingSourceAmount(), tickDelay);
+    }
+
+    @Unique
+    private void emergent$scheduleFiniteFluidIfActive(ServerLevel world, BlockPos pos, Fluid fluid, int amount, int tickDelay) {
+        if (amount <= 0 || !WaterPhysics.isSameFluid(fluid, world.getFluidState(pos))) {
+            return;
+        }
+
+        if (!emergent$finiteFluidCellCanDoWork(world, pos, fluid, amount)) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_schedule_skips", 1);
+            return;
+        }
+
+        world.scheduleTick(pos, fluid, tickDelay);
+    }
+
+    @Unique
+    private boolean emergent$finiteFluidCellCanDoWork(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
+            if (WaterPhysics.isWater(fluid)
+                    && EmergentConfig.get().hydraulicErosion
+                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
+                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
+            }
+            return false;
+        }
+
+        if (amount >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
+            return false;
+        }
+
+        BlockState state = world.getBlockState(pos);
+        if (state.getBlock() instanceof LiquidBlockContainer) {
+            return false;
+        }
+
+        BlockPos below = pos.below();
+        BlockState belowState = world.getBlockState(below);
+        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+            return true;
+        }
+        if (canFlowInto(world, below, belowState, Direction.DOWN)
+                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+            return true;
+        }
+
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos targetPos = pos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            FluidState targetFluidState = targetState.getFluidState();
+            if (emergent$fluidContactWouldReact(fluid, targetFluidState)) {
+                return true;
+            }
+            if (isWaterloggableTarget(world, targetPos, targetState)) {
+                return amount >= 8 && WaterPhysics.isWater(fluid);
+            }
+            if (canFlowInto(world, targetPos, targetState, direction)) {
+                int targetAmount = WaterPhysics.isSameFluid(fluid, targetFluidState) ? targetFluidState.getAmount() : 0;
+                if (targetAmount < amount) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     @Unique

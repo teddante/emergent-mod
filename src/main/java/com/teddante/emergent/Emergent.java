@@ -22,7 +22,7 @@ public class Emergent implements ModInitializer {
 		ServerTickEvents.END_LEVEL_TICK.register(EmergentProfiler::endLevelTick);
 		LOGGER.info("Emergent mod initialized.");
 		if (EmergentProfiler.enabled()) {
-			LOGGER.info("Emergent profiler enabled. Slow tick threshold: -Demergent.profiler.slowMs");
+			LOGGER.info("Emergent profiler enabled. Slow tick threshold: {} ms", EmergentProfiler.slowTickMillis());
 		}
 	}
 }
