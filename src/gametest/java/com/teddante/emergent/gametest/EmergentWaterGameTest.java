@@ -4,6 +4,7 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FireWetness;
+import com.teddante.emergent.MaterialPhysicsProfiles;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
@@ -339,6 +340,41 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 1_000_000);
 
         context.assertBlockPresent(Blocks.BEDROCK, targetPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void erosionSedimentCanDepositFromSettledShallowWater(GameTestHelper context) {
+        BlockPos waterPos = new BlockPos(1, 2, 1);
+        context.setBlock(waterPos.below(), Blocks.STONE);
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7));
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(waterPos),
+                context.getBlockState(waterPos),
+                70.0);
+
+        boolean deposited = ErosionPhysics.tryDepositSediment(
+                context.getLevel(),
+                context.absolutePos(waterPos),
+                Fluids.WATER,
+                1);
+
+        context.assertTrue(deposited, "settled shallow water should be able to deposit carried sediment");
+        context.assertBlockPresent(Blocks.MUD, waterPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void materialProfilesUsePhysicallyOrderedDensities(GameTestHelper context) {
+        context.assertTrue(
+                MaterialPhysicsProfiles.densityKilogramsPerCubicMeter(Blocks.STONE.defaultBlockState())
+                        > MaterialPhysicsProfiles.densityKilogramsPerCubicMeter(Blocks.DIRT.defaultBlockState()),
+                "stone should be denser than soil");
+        context.assertTrue(
+                MaterialPhysicsProfiles.densityKilogramsPerCubicMeter(Blocks.DIRT.defaultBlockState())
+                        > MaterialPhysicsProfiles.densityKilogramsPerCubicMeter(Blocks.OAK_LEAVES.defaultBlockState()),
+                "soil should be denser than leaves");
         context.succeed();
     }
 

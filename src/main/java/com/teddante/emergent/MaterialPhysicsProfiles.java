@@ -6,6 +6,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 public final class MaterialPhysicsProfiles {
     private static final double DEFAULT_SOLID_ABSORPTION = 0.12;
+    private static final double GAME_MASS_KG_SCALE = 0.01;
 
     private MaterialPhysicsProfiles() {
     }
@@ -38,6 +39,73 @@ public final class MaterialPhysicsProfiles {
 
     public static double dryingExposure(BlockState state) {
         return 1.0 - surfaceWaterAbsorption(state) * 0.35;
+    }
+
+    public static double densityKilogramsPerCubicMeter(BlockState state) {
+        if (state.is(BlockTags.ANVIL)) {
+            return 7_800.0;
+        }
+        if (state.is(BlockTags.LOGS)) {
+            return 650.0;
+        }
+        if (state.is(BlockTags.LEAVES)) {
+            return 120.0;
+        }
+        if (state.is(BlockTags.SAND)) {
+            return 1_600.0;
+        }
+        if (state.is(BlockTags.DIRT) || state.is(BlockTags.GRASS_BLOCKS) || state.is(BlockTags.MUD)) {
+            return 1_450.0;
+        }
+        if (state.is(Blocks.GLASS) || state.is(Blocks.TINTED_GLASS)) {
+            return 2_500.0;
+        }
+        if (state.is(Blocks.OBSIDIAN)) {
+            return 2_600.0;
+        }
+        if (state.is(Blocks.STONE)
+                || state.is(Blocks.COBBLESTONE)
+                || state.is(Blocks.DEEPSLATE)
+                || state.is(Blocks.CALCITE)
+                || state.is(Blocks.TUFF)) {
+            return 2_700.0;
+        }
+
+        return 1_200.0 + Math.sqrt(Math.max(0.0F, state.getBlock().getExplosionResistance())) * 120.0;
+    }
+
+    public static double blockMassKilograms(BlockState state) {
+        return densityKilogramsPerCubicMeter(state) * EnvironmentalExposure.BLOCK_VOLUME_CUBIC_METERS;
+    }
+
+    public static double blockGameMass(BlockState state) {
+        return blockMassKilograms(state) * GAME_MASS_KG_SCALE;
+    }
+
+    public static double structuralStressThreshold(BlockState state) {
+        double resistance = Math.max(0.1, state.getBlock().getExplosionResistance());
+        double brittleness = state.is(MaterialReactionTags.BRITTLE) ? 0.45 : 1.0;
+        return resistance * brittleness;
+    }
+
+    public static double sedimentKilogramsFromErodedBlock(BlockState state, double energy) {
+        double detachedVolume = Math.min(0.08, Math.max(0.0, energy) * 0.0025);
+        if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
+            detachedVolume *= 2.0;
+        }
+
+        return densityKilogramsPerCubicMeter(state) * detachedVolume;
+    }
+
+    public static BlockState sedimentDepositState(double sedimentKilograms) {
+        if (sedimentKilograms >= 120.0) {
+            return Blocks.GRAVEL.defaultBlockState();
+        }
+        if (sedimentKilograms >= 60.0) {
+            return Blocks.MUD.defaultBlockState();
+        }
+
+        return Blocks.DIRT.defaultBlockState();
     }
 
     public static double dryFireExposureMultiplier(BlockState state, double moisture, double storedHeat) {

@@ -158,6 +158,10 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         if (currentLevel <= WaterPhysics.settledThinLayerAmount(fluid)) {
+            if (WaterPhysics.isWater(fluid) && EmergentConfig.get().hydraulicErosion
+                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, currentLevel)) {
+                return;
+            }
             return;
         }
 

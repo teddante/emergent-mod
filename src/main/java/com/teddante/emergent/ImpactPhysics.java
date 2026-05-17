@@ -78,11 +78,7 @@ public final class ImpactPhysics {
     }
 
     private static double estimateBlockMass(BlockState state) {
-        if (state.is(BlockTags.ANVIL)) {
-            return 20.0;
-        }
-
-        return 4.0 + Math.sqrt(Math.max(0.0F, state.getBlock().getExplosionResistance()));
+        return MaterialPhysicsProfiles.blockGameMass(state);
     }
 
     private static void applyEntityImpacts(Entity mover, Vec3 velocity, double moverMass, double kineticEnergy) {
@@ -167,11 +163,21 @@ public final class ImpactPhysics {
             return false;
         }
 
-        double breakEnergy = state.getBlock().getExplosionResistance();
+        double breakEnergy = MaterialPhysicsProfiles.structuralStressThreshold(state);
         if (kineticEnergy <= breakEnergy) {
+            if (world instanceof net.minecraft.server.level.ServerLevel serverWorld) {
+                double accumulatedStress = EnvironmentalExposure.addStructuralStress(serverWorld, pos, state, kineticEnergy);
+                if (accumulatedStress > breakEnergy) {
+                    EnvironmentalExposure.clearStructuralStress(serverWorld, pos);
+                    return world.destroyBlock(pos, true, mover, Block.UPDATE_LIMIT);
+                }
+            }
             return false;
         }
 
+        if (world instanceof net.minecraft.server.level.ServerLevel serverWorld) {
+            EnvironmentalExposure.clearStructuralStress(serverWorld, pos);
+        }
         return world.destroyBlock(pos, true, mover, Block.UPDATE_LIMIT);
     }
 

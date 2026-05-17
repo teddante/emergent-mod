@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -80,16 +81,16 @@ public class ErosionPhysics {
 
         BlockPos impactPos = findImpactTarget(world, fluidPos, direction, direction == Direction.DOWN ? 6 : 3);
         if (impactPos != null) {
-            attemptBlockBreak(world, impactPos, world.getBlockState(impactPos), impulse);
+            attemptBlockBreak(world, fluidPos, impactPos, world.getBlockState(impactPos), impulse);
         }
 
         if (direction.getAxis().isHorizontal()) {
             BlockPos bedPos = fluidPos.below();
-            attemptBlockBreak(world, bedPos, world.getBlockState(bedPos), impulse * 0.35);
+            attemptBlockBreak(world, fluidPos, bedPos, world.getBlockState(bedPos), impulse * 0.35);
 
             BlockPos destinationBed = fluidPos.relative(direction).below();
             if (!destinationBed.equals(bedPos)) {
-                attemptBlockBreak(world, destinationBed, world.getBlockState(destinationBed), impulse * 0.25);
+                attemptBlockBreak(world, fluidPos.relative(direction), destinationBed, world.getBlockState(destinationBed), impulse * 0.25);
             }
         }
     }
@@ -125,7 +126,7 @@ public class ErosionPhysics {
         return z > 0.0 ? Direction.SOUTH : Direction.NORTH;
     }
 
-    private static void attemptBlockBreak(ServerLevel world, BlockPos pos, BlockState state, double energy) {
+    private static void attemptBlockBreak(ServerLevel world, BlockPos fluidPos, BlockPos pos, BlockState state, double energy) {
         if (energy <= 0.0 || !canErode(state)) {
             clearWear(world, pos);
             return;
@@ -142,7 +143,13 @@ public class ErosionPhysics {
         double accumulatedWear = addWear(world, pos, state, energy);
         if (accumulatedWear >= threshold) {
             clearWear(world, pos);
-            erodeBlock(world, pos, state);
+            if (erodeBlock(world, pos, state)) {
+                EnvironmentalExposure.addSuspendedSediment(
+                        world,
+                        fluidPos,
+                        world.getBlockState(fluidPos),
+                        MaterialPhysicsProfiles.sedimentKilogramsFromErodedBlock(state, energy));
+            }
         }
     }
 
@@ -197,7 +204,30 @@ public class ErosionPhysics {
                 || DEGRADATION_MAP.containsKey(state.getBlock());
     }
 
-    private static void erodeBlock(ServerLevel world, BlockPos pos, BlockState state) {
+    public static boolean tryDepositSediment(ServerLevel world, BlockPos fluidPos, Fluid fluid, int fluidAmount) {
+        if (!WaterPhysics.isWater(fluid) || fluidAmount > WaterPhysics.settledThinLayerAmount(fluid)) {
+            return false;
+        }
+
+        BlockState fluidState = world.getBlockState(fluidPos);
+        if (!WaterPhysics.isWater(fluidState.getFluidState().getType())
+                || !EnvironmentalExposure.canDepositSediment(world, fluidPos, fluidState)) {
+            return false;
+        }
+
+        BlockPos bedPos = fluidPos.below();
+        BlockState bedState = world.getBlockState(bedPos);
+        if (bedState.isAir() || !bedState.getFluidState().isEmpty()) {
+            return false;
+        }
+
+        double sediment = EnvironmentalExposure.consumeSuspendedSediment(world, fluidPos, fluidState);
+        world.setBlockAndUpdate(fluidPos, MaterialPhysicsProfiles.sedimentDepositState(sediment));
+        world.playSound(null, fluidPos, SoundEvents.GRAVEL_PLACE, SoundSource.BLOCKS, 0.35f, 0.9f);
+        return true;
+    }
+
+    private static boolean erodeBlock(ServerLevel world, BlockPos pos, BlockState state) {
         Block convertedBlock = DEGRADATION_MAP.get(state.getBlock());
         if (convertedBlock == null && state.is(MaterialReactionTags.ERODES_IN_WATER)) {
             convertedBlock = fallbackDegradation(state);
@@ -211,12 +241,14 @@ public class ErosionPhysics {
                     convertedBlock.getName().getString());
             world.setBlockAndUpdate(pos, convertedBlock.defaultBlockState());
             world.playSound(null, pos, SoundEvents.GRAVEL_BREAK, SoundSource.BLOCKS, 0.5f, 0.8f);
+            return true;
         } else if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
             Emergent.LOGGER.debug("Erosion washing at {} [{}]: {} -> AIR",
                     pos.toShortString(),
                     String.format("%.2f", state.getDestroySpeed(world, pos)),
                     state.getBlock().getName().getString());
             world.destroyBlock(pos, false);
+            return true;
         } else if (state.is(MaterialReactionTags.BRITTLE)) {
             Emergent.LOGGER.debug("Erosion shattering at {} [{}]: {} -> AIR",
                     pos.toShortString(),
@@ -224,7 +256,10 @@ public class ErosionPhysics {
                     state.getBlock().getName().getString());
             world.destroyBlock(pos, false);
             world.playSound(null, pos, state.getSoundType().getBreakSound(), SoundSource.BLOCKS, 0.5f, 0.9f);
+            return true;
         }
+
+        return false;
     }
 
     private static Block fallbackDegradation(BlockState state) {

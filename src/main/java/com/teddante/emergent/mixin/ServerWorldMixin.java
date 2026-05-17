@@ -3,6 +3,7 @@ package com.teddante.emergent.mixin;
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.MaterialReactionTags;
+import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.ThermalPhysics;
 import net.minecraft.core.BlockPos;
@@ -70,7 +71,7 @@ public abstract class ServerWorldMixin {
         if (surfaceState.is(Blocks.WATER)) {
             emergent$tryDeepenRainWater(serverWorld, surfacePos, surfaceState);
         } else if (state.isAir() && emergent$canRainCollectOn(serverWorld, surfacePos, surfaceState)) {
-            emergent$tryCreateRainPuddle(serverWorld, topPos, surfaceState);
+            emergent$tryCreateRainPuddle(serverWorld, topPos, surfacePos, surfaceState);
         }
 
         if (EmergentConfig.get().materialReactions) {
@@ -95,8 +96,14 @@ public abstract class ServerWorldMixin {
     }
 
     @Unique
-    private void emergent$tryCreateRainPuddle(ServerLevel world, BlockPos pos, BlockState surfaceState) {
-        double chance = EMERGENT_RAIN_PUDDLE_CHANCE * emergent$surfaceAbsorptionFactor(surfaceState);
+    private void emergent$tryCreateRainPuddle(ServerLevel world, BlockPos pos, BlockPos surfacePos, BlockState surfaceState) {
+        double absorption = MaterialPhysicsProfiles.surfaceWaterAbsorption(surfaceState);
+        double saturation = EnvironmentalExposure.moisture(world, surfacePos, surfaceState);
+        if (absorption > 0.5 && saturation < 0.65) {
+            return;
+        }
+
+        double chance = EMERGENT_RAIN_PUDDLE_CHANCE * emergent$surfaceAbsorptionFactor(surfaceState) * Math.max(0.35, saturation);
         if (world.getRandom().nextDouble() >= chance) {
             return;
         }

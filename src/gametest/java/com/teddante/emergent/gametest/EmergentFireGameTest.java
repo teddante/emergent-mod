@@ -3,6 +3,7 @@ package com.teddante.emergent.gametest;
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.FireWetness;
+import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.TrafficWearPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
@@ -239,6 +240,25 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "local heat should add stored heat exposure");
         context.assertTrue(EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 0.5,
                 "local heat should dry stored moisture");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void structuralStressAccumulatesInExposureMemory(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GLASS);
+        double threshold = MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(TEST_POS));
+        double stress = EnvironmentalExposure.addStructuralStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                threshold * 0.5);
+        stress = EnvironmentalExposure.addStructuralStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                threshold * 0.51);
+
+        context.assertTrue(stress > threshold, "repeated impacts should be able to accumulate structural stress");
         context.succeed();
     }
 
