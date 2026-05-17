@@ -118,10 +118,16 @@ public final class EnvironmentalExposure {
         }
 
         ExposureEntry entry = entryFor(world, pos, state);
+        double removedHeat = Math.min(entry.heat(), cold * COLD_COOLING_RATE);
         entry = entry.withCold(entry.cold() + cold)
-                .withHeat(Math.max(0.0, entry.heat() - cold * COLD_COOLING_RATE))
+                .withHeat(entry.heat() - removedHeat)
                 .withLastTick(world.getGameTime());
+        double thermalStress = MaterialPhysicsProfiles.thermalShockStress(state, removedHeat);
+        entry = entry.withStructuralStress(entry.structuralStress() + thermalStress);
         put(world, pos, entry);
+        if (thermalStress > 0.0) {
+            ThermalPhysics.tryResolveThermalStress(world, pos, state);
+        }
         return entry.cold();
     }
 
@@ -131,10 +137,16 @@ public final class EnvironmentalExposure {
         }
 
         ExposureEntry entry = entryFor(world, pos, state);
+        double removedHeat = Math.min(entry.heat(), moisture * WATER_COOLING_RATE);
         entry = entry.withMoisture(Math.min(MAX_MOISTURE, entry.moisture() + moisture))
-                .withHeat(Math.max(0.0, entry.heat() - moisture * WATER_COOLING_RATE))
+                .withHeat(entry.heat() - removedHeat)
                 .withLastTick(world.getGameTime());
+        double thermalStress = MaterialPhysicsProfiles.thermalShockStress(state, removedHeat);
+        entry = entry.withStructuralStress(entry.structuralStress() + thermalStress);
         put(world, pos, entry);
+        if (thermalStress > 0.0) {
+            ThermalPhysics.tryResolveThermalStress(world, pos, state);
+        }
         return entry.moisture();
     }
 

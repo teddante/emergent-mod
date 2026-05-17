@@ -88,6 +88,48 @@ public final class MaterialPhysicsProfiles {
         return resistance * brittleness;
     }
 
+    public static double thermalShockStress(BlockState state, double removedHeat) {
+        if (removedHeat <= 0.0 || state.isAir() || !state.getFluidState().isEmpty()) {
+            return 0.0;
+        }
+
+        double threshold = structuralStressThreshold(state);
+        if (state.is(MaterialReactionTags.BRITTLE)) {
+            return threshold * removedHeat * 0.45;
+        }
+        if (state.is(MaterialReactionTags.ERODES_IN_WATER)
+                || state.is(Blocks.OBSIDIAN)
+                || state.is(Blocks.STONE)
+                || state.is(Blocks.DEEPSLATE)) {
+            return threshold * removedHeat * 0.18;
+        }
+
+        return 0.0;
+    }
+
+    public static BlockState thermalFractureState(BlockState state) {
+        if (state.is(Blocks.STONE)
+                || state.is(Blocks.ANDESITE)
+                || state.is(Blocks.DIORITE)
+                || state.is(Blocks.GRANITE)) {
+            return Blocks.COBBLESTONE.defaultBlockState();
+        }
+        if (state.is(Blocks.DEEPSLATE)) {
+            return Blocks.COBBLED_DEEPSLATE.defaultBlockState();
+        }
+        if (state.is(Blocks.SANDSTONE)) {
+            return Blocks.SAND.defaultBlockState();
+        }
+        if (state.is(Blocks.RED_SANDSTONE)) {
+            return Blocks.RED_SAND.defaultBlockState();
+        }
+        if (state.is(Blocks.CALCITE) || state.is(Blocks.TUFF) || state.is(Blocks.DRIPSTONE_BLOCK)) {
+            return Blocks.GRAVEL.defaultBlockState();
+        }
+
+        return null;
+    }
+
     public static double sedimentKilogramsFromErodedBlock(BlockState state, double energy) {
         double detachedVolume = Math.min(0.08, Math.max(0.0, energy) * 0.0025);
         if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {

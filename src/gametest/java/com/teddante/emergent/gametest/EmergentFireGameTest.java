@@ -335,6 +335,67 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void waterQuenchingHotBrittleMaterialAddsStructuralStress(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GLASS);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.0);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.25);
+
+        context.assertTrue(
+                EnvironmentalExposure.structuralStress(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "rapid water cooling should feed thermal shock into the same structural stress memory");
+        context.assertBlockPresent(Blocks.GLASS, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void repeatedHotStoneQuenchingFracturesToCobblestone(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+        for (int i = 0; i < 6 && context.getBlockState(TEST_POS).is(Blocks.STONE); i++) {
+            EnvironmentalExposure.addHeat(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    2.0);
+            EnvironmentalExposure.addMoisture(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.0);
+        }
+
+        context.assertBlockPresent(Blocks.COBBLESTONE, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void repeatedHotGlassQuenchingCanShatter(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GLASS);
+        for (int i = 0; i < 4 && context.getBlockState(TEST_POS).is(Blocks.GLASS); i++) {
+            EnvironmentalExposure.addHeat(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.0);
+            EnvironmentalExposure.addMoisture(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.0);
+        }
+
+        context.assertBlockPresent(Blocks.AIR, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void denseFuelCanSustainFireAboveIt(GameTestHelper context) {
         BlockPos firePos = TEST_POS.above();
         context.setBlock(TEST_POS, Blocks.COAL_BLOCK);
