@@ -191,7 +191,7 @@ public final class EnvironmentalExposure {
         entry = entry.withStructuralStress(entry.structuralStress() + thermalStress);
         put(world, pos, entry);
         if (thermalStress > 0.0) {
-            ThermalPhysics.tryResolveThermalStress(world, pos, state);
+            StructuralStressPhysics.tryResolve(world, pos, state);
         }
         return entry.cold();
     }
@@ -211,7 +211,7 @@ public final class EnvironmentalExposure {
         entry = entry.withStructuralStress(entry.structuralStress() + thermalStress);
         put(world, pos, entry);
         if (thermalStress > 0.0) {
-            ThermalPhysics.tryResolveThermalStress(world, pos, state);
+            StructuralStressPhysics.tryResolve(world, pos, state);
         }
         return entry.moisture();
     }

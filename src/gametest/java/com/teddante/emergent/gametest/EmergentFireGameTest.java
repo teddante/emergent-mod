@@ -4,8 +4,10 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ExplosionEnvironmentPhysics;
 import com.teddante.emergent.FireWetness;
+import com.teddante.emergent.ImpactPhysics;
 import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.StructuralStressPhysics;
 import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.TrafficWearPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
@@ -739,6 +741,51 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 threshold * 0.51);
 
         context.assertTrue(stress > threshold, "repeated impacts should be able to accumulate structural stress");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sharedStructuralStressResolverFracturesStone(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+        EnvironmentalExposure.addStructuralStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(TEST_POS)) * 1.05);
+
+        boolean resolved = StructuralStressPhysics.tryResolve(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+
+        context.assertTrue(resolved, "structural stress should resolve independently of the source that created it");
+        context.assertBlockPresent(Blocks.COBBLESTONE, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void repeatedBlockImpactsCanAccumulateAndFractureStone(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+        double threshold = MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(TEST_POS));
+
+        boolean firstImpactResolved = ImpactPhysics.applyBlockImpactStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                threshold * 0.45);
+
+        context.assertFalse(firstImpactResolved, "a sub-threshold impact should weaken stone without immediately fracturing it");
+        context.assertBlockPresent(Blocks.STONE, TEST_POS);
+        context.assertTrue(
+                EnvironmentalExposure.structuralStress(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "impact stress should enter shared structural memory");
+
+        boolean secondImpactResolved = ImpactPhysics.applyBlockImpactStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                threshold * 0.60);
+
+        context.assertTrue(secondImpactResolved, "repeated impacts should resolve through the shared structural failure path");
+        context.assertBlockPresent(Blocks.COBBLESTONE, TEST_POS);
         context.succeed();
     }
 

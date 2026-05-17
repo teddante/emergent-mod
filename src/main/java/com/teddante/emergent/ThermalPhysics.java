@@ -3,8 +3,6 @@ package com.teddante.emergent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.attribute.EnvironmentAttributes;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -222,26 +220,7 @@ public final class ThermalPhysics {
     }
 
     public static boolean tryResolveThermalStress(ServerLevel world, BlockPos pos, BlockState state) {
-        double stress = EnvironmentalExposure.structuralStress(world, pos, state);
-        if (stress < MaterialPhysicsProfiles.structuralStressThreshold(state)) {
-            return false;
-        }
-
-        EnvironmentalExposure.clearStructuralStress(world, pos);
-        BlockState fracturedState = MaterialPhysicsProfiles.thermalFractureState(state);
-        if (fracturedState != null) {
-            world.setBlockAndUpdate(pos, fracturedState);
-            world.playSound(null, pos, SoundEvents.STONE_BREAK, SoundSource.BLOCKS, 0.45f, 0.9f);
-            return true;
-        }
-
-        if (state.is(MaterialReactionTags.BRITTLE)) {
-            world.destroyBlock(pos, true);
-            world.playSound(null, pos, state.getSoundType().getBreakSound(), SoundSource.BLOCKS, 0.55f, 1.1f);
-            return true;
-        }
-
-        return false;
+        return StructuralStressPhysics.tryResolve(world, pos, state);
     }
 
     public static boolean isHeatSource(BlockState state) {

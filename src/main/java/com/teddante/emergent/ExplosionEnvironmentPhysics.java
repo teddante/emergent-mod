@@ -45,7 +45,7 @@ public final class ExplosionEnvironmentPhysics {
 
             EnvironmentalExposure.addHeat(world, pos, state, explosionHeat(explosionRadius, distance));
             EnvironmentalExposure.addStructuralStress(world, pos, state, explosionStructuralStress(explosionRadius, distance));
-            ThermalPhysics.tryResolveThermalStress(world, pos, state);
+            StructuralStressPhysics.tryResolve(world, pos, state);
         }
     }
 
