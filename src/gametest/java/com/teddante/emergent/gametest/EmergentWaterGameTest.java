@@ -492,6 +492,63 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void structuralStressLowersErosionThreshold(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.STONE.defaultBlockState());
+        double intactThreshold = ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        EnvironmentalExposure.addStructuralStress(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(WATER_POS)) * 0.75);
+        double stressedThreshold = ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        context.assertTrue(stressedThreshold < intactThreshold,
+                "pre-stressed material should require less hydraulic wear to erode");
+        assertClose(
+                ErosionPhysics.structuralStressErosionFactor(0.0, 1.0),
+                1.0,
+                "unstressed material should keep its full erosion threshold");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void preStressedStoneErodesBeforeIntactStone(GameTestHelper context) {
+        BlockPos stressedWaterPos = new BlockPos(1, 2, 1);
+        BlockPos stressedTargetPos = stressedWaterPos.relative(Direction.EAST);
+        BlockPos intactWaterPos = new BlockPos(1, 4, 1);
+        BlockPos intactTargetPos = intactWaterPos.relative(Direction.EAST);
+        context.setBlock(stressedWaterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(stressedTargetPos, Blocks.STONE.defaultBlockState());
+        context.setBlock(intactWaterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(intactTargetPos, Blocks.STONE.defaultBlockState());
+
+        double stressThreshold = MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(stressedTargetPos));
+        EnvironmentalExposure.addStructuralStress(
+                context.getLevel(),
+                context.absolutePos(stressedTargetPos),
+                context.getBlockState(stressedTargetPos),
+                stressThreshold * 0.9);
+        int repetitions = (int) Math.ceil(ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(stressedTargetPos),
+                context.getBlockState(stressedTargetPos)) / 10.0);
+
+        applyFlowErosion(context, stressedWaterPos, Direction.EAST, 8, repetitions);
+        applyFlowErosion(context, intactWaterPos, Direction.EAST, 8, repetitions);
+
+        context.assertBlockPresent(Blocks.COBBLESTONE, stressedTargetPos);
+        context.assertBlockPresent(Blocks.STONE, intactTargetPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void erosionAccumulatesWearBeforeWashingAwayWeakMaterial(GameTestHelper context) {
         BlockPos waterPos = new BlockPos(1, 2, 1);
         BlockPos targetPos = waterPos.relative(Direction.EAST);

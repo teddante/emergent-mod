@@ -165,7 +165,28 @@ public class ErosionPhysics {
             resistance *= 0.8;
         }
 
-        return resistance * EXPECTED_RANDOM_ROLL_SCALE * thresholdVariance(world, pos, state);
+        double intactThreshold = resistance * EXPECTED_RANDOM_ROLL_SCALE * thresholdVariance(world, pos, state);
+        return intactThreshold * structuralStressErosionFactor(
+                EnvironmentalExposure.structuralStress(world, pos, state),
+                MaterialPhysicsProfiles.structuralStressThreshold(state));
+    }
+
+    public static double erosionThreshold(ServerLevel world, BlockPos pos, BlockState state) {
+        float hardness = state.getDestroySpeed(world, pos);
+        if (hardness < 0.0F || !canErode(state)) {
+            return Double.POSITIVE_INFINITY;
+        }
+
+        return erosionThreshold(world, pos, state, hardness);
+    }
+
+    public static double structuralStressErosionFactor(double structuralStress, double structuralStressThreshold) {
+        if (structuralStress <= 0.0 || structuralStressThreshold <= 0.0) {
+            return 1.0;
+        }
+
+        double damageRatio = Math.min(1.0, Math.max(0.0, structuralStress / structuralStressThreshold));
+        return Math.max(0.35, 1.0 - damageRatio * 0.65);
     }
 
     private static double addWear(ServerLevel world, BlockPos pos, BlockState state, double energy) {
