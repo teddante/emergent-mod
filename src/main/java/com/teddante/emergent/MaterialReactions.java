@@ -108,6 +108,7 @@ public final class MaterialReactions {
         }
 
         double exposure = EnvironmentalExposure.addHeat(world, pos, state, effectiveHeat);
+        ThermalPhysics.conductStoredTemperature(world, pos, world.getBlockState(pos));
         if (exposure < fireReactionThreshold(world, pos, state)) {
             return true;
         }
@@ -168,6 +169,7 @@ public final class MaterialReactions {
 
         EnvironmentalExposure.addHeat(world, pos, state, sensibleHeat);
         ThermalPhysics.tryMeltFrozenSurface(world, pos, state);
+        ThermalPhysics.conductStoredTemperature(world, pos, world.getBlockState(pos));
     }
 
     private static double heatThresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {

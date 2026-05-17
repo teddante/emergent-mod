@@ -175,6 +175,28 @@ public final class EnvironmentalExposure {
         return entry.moisture();
     }
 
+    public static double removeHeat(ServerLevel world, BlockPos pos, BlockState state, double heat) {
+        if (heat <= 0.0) {
+            return heat(world, pos, state);
+        }
+
+        ExposureEntry entry = entryFor(world, pos, state);
+        entry = entry.withHeat(Math.max(0.0, entry.heat() - heat)).withLastTick(world.getGameTime());
+        put(world, pos, entry);
+        return entry.heat();
+    }
+
+    public static double removeCold(ServerLevel world, BlockPos pos, BlockState state, double cold) {
+        if (cold <= 0.0) {
+            return cold(world, pos, state);
+        }
+
+        ExposureEntry entry = entryFor(world, pos, state);
+        entry = entry.withCold(Math.max(0.0, entry.cold() - cold)).withLastTick(world.getGameTime());
+        put(world, pos, entry);
+        return entry.cold();
+    }
+
     public static void applyAmbientSurfaceExchange(
             ServerLevel world,
             BlockPos pos,
@@ -228,6 +250,7 @@ public final class EnvironmentalExposure {
         if (coldBiomeExposure > 0.0) {
             addCold(world, pos, state, coldBiomeExposure);
         }
+        ThermalPhysics.conductStoredTemperature(world, pos, world.getBlockState(pos));
     }
 
     public static double solarHeatExposure(

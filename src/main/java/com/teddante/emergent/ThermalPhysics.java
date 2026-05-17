@@ -29,6 +29,8 @@ public final class ThermalPhysics {
     private static final double PACKED_ICE_MELT_HEAT = 2.5;
     private static final double MELT_WATER_MOISTURE_PER_LAYER = 0.08;
     private static final double LAVA_CONTACT_HEAT_PER_CUBIC_METER = 0.45;
+    private static final double HEAT_CONDUCTION_FRACTION = 0.18;
+    private static final double COLD_CONDUCTION_FRACTION = 0.12;
 
     public record FluidContactResult(boolean reacted, int remainingSourceAmount, boolean sourceBlockChanged) {
         public static FluidContactResult none(int sourceAmount) {
@@ -142,11 +144,32 @@ public final class ThermalPhysics {
 
             EnvironmentalExposure.addHeat(world, targetPos, targetState, heat);
             ThermalPhysics.tryMeltFrozenSurface(world, targetPos, targetState);
+            conductStoredTemperature(world, targetPos, world.getBlockState(targetPos));
         }
     }
 
     public static double lavaContactHeat(int lavaAmount) {
         return EnvironmentalExposure.fluidAmountCubicMeters(lavaAmount) * LAVA_CONTACT_HEAT_PER_CUBIC_METER;
+    }
+
+    public static double thermalCoupling(BlockState sourceState, BlockState targetState) {
+        double sourceConductivity = MaterialPhysicsProfiles.thermalConductivity(sourceState);
+        double targetConductivity = MaterialPhysicsProfiles.thermalConductivity(targetState);
+        if (sourceConductivity <= 0.0 || targetConductivity <= 0.0) {
+            return 0.0;
+        }
+
+        return Math.sqrt(sourceConductivity * targetConductivity);
+    }
+
+    public static boolean conductStoredTemperature(ServerLevel world, BlockPos pos, BlockState state) {
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            return false;
+        }
+
+        boolean movedHeat = conductHeat(world, pos, state);
+        boolean movedCold = conductCold(world, pos, state);
+        return movedHeat || movedCold;
     }
 
     public static boolean tryFreezeWaterFromStoredCold(ServerLevel world, BlockPos pos, int amount) {
@@ -295,6 +318,87 @@ public final class ThermalPhysics {
         }
 
         return 0;
+    }
+
+    private static boolean conductHeat(ServerLevel world, BlockPos pos, BlockState state) {
+        double heat = EnvironmentalExposure.heat(world, pos, state);
+        double sourceConductivity = MaterialPhysicsProfiles.thermalConductivity(state);
+        double transferableHeat = heat * HEAT_CONDUCTION_FRACTION * sourceConductivity;
+        if (transferableHeat <= 1.0E-5) {
+            return false;
+        }
+
+        return distributeTemperature(world, pos, state, transferableHeat, false);
+    }
+
+    private static boolean conductCold(ServerLevel world, BlockPos pos, BlockState state) {
+        double cold = EnvironmentalExposure.cold(world, pos, state);
+        double sourceConductivity = MaterialPhysicsProfiles.thermalConductivity(state);
+        double transferableCold = cold * COLD_CONDUCTION_FRACTION * sourceConductivity;
+        if (transferableCold <= 1.0E-5) {
+            return false;
+        }
+
+        return distributeTemperature(world, pos, state, transferableCold, true);
+    }
+
+    private static boolean distributeTemperature(
+            ServerLevel world,
+            BlockPos sourcePos,
+            BlockState sourceState,
+            double transferable,
+            boolean cold) {
+        double totalWeight = 0.0;
+        double[] weights = new double[Direction.values().length];
+        BlockPos[] positions = new BlockPos[Direction.values().length];
+        BlockState[] states = new BlockState[Direction.values().length];
+        int index = 0;
+        for (Direction direction : Direction.values()) {
+            BlockPos targetPos = sourcePos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            positions[index] = targetPos;
+            states[index] = targetState;
+            if (!targetState.isAir() && targetState.getFluidState().isEmpty()) {
+                weights[index] = thermalCoupling(sourceState, targetState);
+                totalWeight += weights[index];
+            }
+            index++;
+        }
+
+        if (totalWeight <= 0.0) {
+            return false;
+        }
+
+        double transferred = 0.0;
+        for (int i = 0; i < weights.length; i++) {
+            if (weights[i] <= 0.0) {
+                continue;
+            }
+
+            double amount = transferable * (weights[i] / totalWeight);
+            if (amount <= 1.0E-5) {
+                continue;
+            }
+
+            if (cold) {
+                EnvironmentalExposure.addCold(world, positions[i], states[i], amount);
+            } else {
+                EnvironmentalExposure.addHeat(world, positions[i], states[i], amount);
+                tryMeltFrozenSurface(world, positions[i], world.getBlockState(positions[i]));
+            }
+            transferred += amount;
+        }
+
+        if (transferred <= 0.0) {
+            return false;
+        }
+
+        if (cold) {
+            EnvironmentalExposure.removeCold(world, sourcePos, sourceState, transferred);
+        } else {
+            EnvironmentalExposure.removeHeat(world, sourcePos, sourceState, transferred);
+        }
+        return true;
     }
 
     private static double storedAndNeighboringHeat(ServerLevel world, BlockPos pos, BlockState state) {

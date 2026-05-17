@@ -6,6 +6,7 @@ import com.teddante.emergent.ExplosionEnvironmentPhysics;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.TrafficWearPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -302,6 +303,116 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
 
         context.assertTrue(aridHeat > humidHeat,
                 "humid climate moisture should buffer direct solar heating compared with arid air");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void thermalConductivityProfilesOrderMaterials(GameTestHelper context) {
+        double copperConductivity = MaterialPhysicsProfiles.thermalConductivity(Blocks.COPPER_BLOCK.defaultBlockState());
+        double stoneConductivity = MaterialPhysicsProfiles.thermalConductivity(Blocks.STONE.defaultBlockState());
+        double logConductivity = MaterialPhysicsProfiles.thermalConductivity(Blocks.OAK_LOG.defaultBlockState());
+
+        context.assertTrue(copperConductivity > stoneConductivity,
+                "metallic copper should conduct heat better than stone");
+        context.assertTrue(stoneConductivity > logConductivity,
+                "stone should conduct heat better than wood");
+        context.assertTrue(ThermalPhysics.thermalCoupling(Blocks.COPPER_BLOCK.defaultBlockState(), Blocks.STONE.defaultBlockState())
+                        > ThermalPhysics.thermalCoupling(Blocks.OAK_LOG.defaultBlockState(), Blocks.STONE.defaultBlockState()),
+                "thermal coupling should reflect both materials rather than a flat neighbor rule");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void storedHeatConductsIntoAdjacentSolid(GameTestHelper context) {
+        BlockPos targetPos = TEST_POS.relative(Direction.EAST);
+        context.setBlock(TEST_POS, Blocks.COPPER_BLOCK);
+        context.setBlock(targetPos, Blocks.STONE);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.0);
+
+        boolean conducted = ThermalPhysics.conductStoredTemperature(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+
+        context.assertTrue(conducted, "stored heat should conduct from a hot solid into adjacent solids");
+        context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(targetPos), context.getBlockState(targetPos)) > 0.0,
+                "adjacent stone should receive stored heat through conduction");
+        context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 1.0,
+                "source block should lose the conducted heat");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void conductiveSourceTransfersMoreHeatThanWood(GameTestHelper context) {
+        BlockPos copperSourcePos = TEST_POS;
+        BlockPos copperTargetPos = copperSourcePos.relative(Direction.EAST);
+        BlockPos woodSourcePos = TEST_POS.relative(Direction.SOUTH, 2);
+        BlockPos woodTargetPos = woodSourcePos.relative(Direction.EAST);
+        context.setBlock(copperSourcePos, Blocks.COPPER_BLOCK);
+        context.setBlock(copperTargetPos, Blocks.STONE);
+        context.setBlock(woodSourcePos, Blocks.OAK_LOG);
+        context.setBlock(woodTargetPos, Blocks.STONE);
+        EnvironmentalExposure.addHeat(context.getLevel(), context.absolutePos(copperSourcePos), context.getBlockState(copperSourcePos), 1.0);
+        EnvironmentalExposure.addHeat(context.getLevel(), context.absolutePos(woodSourcePos), context.getBlockState(woodSourcePos), 1.0);
+
+        ThermalPhysics.conductStoredTemperature(context.getLevel(), context.absolutePos(copperSourcePos), context.getBlockState(copperSourcePos));
+        ThermalPhysics.conductStoredTemperature(context.getLevel(), context.absolutePos(woodSourcePos), context.getBlockState(woodSourcePos));
+
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(copperTargetPos), context.getBlockState(copperTargetPos))
+                        > EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(woodTargetPos), context.getBlockState(woodTargetPos)),
+                "a conductive source should move more heat into the same target material than wood");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void conductedStoredHeatCanMeltAdjacentSnowLayer(GameTestHelper context) {
+        BlockPos snowPos = TEST_POS.relative(Direction.EAST);
+        BlockPos supportPos = snowPos.below();
+        context.setBlock(TEST_POS, Blocks.COPPER_BLOCK);
+        context.setBlock(supportPos, Blocks.DIRT);
+        context.setBlock(snowPos, Blocks.SNOW);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                5.0);
+
+        ThermalPhysics.conductStoredTemperature(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+
+        context.assertBlockPresent(Blocks.AIR, snowPos);
+        context.assertTrue(EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(supportPos), context.getBlockState(supportPos)) > 0.0,
+                "snow melted by conducted heat should become stored surface moisture on its support");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void storedColdConductsIntoAdjacentSolid(GameTestHelper context) {
+        BlockPos targetPos = TEST_POS.relative(Direction.EAST);
+        context.setBlock(TEST_POS, Blocks.COPPER_BLOCK);
+        context.setBlock(targetPos, Blocks.STONE);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.0);
+
+        ThermalPhysics.conductStoredTemperature(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+
+        context.assertTrue(EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(targetPos), context.getBlockState(targetPos)) > 0.0,
+                "stored cold should conduct into adjacent solids through the same temperature bridge");
+        context.assertTrue(EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 1.0,
+                "source block should lose the conducted cold");
         context.succeed();
     }
 

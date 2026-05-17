@@ -41,6 +41,43 @@ public final class MaterialPhysicsProfiles {
         return 1.0 - surfaceWaterAbsorption(state) * 0.35;
     }
 
+    public static double thermalConductivity(BlockState state) {
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            return 0.0;
+        }
+        if (state.is(MaterialReactionTags.CONDUCTIVE)
+                || state.is(Blocks.IRON_BLOCK)
+                || state.is(Blocks.COPPER_BLOCK)
+                || state.is(Blocks.EXPOSED_COPPER)
+                || state.is(Blocks.WEATHERED_COPPER)
+                || state.is(Blocks.OXIDIZED_COPPER)
+                || state.is(Blocks.GOLD_BLOCK)
+                || state.is(Blocks.LIGHTNING_ROD)) {
+            return 1.0;
+        }
+        if (state.is(Blocks.STONE)
+                || state.is(Blocks.COBBLESTONE)
+                || state.is(Blocks.DEEPSLATE)
+                || state.is(Blocks.OBSIDIAN)
+                || state.is(Blocks.MAGMA_BLOCK)) {
+            return 0.35;
+        }
+        if (state.is(Blocks.GLASS) || state.is(Blocks.TINTED_GLASS) || state.is(MaterialReactionTags.BRITTLE)) {
+            return 0.25;
+        }
+        if (state.is(BlockTags.DIRT) || state.is(BlockTags.GRASS_BLOCKS) || state.is(BlockTags.SAND) || state.is(BlockTags.MUD)) {
+            return 0.18;
+        }
+        if (state.is(BlockTags.LOGS)) {
+            return 0.08;
+        }
+        if (state.is(BlockTags.LEAVES)) {
+            return 0.04;
+        }
+
+        return 0.12;
+    }
+
     public static double densityKilogramsPerCubicMeter(BlockState state) {
         if (state.is(BlockTags.ANVIL)) {
             return 7_800.0;
