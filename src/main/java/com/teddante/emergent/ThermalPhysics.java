@@ -27,6 +27,7 @@ public final class ThermalPhysics {
     private static final double PACKED_ICE_MELT_HEAT = 2.5;
     private static final double MELT_WATER_MOISTURE_PER_LAYER = 0.08;
     private static final double LAVA_CONTACT_HEAT_PER_CUBIC_METER = 0.45;
+    private static final double EVAPORATION_COOLING_PER_CUBIC_METER = 1.2;
     private static final double HEAT_CONDUCTION_FRACTION = 0.18;
     private static final double COLD_CONDUCTION_FRACTION = 0.12;
 
@@ -101,13 +102,16 @@ public final class ThermalPhysics {
         }
 
         if (amount <= WaterPhysics.settledThinLayerAmount(world.getFluidState(pos).getType())) {
+            coolStoredHeatFromEvaporation(world, pos, amount);
             fizz(world, pos);
             return 0;
         }
 
         if (amount <= 4) {
+            int remaining = Math.max(0, amount - heat);
+            coolStoredHeatFromEvaporation(world, pos, amount - remaining);
             fizz(world, pos);
-            return Math.max(0, amount - heat);
+            return remaining;
         }
 
         return amount;
@@ -148,6 +152,10 @@ public final class ThermalPhysics {
 
     public static double lavaContactHeat(int lavaAmount) {
         return EnvironmentalExposure.fluidAmountCubicMeters(lavaAmount) * LAVA_CONTACT_HEAT_PER_CUBIC_METER;
+    }
+
+    public static double evaporationCooling(int waterAmount) {
+        return EnvironmentalExposure.fluidAmountCubicMeters(waterAmount) * EVAPORATION_COOLING_PER_CUBIC_METER;
     }
 
     public static double thermalCoupling(BlockState sourceState, BlockState targetState) {
@@ -297,6 +305,31 @@ public final class ThermalPhysics {
         }
 
         return 0;
+    }
+
+    private static void coolStoredHeatFromEvaporation(ServerLevel world, BlockPos pos, int evaporatedAmount) {
+        double remainingCooling = evaporationCooling(evaporatedAmount);
+        if (remainingCooling <= 0.0) {
+            return;
+        }
+
+        BlockState waterState = world.getBlockState(pos);
+        double waterHeat = EnvironmentalExposure.heat(world, pos, waterState);
+        double waterCooling = Math.min(waterHeat, remainingCooling);
+        if (waterCooling > 0.0) {
+            EnvironmentalExposure.removeHeat(world, pos, waterState, waterCooling);
+            remainingCooling -= waterCooling;
+        }
+
+        if (remainingCooling <= 0.0) {
+            return;
+        }
+
+        BlockPos supportPos = pos.below();
+        BlockState supportState = world.getBlockState(supportPos);
+        if (!supportState.isAir() && supportState.getFluidState().isEmpty()) {
+            EnvironmentalExposure.removeHeat(world, supportPos, supportState, remainingCooling);
+        }
     }
 
     private static boolean conductHeat(ServerLevel world, BlockPos pos, BlockState state) {

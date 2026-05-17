@@ -337,6 +337,18 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void evaporationCoolingScalesWithFiniteWaterVolume(GameTestHelper context) {
+        assertClose(
+                ThermalPhysics.evaporationCooling(8),
+                ThermalPhysics.evaporationCooling(1) * 8.0,
+                "evaporation cooling should scale with the finite volume of water removed");
+        context.assertTrue(
+                ThermalPhysics.evaporationCooling(2) > ThermalPhysics.lavaContactHeat(2),
+                "evaporating water should remove substantial stored heat at the same block-scale volume");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
         BlockPos stonePos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
@@ -432,6 +444,27 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
 
         context.runAfterDelay(10, () -> {
             context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void evaporationCoolsStoredHeatOnSupportingSurface(GameTestHelper context) {
+        BlockPos supportPos = WATER_POS.below();
+        context.setBlock(supportPos, Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                0.5);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(supportPos), context.getBlockState(supportPos)) < 0.5,
+                    "water evaporated by stored heat should cool the hot supporting surface");
             context.succeed();
         });
     }
