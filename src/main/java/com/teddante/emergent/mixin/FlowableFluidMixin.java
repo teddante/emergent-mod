@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.MaterialReactions;
@@ -66,6 +67,9 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         // Cancel vanilla behavior for finite fluids.
         ci.cancel();
+        long emergent$profileStart = EmergentProfiler.start();
+        try {
+        EmergentProfiler.count(world, "finite_fluid_ticks", 1);
 
         int currentLevel = fluidState.getAmount();
         if (currentLevel <= 0)
@@ -323,6 +327,9 @@ public abstract class FlowableFluidMixin extends Fluid {
         FluidState newState = world.getFluidState(pos);
         if (!newState.isEmpty() && currentLevel > WaterPhysics.settledThinLayerAmount(fluid)) {
             world.scheduleTick(pos, fluid, tickDelay);
+        }
+        } finally {
+            EmergentProfiler.record(world, EmergentProfiler.FINITE_FLUIDS, emergent$profileStart);
         }
     }
 

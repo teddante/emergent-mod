@@ -23,6 +23,8 @@ public final class SurfaceWeatherPhysics {
     }
 
     public static void processWeatherSample(ServerLevel world, BlockPos samplePos, int samples) {
+        long startedAt = EmergentProfiler.start();
+        try {
         if (samples <= 0 || !EmergentConfig.get().rainAccumulation) {
             return;
         }
@@ -85,6 +87,9 @@ public final class SurfaceWeatherPhysics {
                     world.getRandom(),
                     EnvironmentalScheduler.probabilityOverSamples(0.08, samples));
             tryRainGrowExposedBlock(world, topPos, surfacePos, state, surfaceState, samples);
+        }
+        } finally {
+            EmergentProfiler.record(world, "surface_weather_sample", startedAt);
         }
     }
 

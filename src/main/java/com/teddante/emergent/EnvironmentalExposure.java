@@ -229,6 +229,7 @@ public final class EnvironmentalExposure {
         }
 
         ExposureEntry entry = entryFor(world, pos, state);
+        EmergentProfiler.recordHeat(world, state, heat);
         entry = entry.withHeat(entry.heat() + heat)
                 .withCold(Math.max(0.0, entry.cold() - heat))
                 .withMoisture(Math.max(0.0, entry.moisture() - heat * HEAT_DRYING_RATE))

@@ -217,6 +217,16 @@ By default, `-CopyToPrism` targets:
 C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Prism Launcher Thing for Emergent mod testing\minecraft\mods
 ```
 
+### Profiling In Prism
+
+For lag investigations, add these JVM arguments to the Prism instance:
+
+```text
+-Demergent.profiler=true -Demergent.profiler.slowMs=25
+```
+
+When an Emergent tick exceeds the threshold, the log reports subsystem timings and counters such as finite fluid ticks, surface-weather jobs, fire scans, traffic events, pending weather jobs, and the top heated block types. If Minecraft still logs `Can't keep up!` but Emergent does not log a matching slow profiler line, the spike is probably outside the instrumented Emergent systems.
+
 See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.
 
 ## License

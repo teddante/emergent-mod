@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.TrafficWearPhysics;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -32,10 +33,16 @@ public abstract class EntityTrafficWearMixin {
         }
 
         Entity entity = (Entity) (Object) this;
-        TrafficWearPhysics.applyContactPatchTraffic(
-                world,
-                entity.getBoundingBox(),
-                Math.max(0.35, entity.getBbHeight()),
-                delta.horizontalDistance());
+        long startedAt = EmergentProfiler.start();
+        try {
+            TrafficWearPhysics.applyContactPatchTraffic(
+                    world,
+                    entity.getBoundingBox(),
+                    Math.max(0.35, entity.getBbHeight()),
+                    delta.horizontalDistance());
+        } finally {
+            EmergentProfiler.record(world, EmergentProfiler.TRAFFIC, startedAt);
+            EmergentProfiler.count(world, "traffic_entities", 1);
+        }
     }
 }

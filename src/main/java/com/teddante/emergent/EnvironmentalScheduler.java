@@ -26,6 +26,7 @@ public final class EnvironmentalScheduler {
         PendingSample pending = queue.pending.get(key);
         if (pending != null) {
             pending.samples++;
+            EmergentProfiler.count(world, "weather_merged_samples", 1);
             return;
         }
 
@@ -33,6 +34,7 @@ public final class EnvironmentalScheduler {
         pending = new PendingSample(key, dueTick);
         queue.pending.put(key, pending);
         queue.dueSamples.add(pending);
+        EmergentProfiler.count(world, "weather_queued_jobs", 1);
     }
 
     public static void tickWorld(ServerLevel world) {
@@ -43,6 +45,8 @@ public final class EnvironmentalScheduler {
 
         long gameTime = world.getGameTime();
         int processed = 0;
+        int processedSamples = 0;
+        long startedAt = EmergentProfiler.start();
         while (processed < SURFACE_WEATHER_JOBS_PER_TICK && !queue.dueSamples.isEmpty()) {
             PendingSample pending = queue.dueSamples.peek();
             if (pending.dueTick > gameTime) {
@@ -52,11 +56,17 @@ public final class EnvironmentalScheduler {
             queue.dueSamples.poll();
             queue.pending.remove(pending.posLong);
             SurfaceWeatherPhysics.processWeatherSample(world, BlockPos.of(pending.posLong), pending.samples);
+            processedSamples += pending.samples;
             processed++;
         }
+        EmergentProfiler.record(world, EmergentProfiler.WEATHER, startedAt);
+        EmergentProfiler.count(world, "weather_processed_jobs", processed);
+        EmergentProfiler.count(world, "weather_processed_samples", processedSamples);
 
         if (queue.pending.isEmpty()) {
             SURFACE_WEATHER.remove(world);
+        } else {
+            EmergentProfiler.count(world, "weather_pending_jobs", queue.pending.size());
         }
     }
 

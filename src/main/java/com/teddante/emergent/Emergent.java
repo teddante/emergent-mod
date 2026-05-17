@@ -17,7 +17,12 @@ public class Emergent implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		EmergentConfig.load();
+		ServerTickEvents.START_LEVEL_TICK.register(EmergentProfiler::startLevelTick);
 		ServerTickEvents.END_LEVEL_TICK.register(EnvironmentalScheduler::tickWorld);
+		ServerTickEvents.END_LEVEL_TICK.register(EmergentProfiler::endLevelTick);
 		LOGGER.info("Emergent mod initialized.");
+		if (EmergentProfiler.enabled()) {
+			LOGGER.info("Emergent profiler enabled. Slow tick threshold: -Demergent.profiler.slowMs");
+		}
 	}
 }
