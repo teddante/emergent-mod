@@ -259,7 +259,7 @@ public class ErosionPhysics {
         }
 
         double sediment = EnvironmentalExposure.consumeSuspendedSediment(world, fluidPos, fluidState);
-        world.setBlockAndUpdate(fluidPos, MaterialPhysicsProfiles.sedimentDepositState(sediment));
+        world.setBlockAndUpdate(fluidPos, MaterialPhysicsProfiles.sedimentDepositState(sediment, fluidAmount));
         world.playSound(null, fluidPos, SoundEvents.GRAVEL_PLACE, SoundSource.BLOCKS, 0.35f, 0.9f);
         return true;
     }

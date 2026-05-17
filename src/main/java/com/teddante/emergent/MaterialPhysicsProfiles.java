@@ -179,11 +179,22 @@ public final class MaterialPhysicsProfiles {
     }
 
     public static BlockState sedimentDepositState(double sedimentKilograms) {
-        if (sedimentKilograms >= 120.0) {
+        return sedimentDepositState(sedimentKilograms, EnvironmentalExposure.FULL_FLUID_BLOCK_AMOUNT);
+    }
+
+    public static BlockState sedimentDepositState(double sedimentKilograms, int waterAmount) {
+        double concentration = EnvironmentalExposure.sedimentConcentrationKilogramsPerCubicMeter(sedimentKilograms, waterAmount);
+        if (sedimentKilograms >= 120.0 || concentration >= 900.0) {
             return Blocks.GRAVEL.defaultBlockState();
         }
-        if (sedimentKilograms >= 60.0) {
+        if (sedimentKilograms >= 90.0 || concentration >= 700.0) {
+            return Blocks.SAND.defaultBlockState();
+        }
+        if (sedimentKilograms >= 60.0 || concentration >= 450.0) {
             return Blocks.MUD.defaultBlockState();
+        }
+        if (sedimentKilograms >= 45.0 || concentration >= 250.0) {
+            return Blocks.CLAY.defaultBlockState();
         }
 
         return Blocks.DIRT.defaultBlockState();

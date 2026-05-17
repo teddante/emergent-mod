@@ -837,6 +837,43 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void fineSettledSedimentCanDepositClay(GameTestHelper context) {
+        BlockPos waterPos = new BlockPos(1, 2, 1);
+        context.setBlock(waterPos.below(), Blocks.STONE);
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7));
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(waterPos),
+                context.getBlockState(waterPos),
+                50.0);
+
+        boolean deposited = ErosionPhysics.tryDepositSediment(
+                context.getLevel(),
+                context.absolutePos(waterPos),
+                Fluids.WATER,
+                1);
+
+        context.assertTrue(deposited, "quiet shallow water should be able to settle fine suspended sediment");
+        context.assertBlockPresent(Blocks.CLAY, waterPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sedimentDepositProfileIncludesFineAndCoarseProducts(GameTestHelper context) {
+        context.assertTrue(MaterialPhysicsProfiles.sedimentDepositState(20.0, 8).is(Blocks.DIRT),
+                "light dispersed sediment should deposit as general soil");
+        context.assertTrue(MaterialPhysicsProfiles.sedimentDepositState(50.0, 1).is(Blocks.CLAY),
+                "near-threshold fine sediment in settled water should deposit as clay");
+        context.assertTrue(MaterialPhysicsProfiles.sedimentDepositState(70.0, 1).is(Blocks.MUD),
+                "moderate saturated sediment should deposit as mud");
+        context.assertTrue(MaterialPhysicsProfiles.sedimentDepositState(100.0, 1).is(Blocks.SAND),
+                "heavier bed-load sediment should deposit as sand");
+        context.assertTrue(MaterialPhysicsProfiles.sedimentDepositState(130.0, 1).is(Blocks.GRAVEL),
+                "very heavy coarse sediment should deposit as gravel");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void materialProfilesUsePhysicallyOrderedDensities(GameTestHelper context) {
         context.assertTrue(
                 MaterialPhysicsProfiles.densityKilogramsPerCubicMeter(Blocks.STONE.defaultBlockState())
