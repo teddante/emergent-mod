@@ -368,6 +368,31 @@ public final class EnvironmentalExposure {
         return sediment;
     }
 
+    public static double transferSuspendedSediment(
+            ServerLevel world,
+            BlockPos sourcePos,
+            BlockState sourceState,
+            BlockPos targetPos,
+            BlockState targetState,
+            int movedFluidAmount,
+            int sourceFluidAmount) {
+        double sediment = suspendedSediment(world, sourcePos, sourceState);
+        if (sediment <= 0.0 || movedFluidAmount <= 0 || sourceFluidAmount <= 0) {
+            return 0.0;
+        }
+
+        double fractionMoved = Math.min(1.0, Math.max(0.0, movedFluidAmount / (double) sourceFluidAmount));
+        double movedSediment = sediment * fractionMoved;
+        if (movedSediment <= 0.0) {
+            return 0.0;
+        }
+
+        update(world, sourcePos, entry -> entry.withSuspendedSedimentKilograms(
+                Math.max(0.0, entry.suspendedSedimentKilograms() - movedSediment)));
+        addSuspendedSediment(world, targetPos, targetState, movedSediment);
+        return movedSediment;
+    }
+
     public static void consumeAshResidue(ServerLevel world, BlockPos pos, BlockState state, double ashKilograms) {
         update(world, pos, entry -> entry.withAshResidueKilograms(Math.max(0.0, entry.ashResidueKilograms() - ashKilograms)));
     }

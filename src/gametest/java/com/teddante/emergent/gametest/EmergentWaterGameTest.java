@@ -115,6 +115,60 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 20)
+    public void suspendedSedimentTransfersProportionallyWithMovedWater(GameTestHelper context) {
+        BlockPos targetPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+        context.setBlock(targetPos, Fluids.WATER.getFlowing(4, false).createLegacyBlock());
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                80.0);
+
+        double movedSediment = EnvironmentalExposure.transferSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                context.absolutePos(targetPos),
+                context.getBlockState(targetPos),
+                4,
+                8);
+
+        assertClose(movedSediment, 40.0, "half the water volume should carry half the suspended sediment");
+        assertClose(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)),
+                40.0,
+                "source water should retain the unmoved suspended sediment mass");
+        assertClose(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(targetPos), context.getBlockState(targetPos)),
+                40.0,
+                "target water should receive the moved suspended sediment mass");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 40)
+    public void fallingFiniteWaterCarriesSuspendedSedimentDownstream(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                64.0);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, BELOW_WATER_POS);
+            assertClose(
+                    EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(BELOW_WATER_POS), context.getBlockState(BELOW_WATER_POS)),
+                    64.0,
+                    "falling finite water should carry its suspended sediment into the destination cell");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 40)
     public void flatWaterSpreadConservesMassInLocalBasin(GameTestHelper context) {
         prepareFlatBasin(context, WATER_POS, 1);

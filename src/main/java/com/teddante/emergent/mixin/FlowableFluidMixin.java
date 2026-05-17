@@ -71,6 +71,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         if (currentLevel <= 0)
             return;
 
+        int startingLevel = currentLevel;
         int tickDelay = fluid.getTickDelay(world);
 
         if (WaterPhysics.isWater(fluid)) {
@@ -147,6 +148,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
                     // Update below
                     setWaterLevel(world, below, newBelowLevel, false);
+                    emergent$transferSuspendedSediment(world, pos, blockState, below, transfer, startingLevel);
 
                     // Update current position after transferring water down
                     if (newCurrentLevel <= 0) {
@@ -303,6 +305,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
                         // Optimization: The implementation of setWaterLevel does extensive checks.
                         setWaterLevel(world, neighbors[i], neighborLevels[i], false);
+                        emergent$transferSuspendedSediment(world, pos, blockState, neighbors[i], movedAmount, startingLevel);
                         world.scheduleTick(neighbors[i], fluid, tickDelay);
                     }
                 }
@@ -452,6 +455,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 ErosionPhysics.attemptFlowErosion(world, pos, fluidState, direction, 8);
             }
             if (setWaterLevel(world, targetPos, 8, false)) {
+                emergent$transferSuspendedSediment(world, pos, blockState, targetPos, 8, 8);
                 removeWaterAt(world, pos, blockState);
                 world.scheduleTick(targetPos, (Fluid) (Object) this, tickDelay);
                 return true;
@@ -499,6 +503,28 @@ public abstract class FlowableFluidMixin extends Fluid {
             }
             MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());
         }
+    }
+
+    @Unique
+    private void emergent$transferSuspendedSediment(
+            ServerLevel world,
+            BlockPos sourcePos,
+            BlockState sourceState,
+            BlockPos targetPos,
+            int movedAmount,
+            int sourceAmount) {
+        if (!EmergentConfig.get().hydraulicErosion || !WaterPhysics.isWater((Fluid) (Object) this) || movedAmount <= 0) {
+            return;
+        }
+
+        EnvironmentalExposure.transferSuspendedSediment(
+                world,
+                sourcePos,
+                sourceState,
+                targetPos,
+                world.getBlockState(targetPos),
+                movedAmount,
+                sourceAmount);
     }
 
     @Unique
