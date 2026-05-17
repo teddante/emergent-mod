@@ -172,6 +172,82 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         context.runAtTickTime(170, context::succeed);
     }
 
+    @GameTest(maxTicks = 170, padding = 36)
+    public void stressMultiChunkShallowFiniteWaterShelf(GameTestHelper context) {
+        if (!ENABLED) {
+            context.succeed();
+            return;
+        }
+
+        BlockPos origin = new BlockPos(2, 3, 2);
+        int size = 34;
+        final int[] expectedWaterAmount = {0};
+
+        for (int x = -1; x <= size; x++) {
+            context.setBlock(origin.offset(x, -1, -1), Blocks.BEDROCK);
+            context.setBlock(origin.offset(x, -1, size), Blocks.BEDROCK);
+            context.setBlock(origin.offset(x, 0, -1), Blocks.BEDROCK);
+            context.setBlock(origin.offset(x, 0, size), Blocks.BEDROCK);
+        }
+        for (int z = 0; z < size; z++) {
+            context.setBlock(origin.offset(-1, -1, z), Blocks.BEDROCK);
+            context.setBlock(origin.offset(size, -1, z), Blocks.BEDROCK);
+            context.setBlock(origin.offset(-1, 0, z), Blocks.BEDROCK);
+            context.setBlock(origin.offset(size, 0, z), Blocks.BEDROCK);
+        }
+
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                BlockPos pos = origin.offset(x, 0, z);
+                context.setBlock(pos.below(), Blocks.BEDROCK);
+                int amount = (Math.floorMod(x, 9) == 0 || Math.floorMod(z, 11) == 0)
+                        ? 8
+                        : 1 + Math.floorMod(x * 5 + z * 7 + x / 8 + z / 8, 4);
+                context.setBlock(pos, Fluids.WATER.getFlowing(amount, false).createLegacyBlock());
+                expectedWaterAmount[0] += amount;
+                context.getLevel().scheduleTick(context.absolutePos(pos), Fluids.WATER, 1);
+            }
+        }
+
+        for (int tick = 8; tick <= 96; tick += 8) {
+            context.runAtTickTime(tick, () -> {
+                for (int x = 0; x < size; x++) {
+                    for (int z = 0; z < size; z++) {
+                        BlockPos pos = origin.offset(x, 0, z);
+                        if (context.getBlockState(pos).getFluidState().is(Fluids.WATER)) {
+                            context.getLevel().scheduleTick(context.absolutePos(pos), Fluids.WATER, 1);
+                        }
+                    }
+                }
+            });
+        }
+
+        context.runAtTickTime(140, () -> {
+            int actualWaterAmount = 0;
+            int wetCells = 0;
+            for (int x = -1; x <= size; x++) {
+                for (int y = -1; y <= 1; y++) {
+                    for (int z = -1; z <= size; z++) {
+                        int amount = context.getBlockState(origin.offset(x, y, z)).getFluidState().getAmount();
+                        actualWaterAmount += amount;
+                        if (amount > 0) {
+                            wetCells++;
+                        }
+                    }
+                }
+            }
+
+            if (actualWaterAmount != expectedWaterAmount[0]) {
+                context.fail("multi-chunk shallow finite water shelf did not conserve volume; expected="
+                        + expectedWaterAmount[0] + " actual=" + actualWaterAmount);
+                return;
+            }
+            context.assertTrue(wetCells >= size * size / 2,
+                    "multi-chunk shallow finite water shelf should remain broad enough to exercise chunk hotspots");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 220, padding = 18)
     public void stressFlowingFiniteWaterChannel(GameTestHelper context) {
         if (!ENABLED) {
