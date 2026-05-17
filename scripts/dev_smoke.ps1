@@ -2,6 +2,7 @@ param(
     [switch]$SkipBuild,
     [switch]$CopyToPrism,
     [switch]$RequireMinecraftSources,
+    [switch]$VerboseBuildOutput,
     [string]$PrismMinecraftDir = ""
 )
 
@@ -212,8 +213,26 @@ try {
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"
         $gradleWrapper = if ($env:OS -eq "Windows_NT") { ".\gradlew.bat" } else { "./gradlew" }
-        & $gradleWrapper build
-        if ($LASTEXITCODE -ne 0) {
+        if ($VerboseBuildOutput) {
+            & $gradleWrapper build
+            $gradleExitCode = $LASTEXITCODE
+        } else {
+            $buildOutput = & $gradleWrapper build 2>&1
+            $gradleExitCode = $LASTEXITCODE
+            if ($gradleExitCode -eq 0) {
+                $buildOutput | Where-Object {
+                    $_ -match "All \d+ required tests passed" -or $_ -match "BUILD SUCCESSFUL"
+                } | ForEach-Object {
+                    Write-Host $_
+                }
+            } else {
+                $buildOutput | ForEach-Object {
+                    Write-Host $_
+                }
+            }
+        }
+
+        if ($gradleExitCode -ne 0) {
             throw "Gradle build failed."
         }
     }
