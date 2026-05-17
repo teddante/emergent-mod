@@ -2,6 +2,7 @@ package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalExposure;
+import com.teddante.emergent.ExplosionEnvironmentPhysics;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.MaterialReactions;
@@ -533,6 +534,59 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 threshold * 0.51);
 
         context.assertTrue(stress > threshold, "repeated impacts should be able to accumulate structural stress");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void explosionExposureUsesVanillaDoubleRadiusFalloff(GameTestHelper context) {
+        assertClose(ExplosionEnvironmentPhysics.exposureRadius(4.0F), 8.0,
+                "explosion exposure should use vanilla double-radius reach");
+
+        double near = ExplosionEnvironmentPhysics.explosionFalloff(1.0, 4.0F);
+        double middle = ExplosionEnvironmentPhysics.explosionFalloff(4.0, 4.0F);
+        double edge = ExplosionEnvironmentPhysics.explosionFalloff(8.0, 4.0F);
+
+        context.assertTrue(near > middle, "blast exposure should decay with distance");
+        context.assertTrue(middle > edge, "blast exposure should reach zero at the vanilla exposure edge");
+        assertClose(edge, 0.0, "blast exposure should be zero at the exposure edge");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void explosionExposureAddsSharedHeatAndStress(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+
+        ExplosionEnvironmentPhysics.applyExplosionExposure(
+                context.getLevel(),
+                Vec3.atCenterOf(context.absolutePos(TEST_POS)),
+                2.0F);
+
+        double heat = EnvironmentalExposure.heat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+        double stress = EnvironmentalExposure.structuralStress(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+        double threshold = MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(TEST_POS));
+
+        context.assertTrue(heat > 0.0, "blast aftermath should leave residual heat");
+        context.assertTrue(stress > 0.0, "blast aftermath should leave structural stress");
+        context.assertTrue(stress < threshold, "one modest blast should weaken stone without instantly fracturing it");
+        context.assertBlockPresent(Blocks.STONE, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void repeatedExplosionExposureCanFractureStone(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+        Vec3 center = Vec3.atCenterOf(context.absolutePos(TEST_POS));
+
+        ExplosionEnvironmentPhysics.applyExplosionExposure(context.getLevel(), center, 4.0F);
+        ExplosionEnvironmentPhysics.applyExplosionExposure(context.getLevel(), center, 4.0F);
+
+        context.assertBlockPresent(Blocks.COBBLESTONE, TEST_POS);
         context.succeed();
     }
 

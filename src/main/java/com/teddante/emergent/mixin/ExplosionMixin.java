@@ -1,17 +1,20 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.ExplosionEnvironmentPhysics;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,6 +24,21 @@ public abstract class ExplosionMixin {
 
     @Shadow
     public abstract ServerLevel level();
+
+    @Shadow
+    public abstract Vec3 center();
+
+    @Shadow
+    public abstract float radius();
+
+    @Inject(method = "explode", at = @At("TAIL"))
+    private void rememberExplosionExposure(CallbackInfoReturnable<Integer> cir) {
+        if (!EmergentConfig.get().materialReactions) {
+            return;
+        }
+
+        ExplosionEnvironmentPhysics.applyExplosionExposure(this.level(), this.center(), this.radius());
+    }
 
     @Inject(method = "interactWithBlocks", at = @At("HEAD"))
     private void checkVolatileBlocks(List<BlockPos> affectedBlocks, CallbackInfo ci) {
