@@ -422,6 +422,32 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 40)
+    public void equalFiniteWaterLayerStaysQuietAndConservesMass(GameTestHelper context) {
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                BlockPos pos = WATER_POS.offset(x, 0, z);
+                context.setBlock(pos.below(), Blocks.STONE);
+                context.setBlock(pos, Blocks.STONE);
+            }
+        }
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4));
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            context.setBlock(WATER_POS.relative(direction), Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4));
+        }
+
+        int initialMass = totalFluidAmount(context, WATER_POS, 1, Fluids.WATER);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertTrue(totalFluidAmount(context, WATER_POS, 1, Fluids.WATER) == initialMass,
+                    "an equal finite-water layer should wake quietly without creating or deleting volume");
+            context.assertTrue(countFluidCells(context, WATER_POS, 1, Fluids.WATER) == 5,
+                    "an equal finite-water layer should not spread into new cells");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 80)
     public void flatLavaSpreadConservesMassInLocalBasin(GameTestHelper context) {
         prepareFlatBasin(context, WATER_POS, 1);
