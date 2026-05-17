@@ -2,6 +2,7 @@ param(
     [int]$SlowMs = 10,
     [int]$Top = 12,
     [int]$WarmupTicks = 20,
+    [double]$MaxProfilerMs = 0,
     [int]$ActiveFluidBudget = 0,
     [int]$ActiveFluidChunkBudget = 0,
     [switch]$RequireBudgetDeferrals,
@@ -219,6 +220,9 @@ if ($RequireBudgetDeferrals) {
 if ($RequireChunkBudgetDeferrals) {
     $summary.Add("Required chunk budget deferrals: True")
 }
+if ($MaxProfilerMs -gt 0) {
+    $summary.Add(("Required max profiler ms after warmup: {0:N3}" -f $MaxProfilerMs))
+}
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 if ($testPassLine.Count -gt 0) {
     $summary.Add("Tests: $($testPassLine[-1])")
@@ -276,4 +280,12 @@ if ($RequireBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_
 
 if ($RequireChunkBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_chunk_deferrals") -le 0) {
     throw "Expected finite fluid chunk budget deferrals, but none were recorded. Full log: $logPath"
+}
+
+$worstProfilerMs = 0.0
+if ($profilerLines.Count -gt 0) {
+    $worstProfilerMs = [double](@($profilerLines | ForEach-Object { Get-ProfilerValue $_ } | Sort-Object -Descending | Select-Object -First 1)[0])
+}
+if ($MaxProfilerMs -gt 0 -and $worstProfilerMs -gt $MaxProfilerMs) {
+    throw ("Expected profiler max <= {0:N3} ms after warmup, but saw {1:N3} ms. Full log: {2}" -f $MaxProfilerMs, $worstProfilerMs, $logPath)
 }
