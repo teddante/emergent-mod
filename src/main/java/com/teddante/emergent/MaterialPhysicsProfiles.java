@@ -177,6 +177,15 @@ public final class MaterialPhysicsProfiles {
         return 1.0 + dryness * 0.12 + heatReadiness;
     }
 
+    public static double sensibleFireHeat(BlockState state, double contactHeat) {
+        if (contactHeat <= 0.0 || state.isAir() || !state.getFluidState().isEmpty()) {
+            return 0.0;
+        }
+
+        double referenceDensityKilogramsPerCubicMeter = 1_000.0;
+        return contactHeat * referenceDensityKilogramsPerCubicMeter / densityKilogramsPerCubicMeter(state);
+    }
+
     public static double vegetationClimateStress(BlockState state, double moisture, double heat, float biomeTemperature, boolean skyExposed) {
         return vegetationClimateStress(state, moisture, heat, biomeTemperature, skyExposed, 1.0);
     }

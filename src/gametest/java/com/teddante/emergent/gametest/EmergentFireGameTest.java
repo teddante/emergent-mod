@@ -330,6 +330,60 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void sensibleFireHeatScalesWithContactHeat(GameTestHelper context) {
+        double lowHeat = MaterialPhysicsProfiles.sensibleFireHeat(Blocks.STONE.defaultBlockState(), 0.75);
+        double highHeat = MaterialPhysicsProfiles.sensibleFireHeat(Blocks.STONE.defaultBlockState(), 1.5);
+
+        assertClose(highHeat, lowHeat * 2.0, "sensible fire heat should scale linearly with contact heat");
+        context.assertTrue(lowHeat > 0.0, "solid non-fluid blocks should be able to store sensible heat from fire");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void fireExposurePreheatsNonReactiveStoneWithoutHandlingSpread(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+
+        boolean handled = MaterialReactions.exposeToFire(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.35f,
+                RandomSource.create(8));
+
+        context.assertFalse(handled, "non-reactive stone should not cancel vanilla fire spread as a handled fire reaction");
+        context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "non-reactive stone should still store sensible heat from nearby fire");
+        context.assertBlockPresent(Blocks.STONE, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void fireHeatedStoneCanGainThermalStressWhenQuenched(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+
+        for (int i = 0; i < 4; i++) {
+            MaterialReactions.exposeToFire(
+                    context.getLevel(),
+                    context.absolutePos(TEST_POS),
+                    context.getBlockState(TEST_POS),
+                    1.35f,
+                    RandomSource.create(9 + i));
+        }
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.0);
+
+        context.assertTrue(
+                EnvironmentalExposure.structuralStress(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "water quenching fire-heated stone should feed thermal shock into structural stress memory");
+        context.assertBlockPresent(Blocks.STONE, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void coldExposureCoolsStoredHeat(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.STONE);
         EnvironmentalExposure.addHeat(

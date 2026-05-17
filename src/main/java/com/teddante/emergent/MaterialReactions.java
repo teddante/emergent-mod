@@ -83,7 +83,7 @@ public final class MaterialReactions {
         int burnAwayWeight = state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE) ? BURN_AWAY_WEIGHT : 0;
         int totalWeight = charWeight + scorchWeight + flashWeight + burnAwayWeight;
         if (totalWeight <= 0) {
-            clearFireExposure(world, pos);
+            addSensibleFireHeat(world, pos, state, heat);
             return false;
         }
 
@@ -154,6 +154,20 @@ public final class MaterialReactions {
 
     private static void clearFireExposure(ServerLevel world, BlockPos pos) {
         EnvironmentalExposure.clearHeat(world, pos);
+    }
+
+    private static void addSensibleFireHeat(ServerLevel world, BlockPos pos, BlockState state, float heat) {
+        if (state.getDestroySpeed(world, pos) < 0.0F) {
+            return;
+        }
+
+        double sensibleHeat = MaterialPhysicsProfiles.sensibleFireHeat(state, heat);
+        if (sensibleHeat <= 0.0) {
+            return;
+        }
+
+        EnvironmentalExposure.addHeat(world, pos, state, sensibleHeat);
+        ThermalPhysics.tryMeltFrozenSurface(world, pos, state);
     }
 
     private static double heatThresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
