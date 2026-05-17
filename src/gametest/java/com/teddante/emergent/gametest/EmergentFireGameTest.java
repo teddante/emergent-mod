@@ -21,6 +21,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
@@ -1342,6 +1343,69 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "uneven enchantment levels should preserve both stored budgets instead of only keeping the larger level");
         context.assertTrue(cappedMerge == ExperienceEnergy.MAX_ENCHANTMENT_LEVEL,
                 "energy-conserving enchantment merges should still respect Minecraft's component level range");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedDamageEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Player attacker = context.makeMockPlayer(GameType.CREATIVE);
+        LivingEntity victim = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        ItemStack vanillaSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(vanillaSword, enchantments -> enchantments.set(sharpness, 5));
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(sharpness, 10));
+
+        float baseDamage = 7.0F;
+        float vanillaDamage = EnchantmentHelper.modifyDamage(
+                context.getLevel(),
+                vanillaSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                baseDamage);
+        float energeticDamage = EnchantmentHelper.modifyDamage(
+                context.getLevel(),
+                energeticSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                baseDamage);
+
+        context.assertTrue(Math.abs(vanillaDamage - (baseDamage + 3.0F)) < 0.001F,
+                "Sharpness V should keep vanilla's level-based damage bonus");
+        context.assertTrue(Math.abs(energeticDamage - (baseDamage + 5.5F)) < 0.001F,
+                "over-cap Sharpness should already spend stored work through vanilla's level-based damage component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedProtectionEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> protection = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.PROTECTION);
+        LivingEntity defender = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        LivingEntity attacker = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST).above()));
+        ItemStack chestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(chestplate, enchantments -> enchantments.set(protection, 4));
+        defender.setItemSlot(EquipmentSlot.CHEST, chestplate);
+
+        float vanillaProtection = EnchantmentHelper.getDamageProtection(
+                context.getLevel(),
+                defender,
+                context.getLevel().damageSources().mobAttack(attacker));
+
+        EnchantmentHelper.updateEnchantments(chestplate, enchantments -> enchantments.set(protection, 8));
+        defender.setItemSlot(EquipmentSlot.CHEST, chestplate);
+        float energeticProtection = EnchantmentHelper.getDamageProtection(
+                context.getLevel(),
+                defender,
+                context.getLevel().damageSources().mobAttack(attacker));
+
+        context.assertTrue(Math.abs(vanillaProtection - 4.0F) < 0.001F,
+                "Protection IV should keep vanilla's level-based protection value");
+        context.assertTrue(Math.abs(energeticProtection - 8.0F) < 0.001F,
+                "over-cap Protection should already spend stored work through vanilla's level-based protection component");
         context.succeed();
     }
 

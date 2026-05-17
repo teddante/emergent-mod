@@ -33,6 +33,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Headless stress/perf GameTests, compact `scripts/dev_perf.ps1` summaries, and saved-log analysis via `scripts/analyze_profiler_log.ps1` covering stable fluids, multi-chunk finite water, sloped finite-water channels, surface weather, fire scans, traffic contact patches, lava/water thermal reactions, finite-fluid active/quiet diagnosis, and `Can't keep up!` correlation.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path through a shared raw-XP experience-energy helper, plus whole-level raw XP spending for boundless enchanting and anvil costs.
 - Enchanted item/book budget helpers that derive work from vanilla enchantment anvil costs and levels, then convert that work into raw XP through the shared vanilla level curve.
+- Vanilla level-based damage and protection effects are covered through Mojang's native effect components at over-cap levels, avoiding a second Emergent multiplier on effects that already scale with level.
 - Repair enchantment output above the vanilla cap scales durability repaired per raw XP by stored repair-enchantment work, preserving vanilla-level Mending behavior.
 - Constant ignite enchantments above the vanilla cap scale burn duration by stored ignite-enchantment work, preserving vanilla-level Flame behavior.
 - Advanced tooltips expose an enchanted item or book's derived Emergent work budget when Boundless Enchanting is enabled, without adding a new normal-play UI surface.
@@ -45,7 +46,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
 - Use finite-fluid chunk hotspot output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, or genuinely active fluid movement.
 - Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially larger player-made fluid systems and any Prism logs that do not resemble the current basin/channel stress cases.
-- Extend the experience-energy layer from repair/ignite output scaling into more enchantment effect outputs where there is a clear conserved work or rate interpretation.
+- Extend the experience-energy layer from repair/ignite output scaling into more enchantment effect outputs where vanilla does not already provide a level-based output and there is a clear conserved work or rate interpretation.
 - Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
 - README/config/PR documentation pass before release.
@@ -62,7 +63,7 @@ Proposed shared flow:
 - Enchanted books and items expose an energy budget derived from their enchantment levels and vanilla anvil-cost rarity.
 - Merging enchanted items combines stored enchantment work budgets into the resulting level while preserving Minecraft's component level cap.
 - Repair enchantments above their vanilla maximum output a higher durability-repair rate from raw XP in proportion to stored repair work.
-- Stronger enchantment effects should have explainable output: added damage, protection, duration, speed, durability savings, or utility work should scale from stored energy and use rate.
+- Stronger enchantment effects should have explainable output: added damage, protection, duration, speed, durability savings, or utility work should scale from stored energy and use rate. Do not add extra scaling to vanilla effects that already read the over-cap enchantment level through `LevelBasedValue`; cover those with tests instead.
 
 Design constraints:
 
