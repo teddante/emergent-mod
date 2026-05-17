@@ -78,6 +78,9 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $stableSources = Get-CounterTotal $CounterTotals "finite_fluid_stable_sources"
 
     $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions
+    $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
+            $CounterTotals.ContainsKey("finite_fluid_active_schedules") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_schedule_skips")
     $quietDenominator = [Math]::Max(1L, $activeSchedules + $quietSkips)
     $quietPercent = ($quietSkips * 100.0) / $quietDenominator
     $workPercent = ($workEvents * 100.0) / [Math]::Max(1L, $finiteTicks)
@@ -88,6 +91,9 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
     $Summary.Add(("  settledThin={0} stableSources={1} horizontalMoves={2} downwardMoves={3} thermalReactions={4}" -f `
                 $thinSettled, $stableSources, $horizontalMoves, $downwardMoves, $thermalReactions))
+    if (!$hasScheduleCounters) {
+        $Summary.Add("  scheduleCounters=missing; this log was probably captured before active/quiet schedule counters were added.")
+    }
 
     $quietReasons = @(
         @{ Name = "no_work"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_no_work_skips" },
@@ -109,7 +115,9 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
         $Summary.Add("  hottestFiniteFluidChunks=$chunkText")
     }
 
-    if ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
+    if (!$hasScheduleCounters) {
+        $Summary.Add("  interpretation=older profiler format; retest with the latest jar before deciding whether wakeups are stale or active.")
+    } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
     } elseif ($quietPercent -ge 65.0 -and $activeSchedules -gt 0) {
         $Summary.Add("  interpretation=mostly quiet wakeups; inspect top quiet reason and chunk hotspots for stale rescheduling.")
