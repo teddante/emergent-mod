@@ -4,16 +4,31 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FarmlandBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public final class TrafficWearPhysics {
     private static final double FOOTSTEP_TO_PATH_SCALE = 42.0;
+    private static final double VEGETATION_TRAMPLE_SCALE = 6.0;
+    private static final IntegerProperty[] AGE_PROPERTIES = {
+            BlockStateProperties.AGE_1,
+            BlockStateProperties.AGE_2,
+            BlockStateProperties.AGE_3,
+            BlockStateProperties.AGE_4,
+            BlockStateProperties.AGE_5,
+            BlockStateProperties.AGE_7,
+            BlockStateProperties.AGE_15,
+            BlockStateProperties.AGE_25
+    };
 
     private TrafficWearPhysics() {
     }
@@ -66,21 +81,34 @@ public final class TrafficWearPhysics {
     }
 
     public static boolean applyTraffic(ServerLevel world, BlockPos pos, BlockState state, double impulse) {
-        if (impulse <= 0.0 || !canCompact(state) || !world.getBlockState(pos.above()).isAir()) {
-            clearWear(world, pos);
+        if (impulse <= 0.0) {
             return false;
+        }
+
+        BlockPos coverPos = pos.above();
+        BlockState coverState = world.getBlockState(coverPos);
+        boolean coverCanBeTrampled = canTrampleVegetation(coverState);
+        boolean changedCover = coverCanBeTrampled && applyVegetationTrampling(world, coverPos, coverState, pos, state, impulse);
+        if (!coverState.isAir() && !coverCanBeTrampled) {
+            clearWear(world, pos);
+            return changedCover;
+        }
+
+        if (!canCompact(state)) {
+            clearWear(world, pos);
+            return changedCover;
         }
 
         double threshold = compactionThreshold(world, pos, state);
         double accumulatedWear = addWear(world, pos, state, impulse);
         if (accumulatedWear < threshold) {
-            return false;
+            return changedCover;
         }
 
         clearWear(world, pos);
         BlockState compacted = compactedState(state);
         if (compacted == null) {
-            return false;
+            return changedCover;
         }
 
         world.setBlock(pos, compacted, 3);
@@ -115,6 +143,59 @@ public final class TrafficWearPhysics {
         }
 
         return null;
+    }
+
+    private static boolean applyVegetationTrampling(
+            ServerLevel world,
+            BlockPos vegetationPos,
+            BlockState vegetationState,
+            BlockPos supportPos,
+            BlockState supportState,
+            double impulse) {
+        double threshold = vegetationTrampleThreshold(world, vegetationPos, vegetationState, supportPos, supportState);
+        double accumulatedWear = addWear(world, vegetationPos, vegetationState, impulse);
+        if (accumulatedWear < threshold) {
+            return false;
+        }
+
+        clearWear(world, vegetationPos);
+        if (tryRegressAge(world, vegetationPos, vegetationState)) {
+            world.playSound(null, vegetationPos, SoundEvents.CROP_BREAK, SoundSource.BLOCKS, 0.35f, 0.9f);
+            return true;
+        }
+
+        if (vegetationState.getBlock() instanceof CropBlock || vegetationState.is(BlockTags.CROPS)) {
+            world.destroyBlock(vegetationPos, true);
+        } else {
+            world.removeBlock(vegetationPos, false);
+        }
+        world.playSound(null, vegetationPos, SoundEvents.GRASS_BREAK, SoundSource.BLOCKS, 0.35f, 0.8f);
+        return true;
+    }
+
+    private static double vegetationTrampleThreshold(
+            ServerLevel world,
+            BlockPos vegetationPos,
+            BlockState vegetationState,
+            BlockPos supportPos,
+            BlockState supportState) {
+        double maturityFactor = 1.0;
+        IntegerProperty ageProperty = ageProperty(vegetationState);
+        if (ageProperty != null) {
+            int age = vegetationState.getValue(ageProperty);
+            int maxAge = ageProperty.getPossibleValues().stream().mapToInt(Integer::intValue).max().orElse(age);
+            maturityFactor = 0.8 + (maxAge <= 0 ? 0.0 : age / (double) maxAge) * 0.35;
+        }
+
+        double threshold = MaterialPhysicsProfiles.vegetationStressThreshold(vegetationState)
+                * VEGETATION_TRAMPLE_SCALE
+                * maturityFactor
+                * thresholdVariance(world, vegetationPos, vegetationState);
+        double supportMoisture = EnvironmentalExposure.moisture(world, supportPos, supportState);
+        if (supportMoisture > 0.0 && canBeSoftenedByMoisture(supportState)) {
+            threshold *= 1.0 - Math.min(0.35, supportMoisture * 0.3);
+        }
+        return threshold;
     }
 
     private static double compactionThreshold(ServerLevel world, BlockPos pos, BlockState state) {
@@ -154,6 +235,42 @@ public final class TrafficWearPhysics {
                 || state.is(Blocks.PALE_MOSS_BLOCK)
                 || state.is(Blocks.MUD)
                 || state.getBlock() instanceof FarmlandBlock;
+    }
+
+    private static boolean canTrampleVegetation(BlockState state) {
+        return state.is(BlockTags.CROPS)
+                || state.is(BlockTags.FLOWERS)
+                || state.is(MaterialReactionTags.RAIN_GROWS)
+                || state.is(Blocks.SHORT_GRASS)
+                || state.is(Blocks.TALL_GRASS)
+                || state.is(Blocks.FERN)
+                || state.is(Blocks.LARGE_FERN)
+                || state.is(Blocks.LEAF_LITTER);
+    }
+
+    private static boolean tryRegressAge(ServerLevel world, BlockPos pos, BlockState state) {
+        IntegerProperty property = ageProperty(state);
+        if (property == null) {
+            return false;
+        }
+
+        int age = state.getValue(property);
+        if (age <= 0) {
+            return false;
+        }
+
+        world.setBlock(pos, state.setValue(property, age - 1), 3);
+        return true;
+    }
+
+    private static IntegerProperty ageProperty(BlockState state) {
+        for (IntegerProperty property : AGE_PROPERTIES) {
+            if (state.hasProperty(property)) {
+                return property;
+            }
+        }
+
+        return null;
     }
 
     private static double thresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {

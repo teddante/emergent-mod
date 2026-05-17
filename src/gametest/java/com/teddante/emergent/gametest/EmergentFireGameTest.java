@@ -868,6 +868,64 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 20)
+    public void repeatedTrafficRegressesCropGrowth(GameTestHelper context) {
+        BlockPos cropPos = TEST_POS.above();
+        context.setBlock(TEST_POS, Blocks.FARMLAND);
+        context.setBlock(cropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3));
+
+        for (int i = 0; i < 6; i++) {
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS), 1.0);
+        }
+
+        context.assertTrue(context.getBlockState(cropPos).getValue(CropBlock.AGE) < 3,
+                "repeated foot traffic should damage crop growth before the plant disappears");
+        context.assertBlockPresent(Blocks.FARMLAND, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void wetSoilMakesCropsTrampleSooner(GameTestHelper context) {
+        BlockPos wetGroundPos = TEST_POS;
+        BlockPos dryGroundPos = TEST_POS.relative(Direction.EAST, 2);
+        BlockPos wetCropPos = wetGroundPos.above();
+        BlockPos dryCropPos = dryGroundPos.above();
+        context.setBlock(wetGroundPos, Blocks.FARMLAND);
+        context.setBlock(dryGroundPos, Blocks.FARMLAND);
+        context.setBlock(wetCropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3));
+        context.setBlock(dryCropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 3));
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(wetGroundPos),
+                context.getBlockState(wetGroundPos),
+                1.0);
+
+        for (int i = 0; i < 4; i++) {
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(wetGroundPos), context.getBlockState(wetGroundPos), 1.0);
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(dryGroundPos), context.getBlockState(dryGroundPos), 1.0);
+        }
+
+        context.assertTrue(context.getBlockState(wetCropPos).getValue(CropBlock.AGE) < 3,
+                "wet soil should make crop stems more vulnerable to trampling");
+        context.assertTrue(context.getBlockState(dryCropPos).getValue(CropBlock.AGE) == 3,
+                "dry soil should keep the same crop standing under the same light traffic dose");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void trafficCompactsFarmlandUnderCropCanopy(GameTestHelper context) {
+        BlockPos cropPos = TEST_POS.above();
+        context.setBlock(TEST_POS, Blocks.FARMLAND);
+        context.setBlock(cropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 7));
+
+        for (int i = 0; i < 18; i++) {
+            TrafficWearPhysics.applyTraffic(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS), 1.0);
+        }
+
+        context.assertBlockPresent(Blocks.DIRT, TEST_POS);
+        context.succeed();
+    }
+
     @GameTest(maxTicks = 220)
     public void movingEntityDoesNotCompactCoveredGround(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.DIRT);
