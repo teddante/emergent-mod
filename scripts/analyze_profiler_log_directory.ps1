@@ -158,6 +158,8 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
             $counterTotals.ContainsKey("finite_fluid_budget_chunk_deferrals")
     $hasQuietCacheCounters = $counterTotals.ContainsKey("finite_fluid_quiet_cache_hits")
     $finiteTicks = Get-CounterTotal $counterTotals "finite_fluid_ticks"
+    $lavaTicks = Get-CounterTotal $counterTotals "finite_fluid_lava_ticks"
+    $lavaHeat = Get-CounterTotal $counterTotals "finite_fluid_lava_heat"
     $budgetDeferrals = Get-CounterTotal $counterTotals "finite_fluid_budget_deferrals"
     $chunkDeferrals = Get-CounterTotal $counterTotals "finite_fluid_budget_chunk_deferrals"
 
@@ -180,6 +182,8 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         MaxLagMs = $maxRunningMs
         MaxBehindTicks = $maxBehindTicks
         FiniteTicks = $finiteTicks
+        LavaTicks = $lavaTicks
+        LavaHeat = $lavaHeat
         BudgetDeferrals = $budgetDeferrals
         ChunkDeferrals = $chunkDeferrals
         Format = $format
@@ -213,7 +217,13 @@ if ($files.Count -eq 0) {
                 " slowMs=" + $(if ($item.StartupSlowMs -ne "") { $item.StartupSlowMs } else { "-" }) +
                 " budget=" + $(if ($item.StartupActiveBudget -ne "") { $item.StartupActiveBudget } else { "-" }) +
                 "/" + $(if ($item.StartupChunkBudget -ne "") { $item.StartupChunkBudget } else { "-" })
-        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10}" -f `
+        $lavaHeatPercent = ($item.LavaHeat * 100.0) / [Math]::Max(1L, $item.LavaTicks)
+        $lavaText = if ($item.LavaTicks -gt 0 -or $item.LavaHeat -gt 0) {
+            " lavaTicks=$($item.LavaTicks) lavaHeat=$($item.LavaHeat) lavaHeatPerLavaTick=$($lavaHeatPercent.ToString('N1'))%"
+        } else {
+            ""
+        }
+        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10}{11}" -f `
                     $item.Name,
                     $item.Format,
                     $startupText,
@@ -224,7 +234,8 @@ if ($files.Count -eq 0) {
                     $item.MaxBehindTicks,
                     $item.FiniteTicks,
                     $item.BudgetDeferrals,
-                    $item.ChunkDeferrals))
+                    $item.ChunkDeferrals,
+                    $lavaText))
         if ($item.TopChunks -ne "-") {
             $summary.Add("  topChunks=$($item.TopChunks)")
         }

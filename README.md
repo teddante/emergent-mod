@@ -223,7 +223,7 @@ Headless profiler run:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev_perf.ps1 -SlowMs 10 -Top 12
 ```
 
-This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals, finite-fluid diagnosis, and chunk hotspots. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks, `-MaxProfilerMs 25` to fail the run on a post-warmup performance regression, or `-ActiveFluidBudget 64 -ActiveFluidChunkBudget 32 -RequireBudgetDeferrals -RequireChunkBudgetDeferrals` to verify the finite-fluid deferral path under controlled pressure.
+This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals, finite-fluid diagnosis, lava heat pacing, and chunk hotspots. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks, `-MaxProfilerMs 25` to fail the run on a post-warmup performance regression, or `-ActiveFluidBudget 64 -ActiveFluidChunkBudget 32 -RequireBudgetDeferrals -RequireChunkBudgetDeferrals` to verify the finite-fluid deferral path under controlled pressure.
 
 The opt-in stress scenarios currently exercise stable finite-fluid wakeups, multi-chunk finite-water settling, broad shallow finite-water shelves, concentrated one-chunk finite-water and finite-lava hotspots, sloped finite-water channels, queued surface-weather samples, repeated fire-reaction scans, traffic contact patches, and lava/water thermal reactions.
 
@@ -249,7 +249,7 @@ To scan a whole Prism log folder or `build\reports\emergent-profiler` without op
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\analyze_profiler_log_directory.ps1 -Directory "C:\path\to\logs" -TopFiles 12
 ```
 
-The saved-log analyzers accept plain `.log` files and archived `.log.gz` files. They summarize vanilla `Can't keep up!` warnings, profiler startup state, active finite-fluid budget values, profiler format age, finite-fluid budget deferrals, and top finite-fluid chunks.
+The saved-log analyzers accept plain `.log` files and archived `.log.gz` files. They summarize vanilla `Can't keep up!` warnings, profiler startup state, active finite-fluid budget values, profiler format age, finite-fluid budget deferrals, lava heat pacing, and top finite-fluid chunks.
 If the finite-fluid diagnosis says schedule, budget, or quiet-cache counters are missing, the log was captured with an older test jar; launch the current copied jar once and analyze the new `latest.log` before making scheduler decisions.
 
 See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.

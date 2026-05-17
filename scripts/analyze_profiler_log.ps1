@@ -80,6 +80,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
 
     $waterTicks = Get-CounterTotal $CounterTotals "finite_fluid_water_ticks"
     $lavaTicks = Get-CounterTotal $CounterTotals "finite_fluid_lava_ticks"
+    $lavaHeat = Get-CounterTotal $CounterTotals "finite_fluid_lava_heat"
     $activeSchedules = Get-CounterTotal $CounterTotals "finite_fluid_active_schedules"
     $quietSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_schedule_skips"
     $budgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_claims"
@@ -96,7 +97,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
     $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
 
-    $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions
+    $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions + $lavaHeat
     $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
             $CounterTotals.ContainsKey("finite_fluid_active_schedules") -or
             $CounterTotals.ContainsKey("finite_fluid_quiet_schedule_skips")
@@ -108,6 +109,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $quietDenominator = [Math]::Max(1L, $activeSchedules + $quietSkips)
     $quietPercent = ($quietSkips * 100.0) / $quietDenominator
     $workPercent = ($workEvents * 100.0) / [Math]::Max(1L, $finiteTicks)
+    $lavaHeatPercent = ($lavaHeat * 100.0) / [Math]::Max(1L, $lavaTicks)
 
     $Summary.Add("")
     $Summary.Add("Finite fluid diagnosis:")
@@ -117,6 +119,9 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
     $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} thermalQuietSkips={4} horizontalMoves={5} downwardMoves={6} thermalReactions={7}" -f `
                 $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $thermalQuietSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
+        $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
+    }
     if (!$hasScheduleCounters) {
         $Summary.Add("  scheduleCounters=missing; this log was probably captured before active/quiet schedule counters were added.")
     }
