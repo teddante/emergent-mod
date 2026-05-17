@@ -7,7 +7,8 @@
   "entrypoints": {
     "fabric-gametest": [
       "com.teddante.emergent.gametest.EmergentWaterGameTest",
-      "com.teddante.emergent.gametest.EmergentFireGameTest"
+      "com.teddante.emergent.gametest.EmergentFireGameTest",
+      "com.teddante.emergent.gametest.EmergentPerfGameTest"
     ]
   },
   "depends": {

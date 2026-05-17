@@ -1,7 +1,8 @@
 param(
     [int]$SlowMs = 10,
     [int]$Top = 12,
-    [int]$WarmupTicks = 20
+    [int]$WarmupTicks = 20,
+    [switch]$SkipStressScenarios
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,9 +58,11 @@ $summaryPath = Join-Path $reportDir "headless-perf-$stamp.summary.txt"
 
 $gradleArgs = @("--no-daemon", "runGameTest")
 
-Write-Step "Running headless GameTests with Emergent profiler slowMs=$SlowMs"
+$stressScenariosEnabled = !$SkipStressScenarios
+
+Write-Step "Running headless GameTests with Emergent profiler slowMs=$SlowMs stress=$stressScenariosEnabled"
 $oldJavaToolOptions = $env:JAVA_TOOL_OPTIONS
-$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$SlowMs"
+$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$SlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())"
 $oldErrorActionPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = "Continue"
@@ -95,6 +98,7 @@ $summary.Add("Emergent headless perf summary")
 $summary.Add("Log: $logPath")
 $summary.Add("Profiler slowMs: $SlowMs")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
+$summary.Add("Stress scenarios: $stressScenariosEnabled")
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 if ($testPassLine.Count -gt 0) {
     $summary.Add("Tests: $($testPassLine[-1])")
