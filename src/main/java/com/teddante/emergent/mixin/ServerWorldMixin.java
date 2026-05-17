@@ -63,7 +63,8 @@ public abstract class ServerWorldMixin {
                     biome.getBaseTemperature(),
                     skyExposed,
                     ThermalPhysics.neighboringHeat(serverWorld, surfacePos),
-                    climateMoistureFactor);
+                    climateMoistureFactor,
+                    serverWorld.isBrightOutside() ? 1.0 : 0.0);
             ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             if (EmergentConfig.get().materialReactions) {
                 emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed, climateMoistureFactor);

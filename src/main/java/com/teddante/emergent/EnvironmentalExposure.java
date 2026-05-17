@@ -36,6 +36,7 @@ public final class EnvironmentalExposure {
     private static final double SKY_EXPOSURE_DRYING_PER_SAMPLE = 0.006;
     private static final double LOCAL_HEAT_DRYING_PER_SAMPLE = 0.08;
     private static final double LOCAL_HEAT_EXPOSURE_PER_SAMPLE = 0.12;
+    private static final double SOLAR_HEAT_EXPOSURE_PER_SAMPLE = 0.035;
     private static final double COLD_BIOME_EXPOSURE_PER_SAMPLE = 0.04;
     private static final double SEDIMENT_DEPOSIT_THRESHOLD_KG = 45.0;
     private static final double ASH_RUNOFF_SUSPENDED_SOLIDS_KG_PER_CUBIC_METER = 2.0;
@@ -192,6 +193,18 @@ public final class EnvironmentalExposure {
             boolean skyExposed,
             int localHeat,
             double climateMoistureFactor) {
+        applyAmbientSurfaceExchange(world, pos, state, biomeBaseTemperature, skyExposed, localHeat, climateMoistureFactor, skyExposed ? 1.0 : 0.0);
+    }
+
+    public static void applyAmbientSurfaceExchange(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeBaseTemperature,
+            boolean skyExposed,
+            int localHeat,
+            double climateMoistureFactor,
+            double daylightStrength) {
         if (state.isAir() || !state.getFluidState().isEmpty()) {
             clear(world, pos);
             return;
@@ -208,9 +221,27 @@ public final class EnvironmentalExposure {
         if (localHeat > 0) {
             addHeat(world, pos, state, localHeat * LOCAL_HEAT_EXPOSURE_PER_SAMPLE);
         }
+        double solarHeat = solarHeatExposure(biomeBaseTemperature, skyExposed, daylightStrength, climateMoistureFactor);
+        if (solarHeat > 0.0) {
+            addHeat(world, pos, state, solarHeat);
+        }
         if (coldBiomeExposure > 0.0) {
             addCold(world, pos, state, coldBiomeExposure);
         }
+    }
+
+    public static double solarHeatExposure(
+            float biomeBaseTemperature,
+            boolean skyExposed,
+            double daylightStrength,
+            double climateMoistureFactor) {
+        if (!skyExposed || daylightStrength <= 0.0) {
+            return 0.0;
+        }
+
+        double warmAir = Math.max(0.0, biomeBaseTemperature - 0.15);
+        double dryAirMultiplier = 1.0 / climateMoistureFactor(climateMoistureFactor);
+        return Math.max(0.0, daylightStrength) * warmAir * SOLAR_HEAT_EXPOSURE_PER_SAMPLE * dryAirMultiplier;
     }
 
     public static double addHydraulicWear(ServerLevel world, BlockPos pos, BlockState state, double wear) {

@@ -266,6 +266,46 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void sunlitWarmSurfaceAddsStoredHeat(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.2f,
+                true,
+                0,
+                1.0,
+                1.0);
+
+        context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "sunlit warm surfaces should add stored heat exposure");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void solarHeatingNeedsDaylightAndSkyExposure(GameTestHelper context) {
+        assertClose(EnvironmentalExposure.solarHeatExposure(1.2f, true, 0.0, 1.0), 0.0,
+                "night should not add solar heat");
+        assertClose(EnvironmentalExposure.solarHeatExposure(1.2f, false, 1.0, 1.0), 0.0,
+                "shade should not add direct solar heat");
+        context.assertTrue(EnvironmentalExposure.solarHeatExposure(1.2f, true, 1.0, 1.0) > 0.0,
+                "daylit sky exposure should add solar heat in warm climates");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void humidClimateBuffersSolarHeating(GameTestHelper context) {
+        double aridHeat = EnvironmentalExposure.solarHeatExposure(1.2f, true, 1.0, 0.55);
+        double humidHeat = EnvironmentalExposure.solarHeatExposure(1.2f, true, 1.0, 1.35);
+
+        context.assertTrue(aridHeat > humidHeat,
+                "humid climate moisture should buffer direct solar heating compared with arid air");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void localHeatPreheatsAndDriesSurfaceExposure(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.OAK_LOG);
         EnvironmentalExposure.addMoisture(
