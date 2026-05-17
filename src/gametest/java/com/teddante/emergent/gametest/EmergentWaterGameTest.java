@@ -549,6 +549,62 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void storedMoistureLowersSoftMaterialErosionThreshold(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.SAND.defaultBlockState());
+        double dryThreshold = ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                1.0);
+        double wetThreshold = ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        context.assertTrue(wetThreshold < dryThreshold,
+                "stored moisture should reduce cohesion and lower the erosion threshold for soft material");
+        context.assertTrue(ErosionPhysics.moistureErosionFactor(Blocks.STONE.defaultBlockState(), 1.0)
+                        > ErosionPhysics.moistureErosionFactor(Blocks.SAND.defaultBlockState(), 1.0),
+                "dense rock should be less moisture-weakened than absorbent soft material");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void wetSandWashesAwayBeforeDrySand(GameTestHelper context) {
+        BlockPos waterPos = new BlockPos(1, 2, 1);
+        BlockPos targetPos = waterPos.relative(Direction.EAST);
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
+        int movedAmount = 1;
+        double wearPerImpulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, 1.0, 1.25);
+        double wetThreshold = ErosionPhysics.erosionThreshold(
+                context.getLevel(),
+                context.absolutePos(targetPos),
+                context.getBlockState(targetPos))
+                * ErosionPhysics.moistureErosionFactor(context.getBlockState(targetPos), 1.0);
+        int wetErosionRepetitions = Math.max(1, (int) Math.ceil(wetThreshold / wearPerImpulse));
+
+        applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
+        context.assertBlockPresent(Blocks.SAND, targetPos);
+        EnvironmentalExposure.clearHydraulicWear(context.getLevel(), context.absolutePos(targetPos));
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(targetPos),
+                context.getBlockState(targetPos),
+                1.0);
+        applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
+
+        context.assertBlockPresent(Blocks.AIR, targetPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void erosionAccumulatesWearBeforeWashingAwayWeakMaterial(GameTestHelper context) {
         BlockPos waterPos = new BlockPos(1, 2, 1);
         BlockPos targetPos = waterPos.relative(Direction.EAST);

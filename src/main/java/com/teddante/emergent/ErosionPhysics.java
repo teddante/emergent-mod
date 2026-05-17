@@ -168,7 +168,8 @@ public class ErosionPhysics {
         double intactThreshold = resistance * EXPECTED_RANDOM_ROLL_SCALE * thresholdVariance(world, pos, state);
         return intactThreshold * structuralStressErosionFactor(
                 EnvironmentalExposure.structuralStress(world, pos, state),
-                MaterialPhysicsProfiles.structuralStressThreshold(state));
+                MaterialPhysicsProfiles.structuralStressThreshold(state))
+                * moistureErosionFactor(state, EnvironmentalExposure.moisture(world, pos, state));
     }
 
     public static double erosionThreshold(ServerLevel world, BlockPos pos, BlockState state) {
@@ -187,6 +188,16 @@ public class ErosionPhysics {
 
         double damageRatio = Math.min(1.0, Math.max(0.0, structuralStress / structuralStressThreshold));
         return Math.max(0.35, 1.0 - damageRatio * 0.65);
+    }
+
+    public static double moistureErosionFactor(BlockState state, double moisture) {
+        if (moisture <= 0.0) {
+            return 1.0;
+        }
+
+        double poreSaturation = Math.min(1.0, Math.max(0.0, moisture) * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
+        double cohesionLoss = state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER) ? 0.55 : 0.18;
+        return Math.max(0.45, 1.0 - poreSaturation * cohesionLoss);
     }
 
     private static double addWear(ServerLevel world, BlockPos pos, BlockState state, double energy) {
