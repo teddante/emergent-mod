@@ -262,6 +262,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
             // Only transfer if we're above average
             if (currentLevel > avgLevel) {
+                int sourceLevelBeforeHorizontal = currentLevel;
                 int toDistribute = currentLevel - avgLevel;
 
                 // Iterative Fill Algorithm:
@@ -315,6 +316,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 }
 
                 boolean movedHorizontally = false;
+                int actualMovedHorizontally = 0;
                 // Apply changes to world
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
@@ -336,12 +338,14 @@ public abstract class FlowableFluidMixin extends Fluid {
                         setWaterLevel(world, neighbors[i], neighborLevels[i], false);
                         emergent$transferSuspendedSediment(world, pos, blockState, neighbors[i], movedAmount, startingLevel);
                         emergent$scheduleFiniteFluidIfActive(world, neighbors[i], fluid, neighborLevels[i], tickDelay);
+                        actualMovedHorizontally += movedAmount;
                         movedHorizontally = true;
                     }
                 }
 
                 if (movedHorizontally) {
                     EmergentProfiler.count(world, "finite_fluid_horizontal_moves", 1);
+                    currentLevel = sourceLevelBeforeHorizontal - actualMovedHorizontally;
                     // Update current position after horizontal distribution.
                     if (currentLevel <= 0) {
                         removeWaterAt(world, pos, blockState);

@@ -57,6 +57,117 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 180)
+    public void stressLargeSettlingFiniteWaterField(GameTestHelper context) {
+        if (!ENABLED) {
+            context.succeed();
+            return;
+        }
+
+        BlockPos origin = new BlockPos(2, 3, 2);
+        int size = 18;
+        final int[] expectedWaterAmount = {0};
+        for (int x = -1; x <= size; x++) {
+            context.setBlock(origin.offset(x, 0, -1), Blocks.STONE);
+            context.setBlock(origin.offset(x, 0, size), Blocks.STONE);
+        }
+        for (int z = 0; z < size; z++) {
+            context.setBlock(origin.offset(-1, 0, z), Blocks.STONE);
+            context.setBlock(origin.offset(size, 0, z), Blocks.STONE);
+        }
+
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                BlockPos pos = origin.offset(x, 0, z);
+                context.setBlock(pos.below(), Blocks.STONE);
+                int amount = 2 + Math.floorMod(x * 3 + z * 5 + (x / 8) + (z / 8), 7);
+                context.setBlock(pos, Fluids.WATER.getFlowing(amount, false).createLegacyBlock());
+                expectedWaterAmount[0] += amount;
+                context.getLevel().scheduleTick(context.absolutePos(pos), Fluids.WATER, 1);
+            }
+        }
+
+        for (int tick = 12; tick <= 72; tick += 12) {
+            context.runAtTickTime(tick, () -> {
+                for (int x = 0; x < size; x++) {
+                    for (int z = 0; z < size; z++) {
+                        context.getLevel().scheduleTick(context.absolutePos(origin.offset(x, 0, z)), Fluids.WATER, 1);
+                    }
+                }
+            });
+        }
+
+        context.runAtTickTime(120, () -> {
+            int actualWaterAmount = 0;
+            for (int x = -4; x <= size + 4; x++) {
+                for (int y = -2; y <= 2; y++) {
+                    for (int z = -4; z <= size + 4; z++) {
+                        actualWaterAmount += context.getBlockState(origin.offset(x, y, z)).getFluidState().getAmount();
+                    }
+                }
+            }
+            if (actualWaterAmount != expectedWaterAmount[0]) {
+                context.fail("large finite water field did not conserve volume; expected="
+                        + expectedWaterAmount[0] + " actual=" + actualWaterAmount);
+                return;
+            }
+            for (int x = -1; x <= size; x++) {
+                if (!context.getBlockState(origin.offset(x, 0, -1)).is(Blocks.STONE)
+                        || !context.getBlockState(origin.offset(x, 0, size)).is(Blocks.STONE)) {
+                    context.fail("large finite water field escaped its north/south basin wall");
+                    return;
+                }
+            }
+            for (int z = 0; z < size; z++) {
+                if (!context.getBlockState(origin.offset(-1, 0, z)).is(Blocks.STONE)
+                        || !context.getBlockState(origin.offset(size, 0, z)).is(Blocks.STONE)) {
+                    context.fail("large finite water field escaped its east/west basin wall");
+                    return;
+                }
+            }
+        });
+
+        context.runAtTickTime(130, () -> {
+            for (int x = -1; x <= size; x++) {
+                if (!context.getBlockState(origin.offset(x, 0, -1)).is(Blocks.STONE)
+                        || !context.getBlockState(origin.offset(x, 0, size)).is(Blocks.STONE)) {
+                    context.fail("large finite water field damaged its basin during settling");
+                    return;
+                }
+            }
+            for (int z = 0; z < size; z++) {
+                if (!context.getBlockState(origin.offset(-1, 0, z)).is(Blocks.STONE)
+                        || !context.getBlockState(origin.offset(size, 0, z)).is(Blocks.STONE)) {
+                    context.fail("large finite water field damaged its basin during settling");
+                    return;
+                }
+            }
+        });
+
+        context.runAtTickTime(140, () -> {
+            int waterAmountBeforeWake = 0;
+            for (int x = -4; x <= size + 4; x++) {
+                for (int y = -2; y <= 2; y++) {
+                    for (int z = -4; z <= size + 4; z++) {
+                        waterAmountBeforeWake += context.getBlockState(origin.offset(x, y, z)).getFluidState().getAmount();
+                    }
+                }
+            }
+            if (waterAmountBeforeWake != expectedWaterAmount[0]) {
+                context.fail("large finite water field lost volume before wake; expected="
+                        + expectedWaterAmount[0] + " actual=" + waterAmountBeforeWake);
+                return;
+            }
+            for (int x = 0; x < size; x++) {
+                for (int z = 0; z < size; z++) {
+                    context.getLevel().scheduleTick(context.absolutePos(origin.offset(x, 0, z)), Fluids.WATER, 1);
+                }
+            }
+        });
+
+        context.runAtTickTime(170, context::succeed);
+    }
+
     @GameTest(maxTicks = 80)
     public void stressSurfaceWeatherQueue(GameTestHelper context) {
         if (!ENABLED) {
