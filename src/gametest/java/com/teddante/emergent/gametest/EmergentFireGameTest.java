@@ -244,6 +244,78 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void coldExposureCoolsStoredHeat(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.STONE);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                1.0);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                0.4);
+
+        context.assertTrue(EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "cold exposure should accumulate as shared environmental state");
+        context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) < 1.0,
+                "cold exposure should cool stored heat");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void snowfallAddsColdAndMoistureToSurface(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
+
+        EnvironmentalExposure.addSnowfall(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS));
+
+        context.assertTrue(EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "snowfall should add cold exposure");
+        context.assertTrue(EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "snowfall should add stored surface moisture");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void burnedOrganicMatterLeavesAshResidueOnSoil(GameTestHelper context) {
+        BlockPos leavesPos = TEST_POS.above();
+        context.setBlock(TEST_POS, Blocks.DIRT);
+        context.setBlock(leavesPos, Blocks.OAK_LEAVES);
+
+        boolean reacted = MaterialReactions.tryBurnAwayFromFire(
+                context.getLevel(),
+                context.absolutePos(leavesPos),
+                context.getBlockState(leavesPos),
+                RandomSource.create(21));
+
+        context.assertTrue(reacted, "burn-away organic matter should react to fire");
+        context.assertBlockPresent(Blocks.AIR, leavesPos);
+        context.assertTrue(EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(TEST_POS), context.getBlockState(TEST_POS)) > 0.0,
+                "burned organic matter should leave ash residue on the supporting soil");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void ashResidueCanEnrichLaterRainGrowth(GameTestHelper context) {
+        context.setBlock(TEST_POS.below(), Blocks.FARMLAND);
+        context.setBlock(TEST_POS, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0));
+        EnvironmentalExposure.addAshResidue(
+                context.getLevel(),
+                context.absolutePos(TEST_POS.below()),
+                context.getBlockState(TEST_POS.below()),
+                2.0);
+
+        context.assertTrue(
+                EnvironmentalExposure.ashGrowthBonus(context.getLevel(), context.absolutePos(TEST_POS.below()), context.getBlockState(TEST_POS.below())) > 0.0,
+                "ash residue should be available as a small growth bonus for later rain growth");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void structuralStressAccumulatesInExposureMemory(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.GLASS);
         double threshold = MaterialPhysicsProfiles.structuralStressThreshold(context.getBlockState(TEST_POS));

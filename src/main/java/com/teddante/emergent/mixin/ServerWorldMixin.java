@@ -62,7 +62,12 @@ public abstract class ServerWorldMixin {
             return;
         }
 
-        if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) != Biome.Precipitation.RAIN) {
+        Biome.Precipitation precipitation = biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel());
+        if (precipitation == Biome.Precipitation.SNOW) {
+            EnvironmentalExposure.addSnowfall(serverWorld, surfacePos, surfaceState);
+            return;
+        }
+        if (precipitation != Biome.Precipitation.RAIN) {
             return;
         }
 

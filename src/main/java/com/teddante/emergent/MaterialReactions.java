@@ -125,7 +125,7 @@ public final class MaterialReactions {
             int flashWeight,
             RandomSource random) {
         if (flashWeight > 0) {
-            return flashBurnFromFire(world, pos, random);
+            return flashBurnFromFire(world, pos, state, random);
         }
         if (charWeight > 0) {
             return charFromFire(world, pos, state);
@@ -134,7 +134,7 @@ public final class MaterialReactions {
             return scorchToDirtFromFire(world, pos, random);
         }
 
-        return burnAwayFromFire(world, pos);
+        return burnAwayFromFire(world, pos, state);
     }
 
     private static double fireReactionThreshold(ServerLevel world, BlockPos pos, BlockState state) {
@@ -230,7 +230,7 @@ public final class MaterialReactions {
             return true;
         }
 
-        return burnAwayFromFire(world, pos);
+        return burnAwayFromFire(world, pos, state);
     }
 
     public static boolean tryFlashBurnFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
@@ -242,7 +242,7 @@ public final class MaterialReactions {
             return true;
         }
 
-        return flashBurnFromFire(world, pos, random);
+        return flashBurnFromFire(world, pos, state, random);
     }
 
     private static boolean scorchToDirtFromFire(ServerLevel world, BlockPos pos, RandomSource random) {
@@ -257,13 +257,15 @@ public final class MaterialReactions {
         return true;
     }
 
-    private static boolean burnAwayFromFire(ServerLevel world, BlockPos pos) {
+    private static boolean burnAwayFromFire(ServerLevel world, BlockPos pos, BlockState state) {
+        leaveAshResidue(world, pos, state);
         world.removeBlock(pos, false);
         world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.25f, 1.6f);
         return true;
     }
 
-    private static boolean flashBurnFromFire(ServerLevel world, BlockPos pos, RandomSource random) {
+    private static boolean flashBurnFromFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
+        leaveAshResidue(world, pos, state);
         world.removeBlock(pos, false);
         world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.4f, 1.8f);
         if (random.nextFloat() < FLASH_UPWARD_IGNITION_CHANCE) {
@@ -276,6 +278,19 @@ public final class MaterialReactions {
         }
 
         return true;
+    }
+
+    private static void leaveAshResidue(ServerLevel world, BlockPos pos, BlockState burnedState) {
+        double ashKilograms = MaterialPhysicsProfiles.ashKilogramsFromBurnedBlock(burnedState);
+        if (ashKilograms <= 0.0) {
+            return;
+        }
+
+        BlockPos residuePos = pos.below();
+        BlockState residueState = world.getBlockState(residuePos);
+        if (!residueState.isAir() && residueState.getFluidState().isEmpty()) {
+            EnvironmentalExposure.addAshResidue(world, residuePos, residueState, ashKilograms);
+        }
     }
 
     public static boolean trySustainFire(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
@@ -321,7 +336,7 @@ public final class MaterialReactions {
     }
 
     public static void tryRainGrow(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
-        if (!state.is(MaterialReactionTags.RAIN_GROWS) || random.nextFloat() > 0.12f) {
+        if (!state.is(MaterialReactionTags.RAIN_GROWS) || random.nextFloat() > rainGrowthChance(world, pos, state)) {
             return;
         }
 
@@ -330,31 +345,54 @@ public final class MaterialReactions {
                 && growable.isValidBonemealTarget(world, pos, state)
                 && growable.isBonemealSuccess(world, random, pos, state)) {
             growable.performBonemeal(world, random, pos, state);
+            consumeGrowthAsh(world, pos, state);
             return;
         }
 
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_1)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_2)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_3)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_4)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_5)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_7)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
         if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_15)) {
+            consumeGrowthAsh(world, pos, state);
             return;
         }
-        tryIncrementAge(world, pos, state, BlockStateProperties.AGE_25);
+        if (tryIncrementAge(world, pos, state, BlockStateProperties.AGE_25)) {
+            consumeGrowthAsh(world, pos, state);
+        }
+    }
+
+    private static float rainGrowthChance(ServerLevel world, BlockPos pos, BlockState state) {
+        double bonus = EnvironmentalExposure.ashGrowthBonus(world, pos, state);
+        BlockPos belowPos = pos.below();
+        bonus = Math.max(bonus, EnvironmentalExposure.ashGrowthBonus(world, belowPos, world.getBlockState(belowPos)));
+        return (float) Math.min(0.28, 0.12 + bonus);
+    }
+
+    private static void consumeGrowthAsh(ServerLevel world, BlockPos pos, BlockState state) {
+        EnvironmentalExposure.consumeAshResidue(world, pos, state, 0.2);
+        BlockPos belowPos = pos.below();
+        EnvironmentalExposure.consumeAshResidue(world, belowPos, world.getBlockState(belowPos), 0.2);
     }
 
     private static boolean tryIncrementAge(ServerLevel world, BlockPos pos, BlockState state, IntegerProperty property) {

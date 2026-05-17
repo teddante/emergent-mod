@@ -108,6 +108,23 @@ public final class MaterialPhysicsProfiles {
         return Blocks.DIRT.defaultBlockState();
     }
 
+    public static double ashKilogramsFromBurnedBlock(BlockState state) {
+        if (state.is(BlockTags.LEAVES)) {
+            return 0.35;
+        }
+        if (state.is(BlockTags.LOGS)) {
+            return 1.2;
+        }
+        if (state.is(BlockTags.CROPS)) {
+            return 0.45;
+        }
+        if (state.is(MaterialReactionTags.BURNS_AWAY_IN_FIRE) || state.is(MaterialReactionTags.FLASH_BURNS_IN_FIRE)) {
+            return 0.25;
+        }
+
+        return 0.0;
+    }
+
     public static double dryFireExposureMultiplier(BlockState state, double moisture, double storedHeat) {
         if (!isFireReactive(state)) {
             return 1.0;
