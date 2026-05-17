@@ -15,13 +15,13 @@ Current target versions:
 - Minecraft: `26.1.2`
 - Fabric Loader: `0.19.2`
 - Fabric API: `0.146.1+26.1.2`
-- Loom: `1.15-SNAPSHOT`
+- Loom: `1.15.5`
 
 ## User Toggles
 
 Feature flags live in `config/emergent.json` and are generated on first launch. Every gameplay system has its own boolean so players and server owners can keep the interactions they like and disable the ones that do not fit a world or modpack.
 
-The config is deliberately dependency-free. A future client screen can be layered on top with Mod Menu and Cloth Config without changing the server-side behavior gates.
+The runtime config remains a plain JSON file for server and manual use. When Mod Menu and Cloth Config are installed, the client exposes the same broad feature gates in game without changing the server-side behavior gates.
 
 ## Porting Checklist
 

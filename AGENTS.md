@@ -1,43 +1,51 @@
 # AI Development Guidelines
 
-1. **Philosophy**: Build dynamic, system-driven interactions that foster emergent gameplay. Features should interact with each other and the environment unpredictably but logically. If you do something and you expect it to happen as per logic or real life, it should happen. This is what the mod is going for.
-2. **Native Integration**: Always use existing vanilla functions, lists, and mechanics.
-    - **Use Tags**: Never use hardcoded strings (e.g., `name.contains("tnt")`). Use Item Tags (`#emergent:high_explosives`) for all categorical checks. This ensures compatibility with other mods.
-    - **Extend, Don't Reinvent**: Use vanilla `isBurnable`, `getBlastResistance`, etc.
-3. **Compatibility**: Ensure maximum compatibility with Vanilla and other mods.
-    - Use non-destructive Mixins (`@Inject`) wherever possible.
-    - Avoid `@Redirect` unless absolutely necessary (e.g., when a value must be changed *before* it is used in logic that runs in the same tick).
-4. **Quality**: Use optimal programming paradigms and design patterns. Code must be clean, modular, and performant.
-5. **Source Code Access**: Do not guess method names or rely solely on online searches. The project includes generated Minecraft source code.
-    - **Local Source Cache**: Use the `mc-src` directory in the project root to inspect Minecraft source code. If it is empty, missing, or has pre-26.1/Yarn-style packages such as `net/minecraft/fluid`, run `scripts/extract_sources.ps1` to repopulate it from the current official Mojang-name source JAR.
-    - **Minecraft 26.1+ Names**: Fabric for Minecraft 26.1+ uses Mojang official, non-obfuscated names. Expected source paths include `net/minecraft/world/level/material/FlowingFluid.java`, not old Yarn paths.
-    - **Verify Signatures**: Always verify method signatures and mapping names by checking `mc-src` or using `javap`.
-    - **Generate Sources**: If sources are missing from the Gradle cache, run `./gradlew genSources` first, then run the extraction script.
-6. **Configuration Integrity**: Ensure configuration files are synchronized with codebase changes.
-    - **Mixin Config**: When deleting or renaming a Mixin class, immediately update `mixins.json` to remove or update the reference.
-    - **Refmap**: Ensure `refmap` is defined in `mixins.json` to prevent runtime mapping errors.
-    - **Entrypoints**: When renaming main classes or client entry points, update `fabric.mod.json`.
-7. **Automated Testing**: Prefer repeatable command-line checks before manual Minecraft validation.
-    - **Smoke Gate**: Run `scripts/dev_smoke.ps1` for build, config hygiene, jar inspection, and server GameTests.
-    - **Physics GameTests**: Put world-tick physics coverage in `src/gametest` so finite water, erosion, fire, and movement interactions can be checked without launching Prism by hand.
-8. **GitHub, Versioning, and Release Rhythm**: Keep repo operations simple, current, and release-ready without extra process files.
-    - **Start of Work**: Check branch and dirty state first. Use short branches like `fix/fire-grass-spread`, `feature/thermal-fluid-reactions`, or `docs/github-process`; keep `main` buildable.
-    - **Commits**: Commit coherent working chunks after smoke/build checks when practical. Do not tag every commit.
-    - **Pull Requests**: Use PRs as review/change units. Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required in-game validation is done.
-    - **Issues**: Use issues for reproducible bugs and concrete feature ideas with versions, mod list, logs, and reproduction steps when relevant. Do not create issues for every tiny internal cleanup.
-    - **Version Bumps**: Use SemVer in `gradle.properties`: patch for compatible fixes/tuning, minor for meaningful compatible features/systems, major for breaking config/data behavior or dropping a supported Minecraft line. `0.y.z` means early development and may still change.
-    - **Tags and Releases**: Only tag tested public builds. Release by updating version/docs, running `scripts/dev_smoke.ps1`, creating an annotated `vMAJOR.MINOR.PATCH` tag, pushing it, and publishing a GitHub Release from that tag. GitHub Releases are based on tags.
-    - **Safety**: Never rewrite public history, force-push, delete branches, close issues, publish releases, or alter repo settings unless the user clearly asks for that exact action.
+## Project Direction
 
-# Lessons Learned & Technical Specifics
+Emergent is a Minecraft mod about physically motivated, system-driven gameplay. Prefer interactions that arise from shared world state rather than isolated one-off rules. If a player would reasonably expect fire, water, heat, impact, pressure, moisture, mass, or material properties to matter, the systems should connect in a logical Minecraft-scale way.
 
-### Vanilla Limitations
--   **No Explosive Values on Items**: Vanilla Minecraft *Items* (e.g., Gunpowder, TNT items) DO NOT have an "explosive power" property. The power is hardcoded in `TntBlock` or `TntEntity`.
-    -   *Solution*: Create a custom Tag system (e.g., `emergent:high_explosives`) to assign values to items via JSON. Do not try to read this from code.
+Keep the mod readable, compatible, and efficient. Use simple mechanisms that compose well before adding broad abstractions or config surfaces.
 
-### Mixin Patterns
--   **State Updates**: If a Mixin updates a BlockState and subsequent logic relies on `getCachedState()`, you MUST manually call `this.setCachedState(newState)` (suppressing deprecation) to ensure consistency within the same tick. The World state update is not immediate enough for local field access.
--   **Collection Safety**: When iterating over lists that might be modified by the action you are performing (e.g., explosions triggering other explosions), ALWAYS iterate over a **copy** of the list to avoid `ConcurrentModificationException`.
+## Implementation Principles
 
-### Environment
--   **Source Verification**: If you are unsure if a vanilla method exists, **extract the source JAR** and check. Do not hallucinate based on other versions.
+- Use vanilla mechanics, APIs, tags, registries, and block/entity behavior wherever practical.
+- Prefer tags and material/profile helpers over hardcoded name checks.
+- Extend vanilla behavior with small, non-destructive mixins where possible. Use invasive mixins only when the timing of vanilla logic leaves no safer hook.
+- Keep changes scoped to the feature or bug being worked on. Avoid unrelated refactors.
+- Model values in Minecraft-scale units where useful: blocks are roughly `1 m^3`, fluids are finite amounts, and time-sensitive behavior should be explainable in ticks or seconds.
+- Avoid arbitrary caps that erase expected outcomes. If work must be limited for performance, defer and integrate it over elapsed time rather than deleting it.
+- Make slow environmental systems sparse, deterministic, and event-driven where possible. Wake affected cells when state changes; do not rely on constant global ticking.
+
+## Source And Mapping Rules
+
+- Do not guess Minecraft method names or signatures. Inspect the local `mc-src` cache or use `javap` before writing mixins against vanilla code.
+- For current Minecraft/Fabric versions, expect Mojang official names and package paths. If `mc-src` is missing, stale, or looks like an older mapping layout, regenerate sources with Gradle and repopulate the cache with `scripts/extract_sources.ps1`.
+- Keep mixin configs, refmaps, entrypoints, access wideners, tags, resources, and generated-source assumptions synchronized with code changes.
+
+## Testing And Verification
+
+- Prefer repeatable command-line validation before manual Minecraft testing.
+- Run `scripts/dev_smoke.ps1` for build, config/resource hygiene, jar inspection, server GameTests, and optional Prism copy.
+- Put deterministic gameplay and physics coverage in `src/gametest` when behavior can be checked without a manual client session.
+- Tests should assert real invariants, not implementation trivia. Good tests cover conservation, thresholds, state transitions, negative cases, and cross-system interactions.
+- Manual in-game validation is still needed for feel, pacing, visual clarity, and large-world performance.
+
+## GitHub Workflow
+
+- Start work by checking branch, tracking state, and dirty files.
+- Keep `main` buildable. Do feature and fix work on short-lived branches with clear names.
+- A branch/PR should have one reviewable purpose. If the current branch name no longer describes the next change, stop and create a new branch or explicitly choose a stacked PR.
+- Large integration PRs are acceptable while draft when systems are tightly coupled, but stop adding unrelated features once the scope starts drifting.
+- Commit coherent working chunks after verification when practical. Use clear commit messages. Do not tag every commit.
+- Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required manual validation is done.
+- Use issues for reproducible bugs and concrete feature ideas with versions, logs, mod lists, and reproduction steps when relevant.
+- Use SemVer in `gradle.properties`: patch for compatible fixes/tuning, minor for compatible feature systems, major for breaking config/data behavior or dropping a supported Minecraft line. `0.y.z` still means early development.
+- Only tag tested public builds. Releases should come from annotated `vMAJOR.MINOR.PATCH` tags after smoke checks and release notes are ready.
+- Never rewrite public history, force-push, delete branches, close issues, publish releases, or alter repo settings unless the user clearly asks for that exact action.
+
+## Known Project Lessons
+
+- Vanilla items do not generally expose an explosive-power value. Represent item explosive categories with tags or project data, not name matching.
+- If a mixin changes a block state and later logic in the same tick reads cached state from that object, update the local cached state as well when required by the vanilla class.
+- When actions can mutate collections being iterated, iterate over a copy.
+- Prefer local source verification over memory or online examples, especially across Minecraft version changes.

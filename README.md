@@ -1,105 +1,119 @@
 # Emergent
 
-A Minecraft Fabric mod that makes world systems interact in broader, more physical ways. Fire, water, rain, explosions, mobs, inventories, brewing, enchanting, and terrain all become more dynamic while staying configurable.
+Emergent is a Minecraft Fabric mod that makes world systems interact in broader, more physical ways. Fire, water, rain, heat, impacts, mobs, inventories, brewing, enchanting, and terrain all become more dynamic while staying configurable.
 
-## Features
+The goal is not to add isolated gimmicks. Emergent tries to make Minecraft's existing systems share state: wet surfaces resist fire, water carries sediment, heat and cold change materials, impacts weaken blocks, and the same entity-energy model can affect dropped XP and sculk catalyst charge.
 
-### Volatile Explosives
+## Feature Overview
 
-Explosive item stacks can detonate when exposed to fire, lava, or explosion damage. Lightning and burning entities can trigger them indirectly when they apply those vanilla damage types.
+### Explosives And Volatile Inventories
 
-- Dropped explosives can chain react.
-- Explosive items inside inventories or containers can detonate.
+Explosive item stacks can detonate when exposed to fire, lava, or explosion damage.
+
+- Dropped explosives can ignite, detonate, and chain-react.
+- Explosive items inside inventories or containers can react.
 - Nested container items, such as shulker boxes filled with TNT, are inspected too.
-- Explosion strength scales with the quantity and category of explosives.
+- Explosion strength scales with quantity and tag category.
 
-Example:
-
-- 1 gunpowder = tiny pop.
-- 1 TNT = vanilla-ish TNT blast.
-- 64 TNT = power 16, roughly 4x TNT radius.
-
-Tags control what counts as an explosive:
+Item tags control explosive categories:
 
 - `#emergent:low_explosives`
 - `#emergent:explosives`
 - `#emergent:high_explosives`
 - `#emergent:volatile_explosives`
 
-### Reactive Creepers
+### Fire, Wetness, And Material Reactions
 
-Creepers can react to nearby explosions instead of ignoring them.
+Fire spread remains based on vanilla placement and flammability rules, but surrounding systems can now affect the outcome.
 
-### Infinite Fire Spread
+- Rain, stored surface moisture, waterlogged blocks, and nearby water dampen ignition.
+- Grass-like surfaces can resist fire, scorch to dirt, or briefly carry flame.
+- Tagged organics can flash-burn, burn away, char, or sustain fire longer.
+- Fire and lava can add stored heat to nearby material, feeding later thermal shock or drying.
+- Charred wood and burned blocks can leave ash residue for rain runoff or plant growth.
 
-Fire can keep spreading beyond vanilla limits when enabled. Placement still uses vanilla fire placement state selection so dimension behavior and modded hooks have a chance to participate.
-
-### Burning Entity Fire Spread
-
-Burning entities can ignite nearby valid blocks as they move.
-
-### Wetness Fire Dampening
-
-Rain, waterlogged blocks, and nearby water reduce the chance that fire spreads or burning entities ignite a block. Vanilla flammability still decides what can burn, while local wetness changes how likely ignition is.
-
-Grass-like surface blocks tagged with `#emergent:scorches_to_dirt_in_fire` have their own living moisture. When fire reaches them, they can resist, scorch into dirt, or scorch and briefly carry flame above the surface.
-
-Additional fire reaction tags cover fragile organics, dry flash fuels, and dense fuels:
+Important block tags include:
 
 - `#emergent:burns_away_in_fire`
+- `#emergent:chars_in_fire`
 - `#emergent:flash_burns_in_fire`
+- `#emergent:scorches_to_dirt_in_fire`
 - `#emergent:sustains_fire`
+- `#emergent:heat_sources`
 
-### Passenger Momentum Transfer
+### Fluid, Rain, And Erosion Physics
 
-Dismounting from a moving vehicle carries the vehicle's momentum into the passenger. Fast minecarts can throw players and mobs forward instead of letting them step off as if the cart were stationary, including when minecart speed has been increased by game rules or other mods. Inherited momentum briefly preserves inertia against vanilla ground friction so high-speed dismounts slide or fly farther before terrain, fluids, or collisions bleed the motion away.
+Water and lava can use finite volume instead of infinite source regeneration.
 
-### Kinetic Impacts
+- Fluids move as conserved block-volume units.
+- Gravity is preferred; horizontal flow equalizes lower neighboring cells.
+- Thin layers settle as puddles instead of spreading forever.
+- Source water can fill waterloggable blocks through vanilla fluid-container hooks.
+- Lava follows slower vanilla timing and reacts with water.
 
-Fast minecarts, boats, falling blocks, and moving living entities can injure entities or break brittle blocks based on mass and relative speed. Falling sand, gravel, anvils, and other falling blocks transfer impact momentum instead of only relying on vanilla's special-case anvil damage.
+Rain and water feed the same surface-memory model:
 
-### Ballistic Inertia
+- Rain first wets exposed surfaces.
+- Hard, low-absorption surfaces can release visible puddles sooner.
+- Soil, mud, sand, and grass soak more moisture before puddles appear.
+- Puddle formation consumes stored surface moisture instead of creating free water.
+- Puddles and flowing water can wash ash into suspended sediment.
 
-Airborne living entities, off-rail minecarts, boats, falling blocks, and dropped items keep more physically believable trajectories. Drag is based on simple mass versus frontal area, so dense/heavy objects hold speed better while small light objects slow more. Ground, rails, water, lava, and collisions still bleed momentum through their normal environmental rules.
+Hydraulic erosion is driven by actual water movement when finite flow is enabled:
 
-### Universal Warden Summoning
+- Flowing water adds wear based on moved volume and direction.
+- Wet soft material erodes more easily.
+- Structural stress can lower erosion thresholds.
+- Water can carry suspended sediment downstream.
+- Settled sediment can deposit as dirt, clay, mud, sand, or gravel depending on carried mass and water concentration.
 
-Warden summoning behavior can be widened beyond vanilla's default restrictions.
+### Heat, Cold, And Structural Stress
 
-### Finite Fluid Flow
+Blocks can accumulate temporary runtime heat, cold, moisture, ash, sediment, wear, and stress.
 
-Water and lava sources can be prevented from regenerating infinitely. Fluids move as conserved block-volume units: gravity is preferred, horizontal flow equalizes lower neighboring cells, thin layers settle as puddles, and source water can fill waterloggable blocks through vanilla fluid-container hooks. Lava uses its vanilla slower tick timing and solidifies against water.
+- Stored heat can evaporate shallow water, melt snow/ice, dry surfaces, and diffuse through conductive material.
+- Stored cold can freeze finite water or stored surface moisture into snow layers.
+- Freezing wet porous material can add frost-wedging structural stress.
+- Thermal shock, explosions, impacts, erosion, and frost wedging all feed shared structural stress.
+- Stressed material can fracture into sensible products such as cobblestone, sand, or gravel.
 
-Local thermal reactions keep those fluids connected to nearby heat: lava falling into water makes stone, water solidifies lava into obsidian or cobblestone based on the lava state, lava beside water solidifies like vanilla contact, and shallow water evaporates near tagged heat sources.
+### Movement, Traffic, And Impacts
 
-### Rain Accumulation
+Movement systems preserve more physical momentum while still respecting terrain, fluids, rails, collisions, and player control.
 
-Rain can slowly accumulate water in exposed spaces. Absorbent surfaces such as dirt, grass, mud, and sand collect less readily, while existing shallow water can deepen over time.
+- Dismounting from a moving vehicle carries vehicle momentum into the passenger.
+- Airborne entities and vehicles retain ballistic motion with simple mass-vs-area drag.
+- Fast vehicles, falling blocks, boats, and moving entities can injure entities or stress fragile blocks.
+- Repeated movement over soft ground can compact surfaces into paths.
+- Wider entities apply traffic wear over their contact patch.
+- Traffic can trample crops and soft vegetation.
 
-### Hydraulic Erosion
+### Plants, Weather, And Biomes
 
-Flowing water can erode vulnerable blocks over time. Erosion is driven by actual finite-water transfer when finite flow is enabled, with bank impact and bed shear applying bounded probabilities based on block hardness and tags.
+Weather and climate affect the same shared environmental memory.
 
-### Auto Planting
+- Humid biome tags increase rain wetting and reduce drying.
+- Arid/nether-like tags dry surfaces faster and increase heat stress.
+- Stored soil moisture and ash residue can improve rain-assisted plant growth.
+- Successful rain growth consumes a small amount of stored moisture and ash.
+- Hot, dry exposure can stress vegetation; moisture can relieve that stress.
+- Dropped plantable items can settle into suitable blocks.
 
-Dropped seeds and plantable items can eventually plant themselves when resting on valid soil. Failed attempts are throttled so invalid piles do not retry every tick forever.
+### Dynamic XP And Sculk
 
-### Material Reactions
+Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value.
 
-Rain and water can interact with tagged materials.
+Sculk shrieker summoning can also be widened beyond vanilla's default restrictions.
 
-- Rain can oxidize copper-like blocks.
-- Rain can grow exposed tagged plants when the plant actually supports the growth operation.
-- Water can wash away tagged blocks.
-- Brittle blocks can shatter under erosion.
+### Boundless Enchanting And Brewing
 
-### Boundless Enchanting
+Optional systems can relax selected vanilla limits:
 
-Optional enchanting changes can remove or relax selected vanilla limits.
-
-### Boundless Brewing
-
-Optional brewing changes can extend potion amplifier or duration limits. Brewing stops matching once an effect is already at the configured cap, so ingredients are not consumed for no effect.
+- Anvil prior-work penalties and the Too Expensive cap can be removed.
+- Matching enchantments can combine past vanilla max levels.
+- Mutually exclusive enchantments can coexist.
+- Redstone can repeatedly extend potion duration.
+- Glowstone can repeatedly raise potion strength.
 
 ## Configuration
 
@@ -108,6 +122,8 @@ The config is generated at:
 ```text
 config/emergent.json
 ```
+
+These toggles are broad feature gates, not one setting per emergent sub-system. Many newer interactions intentionally share existing gates such as `finiteWaterFlow`, `rainAccumulation`, `hydraulicErosion`, `kineticImpacts`, and `materialReactions` instead of adding a separate option for every small physical effect.
 
 Example:
 
@@ -135,6 +151,8 @@ Example:
 }
 ```
 
+If Mod Menu and Cloth Config are installed, Emergent also provides an in-game config screen.
+
 ## Tags
 
 Most categorical behavior is tag-driven for compatibility with vanilla and other mods.
@@ -146,27 +164,34 @@ data/emergent/tags/item/low_explosives.json
 data/emergent/tags/item/explosives.json
 data/emergent/tags/item/high_explosives.json
 data/emergent/tags/item/volatile_explosives.json
+data/emergent/tags/item/plantables.json
 data/emergent/tags/block/brittle.json
 data/emergent/tags/block/burns_away_in_fire.json
+data/emergent/tags/block/chars_in_fire.json
+data/emergent/tags/block/compacts_under_traffic.json
+data/emergent/tags/block/conductive.json
+data/emergent/tags/block/erodes_in_water.json
 data/emergent/tags/block/flash_burns_in_fire.json
 data/emergent/tags/block/heat_sources.json
+data/emergent/tags/block/rain_grows.json
+data/emergent/tags/block/rain_oxidizes.json
 data/emergent/tags/block/scorches_to_dirt_in_fire.json
 data/emergent/tags/block/sustains_fire.json
 data/emergent/tags/block/washes_away_in_water.json
-data/emergent/tags/block/rain_grows.json
 ```
 
 ## Compatibility
 
 Emergent prefers vanilla APIs, block tags, item tags, block states, inventories, and standard placement/growth hooks instead of hardcoded block names.
 
-Mixin compatibility:
-
 - Most features use non-destructive injections where practical.
-- A narrow overwrite is currently used for water source conversion because the behavior must change at the exact point vanilla decides whether flowing water becomes a source.
-- Container reactions use the generic `Container` interface when available, so vanilla and modded inventories are supported more broadly than chest-like block entities only.
+- Feature categories are broad enough for modpack use without adding a config toggle for every tiny interaction.
+- Runtime environmental memory is not saved as world data unless a later system explicitly introduces persistence.
+- Dynamic XP uses the vanilla living-entity reward query, so sculk catalysts and XP orbs stay on the native path.
 
-## Building
+## Development
+
+Build:
 
 ```powershell
 ./gradlew.bat build
@@ -178,12 +203,10 @@ Fast local smoke check:
 .\scripts\dev_smoke.ps1
 ```
 
-The smoke check also runs Fabric server GameTests from `src/gametest`. These tests are for physics and interaction behavior that needs a real Minecraft world tick, such as finite water movement, waterlogging hooks, and erosion outcomes.
-
-Build, check mixin-package hygiene, and copy the jar into the default Prism test instance:
+Build, check mixin/resource hygiene, run server GameTests, inspect the jar, and copy the jar into the default Prism test instance:
 
 ```powershell
-.\scripts\dev_smoke.ps1 -CopyToPrism
+.\scripts\dev_smoke.ps1 -RequireMinecraftSources -CopyToPrism
 ```
 
 By default, `-CopyToPrism` targets:
@@ -191,6 +214,8 @@ By default, `-CopyToPrism` targets:
 ```text
 C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Prism Launcher Thing for Emergent mod testing\minecraft\mods
 ```
+
+See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.
 
 ## License
 
