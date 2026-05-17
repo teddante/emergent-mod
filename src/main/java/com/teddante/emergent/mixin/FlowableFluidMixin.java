@@ -26,6 +26,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Cellular automata fluid physics.
@@ -37,6 +39,14 @@ import java.util.List;
  */
 @Mixin(FlowingFluid.class)
 public abstract class FlowableFluidMixin extends Fluid {
+    @Unique
+    private static final int emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET = Integer.getInteger(
+            "emergent.finiteFluid.activeTickBudget",
+            4096);
+    @Unique
+    private static final int emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS = 4;
+    @Unique
+    private static final Map<ServerLevel, EmergentFiniteFluidBudget> emergent$FINITE_FLUID_BUDGETS = new WeakHashMap<>();
 
     @Shadow
     public abstract FluidState getFlowing(int level, boolean falling);
@@ -118,6 +128,17 @@ public abstract class FlowableFluidMixin extends Fluid {
                 EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
                 ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
             }
+        }
+
+        String earlyQuietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (earlyQuietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + earlyQuietTickReason + "_skips", 1);
+            return;
+        }
+
+        if (!emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
+            return;
         }
 
         // STEP 1: Gravity - try to flow down
@@ -370,6 +391,35 @@ public abstract class FlowableFluidMixin extends Fluid {
         } finally {
             EmergentProfiler.record(world, EmergentProfiler.FINITE_FLUIDS, emergent$profileStart);
         }
+    }
+
+    @Unique
+    private boolean emergent$claimFiniteFluidWorkSlot(ServerLevel world, BlockPos pos, Fluid fluid, int tickDelay) {
+        if (emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET <= 0) {
+            return true;
+        }
+
+        EmergentFiniteFluidBudget budget = emergent$FINITE_FLUID_BUDGETS.computeIfAbsent(
+                world,
+                ignored -> new EmergentFiniteFluidBudget(world.getGameTime()));
+        if (budget.gameTime != world.getGameTime()) {
+            budget.gameTime = world.getGameTime();
+            budget.claimed = 0;
+            budget.deferred = 0;
+        }
+
+        if (budget.claimed < emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET) {
+            budget.claimed++;
+            EmergentProfiler.count(world, "finite_fluid_budget_claims", 1);
+            return true;
+        }
+
+        budget.deferred++;
+        EmergentProfiler.count(world, "finite_fluid_budget_deferrals", 1);
+        int spread = Math.max(1, emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS);
+        int phaseDelay = 1 + Math.floorMod(directionRank(pos, 0) + pos.getY(), spread);
+        world.scheduleTick(pos, fluid, Math.max(1, tickDelay + phaseDelay));
+        return false;
     }
 
     @Unique
@@ -737,5 +787,16 @@ public abstract class FlowableFluidMixin extends Fluid {
             case WEST -> 3;
             default -> 0;
         };
+    }
+
+    @Unique
+    private static final class EmergentFiniteFluidBudget {
+        private long gameTime;
+        private int claimed;
+        private int deferred;
+
+        private EmergentFiniteFluidBudget(long gameTime) {
+            this.gameTime = gameTime;
+        }
     }
 }

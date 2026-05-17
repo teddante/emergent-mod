@@ -71,6 +71,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $lavaTicks = Get-CounterTotal $CounterTotals "finite_fluid_lava_ticks"
     $activeSchedules = Get-CounterTotal $CounterTotals "finite_fluid_active_schedules"
     $quietSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_schedule_skips"
+    $budgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_claims"
+    $budgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_deferrals"
     $horizontalMoves = Get-CounterTotal $CounterTotals "finite_fluid_horizontal_moves"
     $downwardMoves = Get-CounterTotal $CounterTotals "finite_fluid_downward_moves"
     $thermalReactions = Get-CounterTotal $CounterTotals "finite_fluid_thermal_reactions"
@@ -90,6 +92,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $Summary.Add("Finite fluid diagnosis:")
     $Summary.Add(("  ticks={0} water={1} lava={2} activeSchedules={3} quietSkips={4} quietRatio={5:N1}% workEvents={6} workPerTick={7:N1}%" -f `
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
+    $Summary.Add(("  budgetClaims={0} budgetDeferrals={1}" -f $budgetClaims, $budgetDeferrals))
     $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} horizontalMoves={3} downwardMoves={4} thermalReactions={5}" -f `
                 $thinSettled, $stableSources, $quietTickSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if (!$hasScheduleCounters) {
@@ -118,6 +121,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
 
     if (!$hasScheduleCounters) {
         $Summary.Add("  interpretation=older profiler format; retest with the latest jar before deciding whether wakeups are stale or active.")
+    } elseif ($budgetDeferrals -gt 0) {
+        $Summary.Add("  interpretation=active fluid work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
     } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
     } elseif ($quietPercent -ge 65.0 -and $activeSchedules -gt 0) {
