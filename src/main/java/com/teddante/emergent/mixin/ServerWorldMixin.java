@@ -66,6 +66,7 @@ public abstract class ServerWorldMixin {
                     climateMoistureFactor,
                     serverWorld.isBrightOutside() ? 1.0 : 0.0,
                     emergent$surfaceAirExposureFactor(serverWorld, surfacePos, skyExposed));
+            ThermalPhysics.tryFreezeMoistSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             if (EmergentConfig.get().materialReactions) {
                 emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed, climateMoistureFactor);
@@ -76,6 +77,7 @@ public abstract class ServerWorldMixin {
         Biome.Precipitation precipitation = biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel());
         if (precipitation == Biome.Precipitation.SNOW) {
             EnvironmentalExposure.addSnowfall(serverWorld, surfacePos, surfaceState);
+            ThermalPhysics.tryFreezeMoistSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
             return;
         }
         if (precipitation != Biome.Precipitation.RAIN) {

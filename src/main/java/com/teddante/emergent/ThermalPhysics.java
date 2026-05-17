@@ -26,6 +26,7 @@ public final class ThermalPhysics {
     private static final double ICE_MELT_HEAT = 1.0;
     private static final double PACKED_ICE_MELT_HEAT = 2.5;
     private static final double MELT_WATER_MOISTURE_PER_LAYER = 0.08;
+    private static final double FREEZE_COLD_PER_SNOW_LAYER = 0.18;
     private static final double LAVA_CONTACT_HEAT_PER_CUBIC_METER = 0.45;
     private static final double EVAPORATION_COOLING_PER_CUBIC_METER = 1.2;
     private static final double HEAT_CONDUCTION_FRACTION = 0.18;
@@ -204,6 +205,54 @@ public final class ThermalPhysics {
         }
 
         return false;
+    }
+
+    public static boolean tryFreezeMoistSurface(ServerLevel world, BlockPos supportPos, BlockState supportState) {
+        if (supportState.isAir() || !supportState.getFluidState().isEmpty()) {
+            return false;
+        }
+        if (EnvironmentalExposure.cold(world, supportPos, supportState) < STORED_COLD_FREEZE_THRESHOLD) {
+            return false;
+        }
+        if (EnvironmentalExposure.heat(world, supportPos, supportState) >= STORED_HEAT_EVAPORATION_THRESHOLD) {
+            return false;
+        }
+
+        double moisture = EnvironmentalExposure.moisture(world, supportPos, supportState);
+        double moisturePerLayer = surfaceMoistureForSnowLayer(supportState);
+        int availableLayers = (int) Math.floor(moisture / moisturePerLayer);
+        if (availableLayers <= 0) {
+            return false;
+        }
+
+        BlockPos snowPos = supportPos.above();
+        BlockState snowState = world.getBlockState(snowPos);
+        int existingLayers = 0;
+        if (snowState.is(Blocks.SNOW) && snowState.hasProperty(SnowLayerBlock.LAYERS)) {
+            existingLayers = snowState.getValue(SnowLayerBlock.LAYERS);
+        } else if (!snowState.isAir()) {
+            return false;
+        }
+
+        int targetLayers = Math.min(8, existingLayers + availableLayers);
+        int frozenLayers = targetLayers - existingLayers;
+        if (frozenLayers <= 0) {
+            return false;
+        }
+
+        BlockState frozenState = Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, targetLayers);
+        if (!frozenState.canSurvive(world, snowPos)) {
+            return false;
+        }
+
+        world.setBlockAndUpdate(snowPos, frozenState);
+        EnvironmentalExposure.removeMoisture(world, supportPos, supportState, frozenLayers * moisturePerLayer);
+        EnvironmentalExposure.removeCold(world, supportPos, supportState, frozenLayers * FREEZE_COLD_PER_SNOW_LAYER);
+        return true;
+    }
+
+    public static double surfaceMoistureForSnowLayer(BlockState supportState) {
+        return MELT_WATER_MOISTURE_PER_LAYER * Math.max(0.15, MaterialPhysicsProfiles.surfaceWaterAbsorption(supportState));
     }
 
     public static boolean tryMeltFrozenSurface(ServerLevel world, BlockPos pos, BlockState state) {

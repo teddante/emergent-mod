@@ -489,6 +489,68 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void storedColdFreezesMoistSurfaceAsSnowLayer(GameTestHelper context) {
+        BlockPos supportPos = WATER_POS.below();
+        context.setBlock(supportPos, Blocks.DIRT);
+        context.setBlock(WATER_POS, Blocks.AIR);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                ThermalPhysics.surfaceMoistureForSnowLayer(context.getBlockState(supportPos)) * 2.0);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                0.7);
+
+        boolean froze = ThermalPhysics.tryFreezeMoistSurface(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos));
+
+        context.assertTrue(froze, "stored moisture and cold should be able to freeze into visible snow cover");
+        context.assertBlockPresent(Blocks.SNOW, WATER_POS);
+        context.assertTrue(context.getBlockState(WATER_POS).getValue(SnowLayerBlock.LAYERS) == 2,
+                "stored surface moisture should determine the number of snow layers formed");
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(supportPos), context.getBlockState(supportPos)) < 0.01,
+                "freezing surface moisture should consume the stored liquid water memory");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void storedHeatPreventsMoistSurfaceFreezing(GameTestHelper context) {
+        BlockPos supportPos = WATER_POS.below();
+        context.setBlock(supportPos, Blocks.DIRT);
+        context.setBlock(WATER_POS, Blocks.AIR);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                ThermalPhysics.surfaceMoistureForSnowLayer(context.getBlockState(supportPos)) * 2.0);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                0.7);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                0.5);
+
+        boolean froze = ThermalPhysics.tryFreezeMoistSurface(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos));
+
+        context.assertFalse(froze, "stored heat should stop a wet surface from freezing until it cools");
+        context.assertBlockPresent(Blocks.AIR, WATER_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void storedHeatMeltsSnowLayerIntoSurfaceMoisture(GameTestHelper context) {
         context.setBlock(WATER_POS.below(), Blocks.DIRT);
         context.setBlock(WATER_POS, Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, 1));
