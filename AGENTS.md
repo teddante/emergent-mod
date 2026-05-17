@@ -6,6 +6,12 @@ Emergent is a Minecraft mod about physically motivated, system-driven gameplay. 
 
 Keep the mod readable, compatible, and efficient. Use simple mechanisms that compose well before adding broad abstractions or config surfaces.
 
+## Continuous Process Improvement
+
+- If repeated work reveals a better project workflow, update this file with the generalized lesson. Keep additions short, durable, and broadly useful; avoid recording one-off fixes, temporary preferences, or details that belong in code comments, README usage notes, tests, or PR descriptions.
+- Prefer improvements that reduce future mistakes, tool calls, token use, manual testing, branch confusion, stale Minecraft-version assumptions, or unverifiable claims.
+- When adding process guidance, keep it current for the active Minecraft/Fabric toolchain and verify against local project reality before codifying it.
+
 ## Implementation Principles
 
 - Use vanilla mechanics, APIs, tags, registries, and block/entity behavior wherever practical.
