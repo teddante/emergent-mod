@@ -271,6 +271,19 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void trafficWearUsesContactAreaAndBodyHeightUnits(GameTestHelper context) {
+        assertClose(
+                EnvironmentalExposure.trafficWearFromContact(1.0, 1.0, 1.8),
+                1.8,
+                "one metre of travel over one square metre should scale by body-height pressure proxy");
+        assertClose(
+                EnvironmentalExposure.trafficWearFromContact(2.0, 0.25, 1.0),
+                0.5,
+                "traffic wear should scale with partial block contact area");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void wetTrafficCompactsSoonerThanDryTraffic(GameTestHelper context) {
         BlockPos wetPos = TEST_POS;
         BlockPos dryPos = TEST_POS.relative(Direction.EAST, 2);
@@ -416,6 +429,12 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.assertTrue(context.getBlockState(wirePos).getValue(RedStoneWireBlock.POWER) == 0,
                 "water should short powered conductive neighbors");
         context.succeed();
+    }
+
+    private static void assertClose(double actual, double expected, String message) {
+        if (Math.abs(actual - expected) > 1.0E-6) {
+            throw new AssertionError(message + ": " + actual + " != " + expected);
+        }
     }
 
     @Override

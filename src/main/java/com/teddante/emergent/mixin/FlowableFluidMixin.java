@@ -462,7 +462,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                         world,
                         pos,
                         world.getBlockState(pos),
-                        Math.min(0.95, waterAmount / 8.0));
+                        EnvironmentalExposure.standingWaterMoisture(waterAmount));
                 BlockPos surfacePos = pos.below();
                 BlockState surfaceState = world.getBlockState(surfacePos);
                 if (!surfaceState.isAir() && surfaceState.getFluidState().isEmpty()) {
@@ -470,7 +470,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                             world,
                             surfacePos,
                             surfaceState,
-                            Math.min(0.75, waterAmount / 10.0));
+                            EnvironmentalExposure.contactSurfaceMoisture(waterAmount));
                 }
             }
             MaterialReactions.shortConductiveNeighbors(world, pos, world.getRandom());

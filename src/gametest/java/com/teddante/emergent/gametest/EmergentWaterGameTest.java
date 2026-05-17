@@ -1,6 +1,7 @@
 package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FireWetness;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
@@ -22,6 +23,15 @@ import java.lang.reflect.Method;
 public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     private static final BlockPos WATER_POS = new BlockPos(2, 3, 2);
     private static final BlockPos BELOW_WATER_POS = WATER_POS.below();
+
+    @GameTest(maxTicks = 20)
+    public void fluidAmountsMapToMinecraftBlockScale(GameTestHelper context) {
+        assertClose(EnvironmentalExposure.fluidAmountCubicMeters(8), 1.0, "full source should be one cubic metre");
+        assertClose(EnvironmentalExposure.fluidAmountLiters(8), 1_000.0, "full source should be one thousand litres");
+        assertClose(EnvironmentalExposure.fluidAmountCubicMeters(1), 0.125, "one fluid amount should be one eighth cubic metre");
+        assertClose(EnvironmentalExposure.fluidAmountLiters(1), 125.0, "one fluid amount should be one hundred and twenty five litres");
+        context.succeed();
+    }
 
     @GameTest(maxTicks = 40)
     public void finiteWaterPrefersDownwardFlow(GameTestHelper context) {
@@ -385,6 +395,12 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     private static int fluidAmount(GameTestHelper context, BlockPos pos, Fluid fluid) {
         FluidState fluidState = context.getBlockState(pos).getFluidState();
         return fluidState.getType().isSame(fluid) ? fluidState.getAmount() : 0;
+    }
+
+    private static void assertClose(double actual, double expected, String message) {
+        if (Math.abs(actual - expected) > 1.0E-6) {
+            throw new AssertionError(message + ": " + actual + " != " + expected);
+        }
     }
 
     @Override

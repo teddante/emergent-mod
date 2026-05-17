@@ -10,14 +10,58 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 public final class EnvironmentalExposure {
+    public static final double BLOCK_VOLUME_CUBIC_METERS = 1.0;
+    public static final double LITERS_PER_CUBIC_METER = 1_000.0;
+    public static final int FULL_FLUID_BLOCK_AMOUNT = 8;
+    public static final double FLUID_AMOUNT_CUBIC_METERS = BLOCK_VOLUME_CUBIC_METERS / FULL_FLUID_BLOCK_AMOUNT;
+    public static final double FLUID_AMOUNT_LITERS = LITERS_PER_CUBIC_METER / FULL_FLUID_BLOCK_AMOUNT;
     private static final double MAX_MOISTURE = 1.0;
+    private static final double MAX_STANDING_WATER_MOISTURE = 0.95;
+    private static final double MAX_CONTACT_SURFACE_MOISTURE = 0.75;
     private static final double MOISTURE_DECAY_PER_TICK = 0.001;
     private static final double HEAT_DECAY_PER_TICK = 0.02;
     private static final double HEAT_DRYING_RATE = 0.08;
     private static final double WATER_COOLING_RATE = 1.5;
+    private static final double HYDRAULIC_WEAR_PER_CUBIC_METER = FULL_FLUID_BLOCK_AMOUNT;
+    private static final double HYDRAULIC_MOISTURE_PER_WEAR_UNIT = 1.0 / 32.0;
     private static final Map<ServerLevel, Map<Long, ExposureEntry>> EXPOSURES = new WeakHashMap<>();
 
     private EnvironmentalExposure() {
+    }
+
+    public static double fluidAmountCubicMeters(int fluidAmount) {
+        return Math.max(0, fluidAmount) * FLUID_AMOUNT_CUBIC_METERS;
+    }
+
+    public static double fluidAmountLiters(int fluidAmount) {
+        return fluidAmountCubicMeters(fluidAmount) * LITERS_PER_CUBIC_METER;
+    }
+
+    public static double standingWaterMoisture(int waterAmount) {
+        return Math.min(MAX_STANDING_WATER_MOISTURE, fluidAmountCubicMeters(waterAmount) / BLOCK_VOLUME_CUBIC_METERS);
+    }
+
+    public static double contactSurfaceMoisture(int waterAmount) {
+        return Math.min(MAX_CONTACT_SURFACE_MOISTURE, fluidAmountCubicMeters(waterAmount) / BLOCK_VOLUME_CUBIC_METERS * 0.8);
+    }
+
+    public static double hydraulicWearFromMovedWater(int movedAmount, double gravityFactor, double pressureFactor) {
+        return fluidAmountCubicMeters(movedAmount) * HYDRAULIC_WEAR_PER_CUBIC_METER * gravityFactor * pressureFactor;
+    }
+
+    public static double surfaceMoistureFromHydraulicWear(double hydraulicWear) {
+        return Math.min(0.35, Math.max(0.0, hydraulicWear) * HYDRAULIC_MOISTURE_PER_WEAR_UNIT);
+    }
+
+    public static double trafficWearFromContact(
+            double horizontalDistanceMeters,
+            double contactAreaSquareMeters,
+            double bodyHeightMeters) {
+        if (horizontalDistanceMeters <= 0.0 || contactAreaSquareMeters <= 0.0 || bodyHeightMeters <= 0.0) {
+            return 0.0;
+        }
+
+        return horizontalDistanceMeters * Math.max(0.05, contactAreaSquareMeters) * Math.max(0.35, bodyHeightMeters);
     }
 
     public static double addHeat(ServerLevel world, BlockPos pos, BlockState state, double heat) {

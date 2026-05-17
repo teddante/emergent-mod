@@ -57,7 +57,7 @@ public final class TrafficWearPhysics {
 
                 BlockPos pos = new BlockPos(x, y, z);
                 BlockState state = world.getBlockState(pos);
-                double impulse = horizontalMovement * Math.max(0.05, contactArea) * bodyHeight;
+                double impulse = EnvironmentalExposure.trafficWearFromContact(horizontalMovement, contactArea, bodyHeight);
                 changedAny |= applyTraffic(world, pos, state, impulse);
             }
         }

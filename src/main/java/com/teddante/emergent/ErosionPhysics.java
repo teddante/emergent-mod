@@ -69,7 +69,7 @@ public class ErosionPhysics {
 
         double gravityFactor = direction == Direction.DOWN ? 1.75 : 1.0;
         double sourcePressure = fluidState.isSource() ? 1.25 : 1.0;
-        double impulse = movedAmount * gravityFactor * sourcePressure;
+        double impulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, gravityFactor, sourcePressure);
         attemptDirectionalErosion(world, fluidPos, direction, impulse);
     }
 
@@ -137,7 +137,7 @@ public class ErosionPhysics {
             return;
         }
 
-        EnvironmentalExposure.addMoisture(world, pos, state, Math.min(0.35, energy / 32.0));
+        EnvironmentalExposure.addMoisture(world, pos, state, EnvironmentalExposure.surfaceMoistureFromHydraulicWear(energy));
         double threshold = erosionThreshold(world, pos, state, hardness);
         double accumulatedWear = addWear(world, pos, state, energy);
         if (accumulatedWear >= threshold) {
