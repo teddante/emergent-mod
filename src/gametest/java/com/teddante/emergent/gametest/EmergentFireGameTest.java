@@ -1,6 +1,7 @@
 package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.DynamicExperience;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ExplosionEnvironmentPhysics;
 import com.teddante.emergent.FireWetness;
@@ -17,6 +18,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.level.block.Blocks;
@@ -1186,6 +1188,35 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
             context.assertBlockPresent(Blocks.DIRT, TEST_POS);
             context.succeed();
         });
+    }
+
+    @GameTest(maxTicks = 20)
+    public void dynamicExperienceScalesWithBodyEnergy(GameTestHelper context) {
+        int cowEnergy = DynamicExperience.baseExperienceFromMeasurements(10.0, 5.0, 0.0, 0.0);
+        int zombieEnergy = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
+        int ravagerEnergy = DynamicExperience.baseExperienceFromMeasurements(100.0, 40.0, 0.0, 0.0);
+
+        context.assertTrue(cowEnergy > 0, "living body energy should produce experience");
+        context.assertTrue(zombieEnergy > cowEnergy,
+                "a tougher living body should release more experience than a small passive body");
+        context.assertTrue(ravagerEnergy > zombieEnergy,
+                "a high-health massive entity should release substantially more experience");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void livingEntityExperienceUsesDynamicFormula(GameTestHelper context) {
+        LivingEntity zombie = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.above()));
+        LivingEntity ravager = context.spawn(EntityType.RAVAGER, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST, 2).above()));
+
+        int zombieReward = zombie.getExperienceReward(context.getLevel(), null);
+        int ravagerReward = ravager.getExperienceReward(context.getLevel(), null);
+
+        context.assertTrue(zombieReward == DynamicExperience.rewardAfterVanillaProcessing(zombie, 5),
+                "the central vanilla experience query should use the dynamic physical formula");
+        context.assertTrue(ravagerReward > zombieReward,
+                "sculk catalysts and XP orbs should see more charge from a larger, tougher entity");
+        context.succeed();
     }
 
     @GameTest(maxTicks = 20)

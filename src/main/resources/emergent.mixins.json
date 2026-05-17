@@ -19,6 +19,7 @@
 		"AbstractMinecartImpactMixin",
 		"FallingBlockImpactMixin",
 		"LivingEntityImpactMixin",
+		"LivingEntityDynamicExperienceMixin",
 		"ExplosionMixin",
 		"VolatileInventoryMixin",
 		"CreeperInvoker",
