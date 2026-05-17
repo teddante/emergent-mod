@@ -48,6 +48,8 @@
   "emergent.config.unrestricted_enchantments.tooltip": "Allows mutually exclusive enchantments to coexist, such as Protection variants or Sharpness with Smite.",
   "emergent.config.boundless_brewing": "Boundless Brewing",
   "emergent.config.boundless_brewing.tooltip": "Lets redstone repeatedly extend potion duration and glowstone repeatedly raise potion strength.",
+  "emergent.tooltip.enchantment_energy.work": "Emergent stored work: %s",
+  "emergent.tooltip.enchantment_energy.application_work": "Emergent application work: %s",
   "tag.item.emergent.explosives": "Explosives",
   "tag.item.emergent.high_explosives": "High Explosives",
   "tag.item.emergent.low_explosives": "Low Explosives",

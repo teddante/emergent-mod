@@ -114,6 +114,7 @@ Optional systems can relax selected vanilla limits:
 - Matching enchantments can combine past vanilla max levels by combining both inputs' stored enchantment work budget.
 - Repair enchantments above their vanilla cap can output proportionally more durability repair per XP point.
 - Constant ignite enchantments above their vanilla cap can output proportionally longer burn duration when they have stored extra enchantment work.
+- Advanced item tooltips show an enchanted item or book's Emergent stored work when Boundless Enchanting is enabled.
 - Mutually exclusive enchantments can coexist.
 - Redstone can repeatedly extend potion duration.
 - Glowstone can repeatedly raise potion strength.
