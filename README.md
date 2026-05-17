@@ -223,9 +223,9 @@ Headless profiler run:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev_perf.ps1 -SlowMs 10 -Top 12
 ```
 
-This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals, finite-fluid diagnosis, and chunk hotspots. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks, or `-ActiveFluidBudget 64 -ActiveFluidChunkBudget 32 -RequireBudgetDeferrals` to verify the finite-fluid deferral path under controlled pressure.
+This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals, finite-fluid diagnosis, and chunk hotspots. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks, or `-ActiveFluidBudget 64 -ActiveFluidChunkBudget 32 -RequireBudgetDeferrals -RequireChunkBudgetDeferrals` to verify the finite-fluid deferral path under controlled pressure.
 
-The opt-in stress scenarios currently exercise stable finite-fluid wakeups, multi-chunk finite-water settling, broad shallow finite-water shelves, sloped finite-water channels, queued surface-weather samples, repeated fire-reaction scans, traffic contact patches, and lava/water thermal reactions.
+The opt-in stress scenarios currently exercise stable finite-fluid wakeups, multi-chunk finite-water settling, broad shallow finite-water shelves, concentrated one-chunk finite-water hotspots, sloped finite-water channels, queued surface-weather samples, repeated fire-reaction scans, traffic contact patches, and lava/water thermal reactions.
 
 ### Profiling In Prism
 

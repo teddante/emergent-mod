@@ -5,6 +5,7 @@ param(
     [int]$ActiveFluidBudget = 0,
     [int]$ActiveFluidChunkBudget = 0,
     [switch]$RequireBudgetDeferrals,
+    [switch]$RequireChunkBudgetDeferrals,
     [switch]$SkipStressScenarios
 )
 
@@ -215,6 +216,9 @@ if ($ActiveFluidChunkBudget -gt 0) {
 if ($RequireBudgetDeferrals) {
     $summary.Add("Required budget deferrals: True")
 }
+if ($RequireChunkBudgetDeferrals) {
+    $summary.Add("Required chunk budget deferrals: True")
+}
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 if ($testPassLine.Count -gt 0) {
     $summary.Add("Tests: $($testPassLine[-1])")
@@ -268,4 +272,8 @@ if ($exitCode -ne 0) {
 
 if ($RequireBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_deferrals") -le 0) {
     throw "Expected finite fluid budget deferrals, but none were recorded. Full log: $logPath"
+}
+
+if ($RequireChunkBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_chunk_deferrals") -le 0) {
+    throw "Expected finite fluid chunk budget deferrals, but none were recorded. Full log: $logPath"
 }
