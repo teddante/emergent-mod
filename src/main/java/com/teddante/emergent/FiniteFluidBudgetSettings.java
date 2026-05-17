@@ -3,8 +3,8 @@ package com.teddante.emergent;
 public final class FiniteFluidBudgetSettings {
     public static final String ACTIVE_TICK_BUDGET_PROPERTY = "emergent.finiteFluid.activeTickBudget";
     public static final String ACTIVE_CHUNK_TICK_BUDGET_PROPERTY = "emergent.finiteFluid.activeChunkTickBudget";
-    private static final int DEFAULT_ACTIVE_TICK_BUDGET = 1024;
-    private static final int DEFAULT_ACTIVE_CHUNK_TICK_BUDGET = 256;
+    private static final int DEFAULT_ACTIVE_TICK_BUDGET = 512;
+    private static final int DEFAULT_ACTIVE_CHUNK_TICK_BUDGET = 128;
     private static final int DEFAULT_BUDGET_DEFER_SPREAD_TICKS = 4;
 
     private FiniteFluidBudgetSettings() {
