@@ -8,8 +8,10 @@ The active work is split across stacked draft PRs:
 
 - PR #3, `fix/water-erosion-physics`, integrates the broad environmental physics layer: shared runtime state for moisture, heat, cold, ash, sediment, traffic wear, structural stress, fluid flow, erosion, fire aftermath, rain puddles, plant growth, and impact/thermal/explosion interactions.
 - PR #4, `perf-environmental-scheduler`, is stacked on PR #3 and focuses on slow environmental scheduling, finite-fluid quiescence, profiling, and headless performance checks.
+- PR #5, `feature/experience-energy-model`, is stacked on PR #4 and introduces raw XP points as the shared experience-energy quantity used by dynamic entity rewards and the vanilla sculk catalyst path.
+- PR #6, `perf/finite-fluid-budget`, is stacked on PR #4 and adds deterministic active finite-fluid tick budgeting plus diagnostics for budget claims and deferrals.
 
-No more unrelated features should be added to either PR. New gameplay systems should move to a focused branch from updated `main` once the current stack is merged, unless the work is directly required to stabilize the existing environmental integration.
+No more unrelated features should be added to PR #3 or PR #4. Performance stabilization can continue on PR #6, and experience-energy follow-through can continue in focused branches stacked on PR #5. New unrelated gameplay systems should move to a focused branch from updated `main` once the current stack is merged, unless the work is directly required to stabilize the existing environmental integration.
 
 ## Implemented Or In Draft
 
@@ -28,6 +30,7 @@ No more unrelated features should be added to either PR. New gameplay systems sh
 - Moisture/ash-assisted rain growth.
 - Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
 - Opt-in Emergent tick profiler with finite-fluid water/lava counters, active-schedule counters, quiet schedule/tick-skip reason counters, heated block summaries, finite-fluid chunk hotspots, and traffic contact-cell hotspots when traffic becomes a slow contributor.
+- Deterministic active finite-fluid tick budget that defers excess active cells instead of dropping work, with profiler counters for budget claims and deferrals.
 - Headless stress/perf GameTests, compact `scripts/dev_perf.ps1` summaries, and saved-log analysis via `scripts/analyze_profiler_log.ps1` covering stable fluids, multi-chunk finite water, sloped finite-water channels, surface weather, fire scans, traffic contact patches, lava/water thermal reactions, finite-fluid active/quiet diagnosis, and `Can't keep up!` correlation.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
@@ -37,7 +40,7 @@ No more unrelated features should be added to either PR. New gameplay systems sh
 ## High-Priority Next Work
 
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
-- Use finite-fluid chunk hotspot output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, or genuinely active fluid movement.
+- Use finite-fluid chunk hotspot and budget-deferral output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, genuinely active fluid movement, or an active-work budget that needs tuning.
 - Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially larger player-made fluid systems and any Prism logs that do not resemble the current basin/channel stress cases.
 - Design the experience-energy layer so XP, sculk charge, enchanting, anvils, books, and enchantment output all use one shared quantity instead of unrelated costs.
 - Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.

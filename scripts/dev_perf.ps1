@@ -3,6 +3,7 @@ param(
     [int]$Top = 12,
     [int]$WarmupTicks = 20,
     [int]$ActiveFluidBudget = 0,
+    [switch]$RequireBudgetDeferrals,
     [switch]$SkipStressScenarios
 )
 
@@ -194,6 +195,9 @@ $summary.Add("Stress scenarios: $stressScenariosEnabled")
 if ($ActiveFluidBudget -gt 0) {
     $summary.Add("Forced active fluid budget: $ActiveFluidBudget")
 }
+if ($RequireBudgetDeferrals) {
+    $summary.Add("Required budget deferrals: True")
+}
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 if ($testPassLine.Count -gt 0) {
     $summary.Add("Tests: $($testPassLine[-1])")
@@ -243,4 +247,8 @@ $summary | ForEach-Object { Write-Host $_ }
 
 if ($exitCode -ne 0) {
     throw "Headless perf run failed with exit code $exitCode. Full log: $logPath"
+}
+
+if ($RequireBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_deferrals") -le 0) {
+    throw "Expected finite fluid budget deferrals, but none were recorded. Full log: $logPath"
 }
