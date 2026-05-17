@@ -223,7 +223,7 @@ Headless profiler run:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev_perf.ps1 -SlowMs 10 -Top 12
 ```
 
-This runs the server GameTests without opening Minecraft, enables the Emergent profiler, saves the full log under `build\reports\emergent-profiler`, and prints only the worst profiler ticks plus counter totals. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation.
+This runs the server GameTests without opening Minecraft, enables the Emergent profiler, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation.
 
 ### Profiling In Prism
 

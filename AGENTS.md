@@ -33,6 +33,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 - Prefer repeatable command-line validation before manual Minecraft testing.
 - Run `scripts/dev_smoke.ps1` for build, config/resource hygiene, jar inspection, server GameTests, and optional Prism copy.
 - Use `scripts/dev_perf.ps1` for token-efficient headless profiler runs. It should save full logs under `build/reports/emergent-profiler` and print only the compact summary needed to diagnose subsystem cost.
+- Treat first-tick profiler spikes as warmup unless they reproduce after warmup or in a real loaded world.
 - Put deterministic gameplay and physics coverage in `src/gametest` when behavior can be checked without a manual client session.
 - Tests should assert real invariants, not implementation trivia. Good tests cover conservation, thresholds, state transitions, negative cases, and cross-system interactions.
 - Manual in-game validation is still needed for feel, pacing, visual clarity, and large-world performance.
@@ -45,6 +46,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 - Large integration PRs are acceptable while draft when systems are tightly coupled, but stop adding unrelated features once the scope starts drifting.
 - Commit coherent working chunks after verification when practical. Use clear commit messages. Do not tag every commit.
 - Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required manual validation is done.
+- Do not block every inner-loop push on `gh pr checks --watch`. Prefer local smoke/perf gates first, then check CI synchronously when build tooling changed, a failure is suspected, the PR is being readied, or the user needs a definitive remote status now.
 - Use issues for reproducible bugs and concrete feature ideas with versions, logs, mod lists, and reproduction steps when relevant.
 - Use SemVer in `gradle.properties`: patch for compatible fixes/tuning, minor for compatible feature systems, major for breaking config/data behavior or dropping a supported Minecraft line. `0.y.z` still means early development.
 - Only tag tested public builds. Releases should come from annotated `vMAJOR.MINOR.PATCH` tags after smoke checks and release notes are ready.

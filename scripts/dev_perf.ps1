@@ -1,6 +1,7 @@
 param(
     [int]$SlowMs = 10,
-    [int]$Top = 12
+    [int]$Top = 12,
+    [int]$WarmupTicks = 20
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,6 +20,13 @@ function Get-ProfilerValue($Line) {
         return [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
     }
     return 0.0
+}
+
+function Get-ProfilerTick($Line) {
+    if ($Line -match " at tick ([0-9]+) ") {
+        return [long]$Matches[1]
+    }
+    return [long]::MaxValue
 }
 
 function Add-Counters($Line, [hashtable]$Totals) {
@@ -63,7 +71,8 @@ try {
 }
 
 $logLines = Get-Content -Path $logPath
-$profilerLines = @($logLines | Where-Object { $_ -like "*Emergent profiler:*" })
+$allProfilerLines = @($logLines | Where-Object { $_ -like "*Emergent profiler:*" })
+$profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt $WarmupTicks })
 $testPassLine = @($logLines | Where-Object { $_ -like "*required tests passed*" } | Select-Object -Last 1)
 $failureLines = @($logLines | Where-Object {
     $_ -like "*BUILD FAILED*" -or
@@ -85,7 +94,8 @@ $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent headless perf summary")
 $summary.Add("Log: $logPath")
 $summary.Add("Profiler slowMs: $SlowMs")
-$summary.Add("Profiler lines: $($profilerLines.Count)")
+$summary.Add("Warmup ticks ignored: $WarmupTicks")
+$summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 if ($testPassLine.Count -gt 0) {
     $summary.Add("Tests: $($testPassLine[-1])")
 }
