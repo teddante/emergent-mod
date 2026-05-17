@@ -39,7 +39,10 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
+import net.minecraft.world.level.block.entity.SculkCatalystBlockEntity;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.gameevent.BlockPositionSource;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -1434,6 +1437,47 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void sculkCatalystChargeUsesDynamicExperienceEnergy(GameTestHelper context) {
+        BlockPos catalystPos = TEST_POS;
+        context.setBlock(catalystPos, Blocks.SCULK_CATALYST);
+
+        LivingEntity zombie = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.above()));
+        LivingEntity ravager = context.spawn(EntityType.RAVAGER, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST, 2).above()));
+        int zombieReward = zombie.getExperienceReward(context.getLevel(), null);
+        int ravagerReward = ravager.getExperienceReward(context.getLevel(), null);
+
+        SculkCatalystBlockEntity.CatalystListener zombieListener = new SculkCatalystBlockEntity.CatalystListener(
+                Blocks.SCULK_CATALYST.defaultBlockState(),
+                new BlockPositionSource(context.absolutePos(catalystPos)));
+        SculkCatalystBlockEntity.CatalystListener ravagerListener = new SculkCatalystBlockEntity.CatalystListener(
+                Blocks.SCULK_CATALYST.defaultBlockState(),
+                new BlockPositionSource(context.absolutePos(catalystPos)));
+
+        boolean zombieHandled = zombieListener.handleGameEvent(
+                context.getLevel(),
+                GameEvent.ENTITY_DIE,
+                GameEvent.Context.of(zombie),
+                zombie.position());
+        boolean ravagerHandled = ravagerListener.handleGameEvent(
+                context.getLevel(),
+                GameEvent.ENTITY_DIE,
+                GameEvent.Context.of(ravager),
+                ravager.position());
+
+        context.assertTrue(zombieHandled && ravagerHandled,
+                "sculk catalyst listeners should consume living death events");
+        context.assertTrue(totalSculkCharge(zombieListener) == zombieReward,
+                "sculk catalyst charge should use the same dynamic XP-energy reward as dropped orbs");
+        context.assertTrue(totalSculkCharge(ravagerListener) == ravagerReward,
+                "larger dynamic XP rewards should become matching sculk spread charge");
+        context.assertTrue(ravagerReward > zombieReward,
+                "a larger, tougher entity should feed more sculk charge than a zombie");
+        context.assertTrue(zombie.wasExperienceConsumed() && ravager.wasExperienceConsumed(),
+                "sculk catalysts should mark the living death energy as consumed to prevent duplicate XP drops");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void wideTrafficCompactsWholeContactPatch(GameTestHelper context) {
         BlockPos base = TEST_POS;
         for (int x = 0; x <= 1; x++) {
@@ -1593,6 +1637,12 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         if (Math.abs(actual - expected) > 1.0E-6) {
             throw new AssertionError(message + ": " + actual + " != " + expected);
         }
+    }
+
+    private static int totalSculkCharge(SculkCatalystBlockEntity.CatalystListener listener) {
+        return listener.getSculkSpreader().getCursors().stream()
+                .mapToInt(cursor -> cursor.getCharge())
+                .sum();
     }
 
     @Override
