@@ -1,8 +1,14 @@
 package com.teddante.emergent;
 
+import it.unimi.dsi.fastutil.objects.Object2IntMap;
+import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 /**
  * Shared XP-as-energy helpers.
@@ -123,6 +129,49 @@ public final class ExperienceEnergy {
         int currentRawPoints = rawPointsAtLevelProgress(currentLevel, currentProgress);
         int rawCost = rawPointsForWholeLevelCost(currentLevel, levelCost);
         return levelProgressForRawPoints(Math.max(0, currentRawPoints - rawCost));
+    }
+
+    public static int enchantmentLevelBudget(ItemStack stack) {
+        return enchantmentLevelBudget(EnchantmentHelper.getEnchantmentsForCrafting(stack));
+    }
+
+    public static int enchantmentLevelBudget(ItemEnchantments enchantments) {
+        return enchantmentApplicationLevelCost(enchantments, false);
+    }
+
+    public static int enchantmentApplicationLevelCost(ItemStack stack) {
+        return enchantmentApplicationLevelCost(
+                EnchantmentHelper.getEnchantmentsForCrafting(stack),
+                stack.has(DataComponents.STORED_ENCHANTMENTS));
+    }
+
+    public static int enchantmentApplicationLevelCost(ItemEnchantments enchantments, boolean storedBookCost) {
+        long total = 0L;
+        for (Object2IntMap.Entry<Holder<Enchantment>> entry : enchantments.entrySet()) {
+            int level = Math.max(0, entry.getIntValue());
+            int fee = Math.max(0, entry.getKey().value().getAnvilCost());
+            if (storedBookCost) {
+                fee = Math.max(1, fee / 2);
+            }
+            total += (long) fee * level;
+            if (total >= Integer.MAX_VALUE) {
+                return Integer.MAX_VALUE;
+            }
+        }
+
+        return (int) total;
+    }
+
+    public static int enchantmentEnergyBudgetPoints(ItemStack stack, int currentLevel) {
+        return enchantmentEnergyBudgetPoints(EnchantmentHelper.getEnchantmentsForCrafting(stack), currentLevel);
+    }
+
+    public static int enchantmentEnergyBudgetPoints(ItemEnchantments enchantments, int currentLevel) {
+        return rawPointsForWholeLevelCost(currentLevel, enchantmentLevelBudget(enchantments));
+    }
+
+    public static int enchantmentApplicationEnergyCostPoints(ItemStack stack, int currentLevel) {
+        return rawPointsForWholeLevelCost(currentLevel, enchantmentApplicationLevelCost(stack));
     }
 
     public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {

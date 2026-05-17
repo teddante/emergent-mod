@@ -102,7 +102,7 @@ Weather and climate affect the same shared environmental memory.
 
 ### Dynamic XP And Sculk
 
-Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. The model treats raw XP points as the shared experience-energy unit and keeps vanilla levels as the display/storage curve. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value. With boundless enchanting enabled, enchanting table and anvil level costs are spent as equivalent raw XP points using the same vanilla nonlinear level curve instead of treating every level label as equal energy.
+Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. The model treats raw XP points as the shared experience-energy unit and keeps vanilla levels as the display/storage curve. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value. With boundless enchanting enabled, enchanting table and anvil level costs are spent as equivalent raw XP points using the same vanilla nonlinear level curve instead of treating every level label as equal energy. Enchanted items and books also expose an energy budget derived from vanilla enchantment anvil costs and levels; enchanted books keep vanilla's half-cost application rule.
 
 Sculk shrieker summoning can also be widened beyond vanilla's default restrictions.
 

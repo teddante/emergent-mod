@@ -16,12 +16,20 @@ import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.CropBlock;
@@ -1255,6 +1263,53 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "spending a whole-level cost as raw XP should preserve fractional progress energy within Minecraft's progress-bar precision");
         context.assertTrue(after.level() == 27 && after.progress() > 0.0F,
                 "half a high-level bar should remain as progress after a three-level raw XP spend");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void enchantmentEnergyBudgetUsesVanillaAnvilCosts(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Holder<Enchantment> mending = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MENDING);
+        ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+        mutable.set(sharpness, 3);
+        mutable.set(mending, 1);
+        ItemEnchantments enchantments = mutable.toImmutable();
+
+        int expectedLevelBudget = sharpness.value().getAnvilCost() * 3 + mending.value().getAnvilCost();
+        int levelBudget = ExperienceEnergy.enchantmentLevelBudget(enchantments);
+        int rawBudget = ExperienceEnergy.enchantmentEnergyBudgetPoints(enchantments, 30);
+
+        context.assertTrue(levelBudget == expectedLevelBudget,
+                "enchantment energy budget should use vanilla anvil costs as the rarity/work measure");
+        context.assertTrue(rawBudget == ExperienceEnergy.rawPointsForWholeLevelCost(30, expectedLevelBudget),
+                "enchantment budget should convert visible work levels through the shared raw-XP curve");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void enchantedBooksUseVanillaHalfCostForApplicationEnergy(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
+        EnchantmentHelper.updateEnchantments(sword, enchantments -> enchantments.set(sharpness, 4));
+        EnchantmentHelper.updateEnchantments(book, enchantments -> enchantments.set(sharpness, 4));
+
+        int itemCost = ExperienceEnergy.enchantmentApplicationLevelCost(sword);
+        int bookCost = ExperienceEnergy.enchantmentApplicationLevelCost(book);
+
+        context.assertTrue(itemCost == sharpness.value().getAnvilCost() * 4,
+                "applied item enchantment work should use the full vanilla anvil fee");
+        context.assertTrue(bookCost == Math.max(1, sharpness.value().getAnvilCost() / 2) * 4,
+                "stored book application work should use vanilla's half-cost enchanted-book rule");
+        context.assertTrue(ExperienceEnergy.enchantmentApplicationEnergyCostPoints(book, 30)
+                == ExperienceEnergy.rawPointsForWholeLevelCost(30, bookCost),
+                "book application work should convert through the same raw-XP energy curve");
         context.succeed();
     }
 
