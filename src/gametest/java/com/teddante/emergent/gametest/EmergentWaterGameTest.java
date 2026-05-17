@@ -520,6 +520,55 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void frostWedgingStressFollowsPorousMaterialPhysics(GameTestHelper context) {
+        double frozenMoisture = ThermalPhysics.surfaceMoistureForSnowLayer(Blocks.STONE.defaultBlockState()) * 2.0;
+        double stoneStress = MaterialPhysicsProfiles.frostWedgingStress(Blocks.STONE.defaultBlockState(), frozenMoisture);
+        double sandstoneStress = MaterialPhysicsProfiles.frostWedgingStress(Blocks.SANDSTONE.defaultBlockState(), frozenMoisture);
+        double woodStress = MaterialPhysicsProfiles.frostWedgingStress(Blocks.OAK_LOG.defaultBlockState(), frozenMoisture);
+
+        context.assertTrue(stoneStress > 0.0,
+                "freezing water in rock pores should add structural stress");
+        context.assertTrue(
+                sandstoneStress / MaterialPhysicsProfiles.structuralStressThreshold(Blocks.SANDSTONE.defaultBlockState())
+                        > stoneStress / MaterialPhysicsProfiles.structuralStressThreshold(Blocks.STONE.defaultBlockState()),
+                "more porous sedimentary rock should take a larger fraction of its fracture threshold than dense stone");
+        context.assertTrue(woodStress == 0.0,
+                "ordinary wood should not use the rock frost-wedging fracture path");
+        context.assertTrue(MaterialPhysicsProfiles.frostWedgingStress(Blocks.STONE.defaultBlockState(), 0.0) == 0.0,
+                "frost wedging should require frozen moisture");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void freezingMoistRockAddsStructuralStress(GameTestHelper context) {
+        BlockPos supportPos = WATER_POS.below();
+        context.setBlock(supportPos, Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.AIR);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                ThermalPhysics.surfaceMoistureForSnowLayer(context.getBlockState(supportPos)) * 2.0);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos),
+                0.7);
+
+        boolean froze = ThermalPhysics.tryFreezeMoistSurface(
+                context.getLevel(),
+                context.absolutePos(supportPos),
+                context.getBlockState(supportPos));
+
+        context.assertTrue(froze, "stored moisture and cold should freeze on exposed rock");
+        context.assertBlockPresent(Blocks.SNOW, WATER_POS);
+        context.assertTrue(
+                EnvironmentalExposure.structuralStress(context.getLevel(), context.absolutePos(supportPos), context.getBlockState(supportPos)) > 0.0,
+                "frozen pore water should add rock stress through the shared structural memory");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void storedHeatPreventsMoistSurfaceFreezing(GameTestHelper context) {
         BlockPos supportPos = WATER_POS.below();
         context.setBlock(supportPos, Blocks.DIRT);

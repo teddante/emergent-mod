@@ -9,6 +9,7 @@ public final class MaterialPhysicsProfiles {
     private static final double GAME_MASS_KG_SCALE = 0.01;
     private static final double CHARRED_SURFACE_DEPTH_METERS = 0.02;
     private static final double WOOD_SURFACE_ASH_YIELD_FRACTION = 0.05;
+    private static final double ICE_EXPANSION_FRACTION = 0.09;
 
     private MaterialPhysicsProfiles() {
     }
@@ -141,6 +142,48 @@ public final class MaterialPhysicsProfiles {
                 || state.is(Blocks.STONE)
                 || state.is(Blocks.DEEPSLATE)) {
             return threshold * removedHeat * 0.18;
+        }
+
+        return 0.0;
+    }
+
+    public static double frostWedgingStress(BlockState state, double frozenMoisture) {
+        if (frozenMoisture <= 0.0 || state.isAir() || !state.getFluidState().isEmpty()) {
+            return 0.0;
+        }
+
+        double susceptibility = frostWedgingSusceptibility(state);
+        if (susceptibility <= 0.0) {
+            return 0.0;
+        }
+
+        double porePressure = Math.min(1.0, frozenMoisture * 8.0) * ICE_EXPANSION_FRACTION;
+        return structuralStressThreshold(state) * porePressure * susceptibility;
+    }
+
+    private static double frostWedgingSusceptibility(BlockState state) {
+        if (state.is(MaterialReactionTags.BRITTLE)) {
+            return 3.0;
+        }
+        if (state.is(Blocks.SANDSTONE)
+                || state.is(Blocks.RED_SANDSTONE)
+                || state.is(Blocks.CALCITE)
+                || state.is(Blocks.TUFF)
+                || state.is(Blocks.DRIPSTONE_BLOCK)) {
+            return 2.0;
+        }
+        if (state.is(MaterialReactionTags.ERODES_IN_WATER)
+                || state.is(Blocks.STONE)
+                || state.is(Blocks.COBBLESTONE)
+                || state.is(Blocks.DEEPSLATE)) {
+            return 1.2;
+        }
+        if (state.is(BlockTags.DIRT)
+                || state.is(BlockTags.GRASS_BLOCKS)
+                || state.is(BlockTags.SAND)
+                || state.is(BlockTags.MUD)
+                || state.is(BlockTags.BASE_STONE_OVERWORLD)) {
+            return 0.35;
         }
 
         return 0.0;

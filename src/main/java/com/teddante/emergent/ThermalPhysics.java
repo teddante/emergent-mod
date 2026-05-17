@@ -245,9 +245,15 @@ public final class ThermalPhysics {
             return false;
         }
 
+        double frozenMoisture = frozenLayers * moisturePerLayer;
         world.setBlockAndUpdate(snowPos, frozenState);
-        EnvironmentalExposure.removeMoisture(world, supportPos, supportState, frozenLayers * moisturePerLayer);
+        EnvironmentalExposure.removeMoisture(world, supportPos, supportState, frozenMoisture);
         EnvironmentalExposure.removeCold(world, supportPos, supportState, frozenLayers * FREEZE_COLD_PER_SNOW_LAYER);
+        double frostStress = MaterialPhysicsProfiles.frostWedgingStress(supportState, frozenMoisture);
+        if (frostStress > 0.0) {
+            EnvironmentalExposure.addStructuralStress(world, supportPos, supportState, frostStress);
+            StructuralStressPhysics.tryResolve(world, supportPos, world.getBlockState(supportPos));
+        }
         return true;
     }
 
