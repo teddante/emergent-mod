@@ -26,6 +26,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 
 - Prefer repeatable command-line validation before manual Minecraft testing.
 - Run `scripts/dev_smoke.ps1` for build, config/resource hygiene, jar inspection, server GameTests, and optional Prism copy.
+- Use `scripts/dev_perf.ps1` for token-efficient headless profiler runs. It should save full logs under `build/reports/emergent-profiler` and print only the compact summary needed to diagnose subsystem cost.
 - Put deterministic gameplay and physics coverage in `src/gametest` when behavior can be checked without a manual client session.
 - Tests should assert real invariants, not implementation trivia. Good tests cover conservation, thresholds, state transitions, negative cases, and cross-system interactions.
 - Manual in-game validation is still needed for feel, pacing, visual clarity, and large-world performance.
