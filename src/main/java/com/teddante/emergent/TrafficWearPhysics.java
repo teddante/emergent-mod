@@ -71,6 +71,8 @@ public final class TrafficWearPhysics {
                 }
 
                 BlockPos pos = new BlockPos(x, y, z);
+                EmergentProfiler.count(world, "traffic_contact_cells", 1);
+                EmergentProfiler.recordChunk(world, EmergentProfiler.TRAFFIC, pos);
                 BlockState state = world.getBlockState(pos);
                 double impulse = EnvironmentalExposure.trafficWearFromContact(horizontalMovement, contactArea, bodyHeight);
                 changedAny |= applyTraffic(world, pos, state, impulse);

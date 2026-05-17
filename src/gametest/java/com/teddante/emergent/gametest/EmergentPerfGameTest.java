@@ -2,20 +2,24 @@ package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalScheduler;
+import com.teddante.emergent.TrafficWearPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FireBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.phys.AABB;
 
 import java.lang.reflect.Method;
 
 public class EmergentPerfGameTest implements CustomTestMethodInvoker {
     private static final boolean ENABLED = Boolean.getBoolean("emergent.perfScenarios");
 
-    @GameTest(maxTicks = 100)
+    @GameTest(maxTicks = 100, padding = 6)
     public void stressStableFiniteFluidWakeups(GameTestHelper context) {
         if (!ENABLED) {
             context.succeed();
@@ -57,7 +61,7 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         });
     }
 
-    @GameTest(maxTicks = 180)
+    @GameTest(maxTicks = 180, padding = 20)
     public void stressLargeSettlingFiniteWaterField(GameTestHelper context) {
         if (!ENABLED) {
             context.succeed();
@@ -168,7 +172,7 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         context.runAtTickTime(170, context::succeed);
     }
 
-    @GameTest(maxTicks = 80)
+    @GameTest(maxTicks = 80, padding = 8)
     public void stressSurfaceWeatherQueue(GameTestHelper context) {
         if (!ENABLED) {
             context.succeed();
@@ -195,7 +199,7 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         });
     }
 
-    @GameTest(maxTicks = 100)
+    @GameTest(maxTicks = 100, padding = 6)
     public void stressFireReactionScans(GameTestHelper context) {
         if (!ENABLED) {
             context.succeed();
@@ -229,6 +233,109 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
 
         context.runAtTickTime(70, () -> {
             context.assertBlockPresent(Blocks.FIRE, origin.above());
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80, padding = 8)
+    public void stressTrafficWearContactPatches(GameTestHelper context) {
+        if (!ENABLED) {
+            context.succeed();
+            return;
+        }
+
+        BlockPos origin = new BlockPos(2, 3, 2);
+        int size = 10;
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                BlockPos pos = origin.offset(x, 0, z);
+                Block block = Math.floorMod(x + z, 4) == 0 ? Blocks.MUD
+                        : Math.floorMod(x * 3 + z, 5) == 0 ? Blocks.FARMLAND
+                        : Blocks.GRASS_BLOCK;
+                context.setBlock(pos, block);
+                context.setBlock(pos.above(), Blocks.AIR);
+            }
+        }
+
+        for (int tick = 1; tick <= 36; tick++) {
+            final int step = tick;
+            context.runAtTickTime(tick, () -> {
+                for (int lane = 0; lane < 4; lane++) {
+                    int x = Math.floorMod(step + lane * 2, size - 2);
+                    int z = Math.floorMod(step * 2 + lane * 3, size - 2);
+                    BlockPos base = context.absolutePos(origin.offset(x, 0, z));
+                    AABB footprint = new AABB(
+                            base.getX(),
+                            base.getY() + 1.0,
+                            base.getZ(),
+                            base.getX() + 2.4,
+                            base.getY() + 2.8,
+                            base.getZ() + 1.8);
+                    TrafficWearPhysics.applyContactPatchTraffic(context.getLevel(), footprint, 1.8, 1.0);
+                }
+            });
+        }
+
+        context.runAtTickTime(60, () -> {
+            int transformed = 0;
+            for (int x = 0; x < size; x++) {
+                for (int z = 0; z < size; z++) {
+                    BlockState state = context.getBlockState(origin.offset(x, 0, z));
+                    if (state.is(Blocks.DIRT_PATH) || state.is(Blocks.DIRT) || state.is(Blocks.PACKED_MUD)) {
+                        transformed++;
+                    }
+                }
+            }
+            context.assertTrue(transformed > 0, "traffic stress should compact at least some walked surfaces");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 120, padding = 6)
+    public void stressThermalFluidReactions(GameTestHelper context) {
+        if (!ENABLED) {
+            context.succeed();
+            return;
+        }
+
+        BlockPos origin = new BlockPos(2, 3, 2);
+        int size = 8;
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                BlockPos pos = origin.offset(x, 0, z);
+                context.setBlock(pos.below(), Blocks.STONE);
+                context.setBlock(pos, Math.floorMod(x + z, 2) == 0 ? Blocks.LAVA : Blocks.WATER);
+                context.getLevel().scheduleTick(context.absolutePos(pos), context.getBlockState(pos).getFluidState().getType(), 1);
+            }
+        }
+
+        for (int tick = 8; tick <= 48; tick += 8) {
+            context.runAtTickTime(tick, () -> {
+                for (int x = 0; x < size; x++) {
+                    for (int z = 0; z < size; z++) {
+                        BlockPos pos = origin.offset(x, 0, z);
+                        if (!context.getBlockState(pos).getFluidState().isEmpty()) {
+                            context.getLevel().scheduleTick(
+                                    context.absolutePos(pos),
+                                    context.getBlockState(pos).getFluidState().getType(),
+                                    1);
+                        }
+                    }
+                }
+            });
+        }
+
+        context.runAtTickTime(90, () -> {
+            int solidified = 0;
+            for (int x = 0; x < size; x++) {
+                for (int z = 0; z < size; z++) {
+                    BlockState state = context.getBlockState(origin.offset(x, 0, z));
+                    if (state.is(Blocks.OBSIDIAN) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.STONE)) {
+                        solidified++;
+                    }
+                }
+            }
+            context.assertTrue(solidified > 0, "lava/water thermal stress should solidify at least some fluid cells");
             context.succeed();
         });
     }

@@ -225,7 +225,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\dev_perf.ps1 -Slow
 
 This runs the server GameTests without opening Minecraft, enables the Emergent profiler and opt-in stress scenarios, saves the full log under `build\reports\emergent-profiler`, ignores the first 20 warmup ticks by default, and prints only the worst profiler ticks plus counter totals and chunk hotspots. Use it for fast regression checks and subsystem diagnosis; use Prism afterward for large-world feel and player-visible validation. Pass `-SkipStressScenarios` to profile only the normal correctness GameTests, or `-SlowMs 0` for microscope-mode counter totals from all instrumented ticks.
 
-The opt-in stress scenarios currently exercise stable finite-fluid wakeups, multi-chunk finite-water settling, queued surface-weather samples, and repeated fire-reaction scans.
+The opt-in stress scenarios currently exercise stable finite-fluid wakeups, multi-chunk finite-water settling, queued surface-weather samples, repeated fire-reaction scans, traffic contact patches, and lava/water thermal reactions.
 
 ### Profiling In Prism
 
