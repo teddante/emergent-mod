@@ -194,6 +194,55 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 20)
+    public void lavaContactHeatScalesWithFiniteVolume(GameTestHelper context) {
+        double thinLavaHeat = ThermalPhysics.lavaContactHeat(2);
+        double sourceLavaHeat = ThermalPhysics.lavaContactHeat(8);
+
+        assertClose(sourceLavaHeat, thinLavaHeat * 4.0,
+                "lava contact heating should scale with finite lava volume");
+        context.assertTrue(sourceLavaHeat > thinLavaHeat,
+                "a source-equivalent lava block should heat contacts more strongly than a shallow lava layer");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
+        BlockPos stonePos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
+        context.setBlock(stonePos, Blocks.STONE.defaultBlockState());
+
+        ThermalPhysics.applyLavaContactHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(stonePos), context.getBlockState(stonePos)) > 0.0,
+                "lava contact should add shared stored heat to adjacent solid blocks");
+        context.assertBlockPresent(Blocks.STONE, stonePos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void lavaContactCanMeltAdjacentSnowLayer(GameTestHelper context) {
+        BlockPos snowPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
+        context.setBlock(snowPos.below(), Blocks.DIRT.defaultBlockState());
+        context.setBlock(snowPos, Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, 1));
+
+        ThermalPhysics.applyLavaContactHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertBlockPresent(Blocks.AIR, snowPos);
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(snowPos.below()), context.getBlockState(snowPos.below())) > 0.0,
+                "snow melted by lava contact should leave moisture on the supporting surface");
+        context.succeed();
+    }
+
     @GameTest(maxTicks = 80)
     public void lavaSolidifiesWhenDroppingIntoWater(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());

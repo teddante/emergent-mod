@@ -95,6 +95,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 }
                 return;
             }
+        } else if (WaterPhysics.isLava(fluid) && EmergentConfig.get().materialReactions) {
+            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
         }
 
         // STEP 1: Gravity - try to flow down

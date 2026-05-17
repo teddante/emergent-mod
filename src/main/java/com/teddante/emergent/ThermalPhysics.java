@@ -28,6 +28,7 @@ public final class ThermalPhysics {
     private static final double ICE_MELT_HEAT = 1.0;
     private static final double PACKED_ICE_MELT_HEAT = 2.5;
     private static final double MELT_WATER_MOISTURE_PER_LAYER = 0.08;
+    private static final double LAVA_CONTACT_HEAT_PER_CUBIC_METER = 0.45;
 
     public record FluidContactResult(boolean reacted, int remainingSourceAmount, boolean sourceBlockChanged) {
         public static FluidContactResult none(int sourceAmount) {
@@ -124,6 +125,28 @@ public final class ThermalPhysics {
             fizz(world, pos);
         }
         return remainingAmount;
+    }
+
+    public static void applyLavaContactHeat(ServerLevel world, BlockPos lavaPos, int lavaAmount) {
+        double heat = lavaContactHeat(lavaAmount);
+        if (heat <= 0.0) {
+            return;
+        }
+
+        for (Direction direction : Direction.values()) {
+            BlockPos targetPos = lavaPos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            if (targetState.isAir() || !targetState.getFluidState().isEmpty() || targetState.getDestroySpeed(world, targetPos) < 0.0F) {
+                continue;
+            }
+
+            EnvironmentalExposure.addHeat(world, targetPos, targetState, heat);
+            ThermalPhysics.tryMeltFrozenSurface(world, targetPos, targetState);
+        }
+    }
+
+    public static double lavaContactHeat(int lavaAmount) {
+        return EnvironmentalExposure.fluidAmountCubicMeters(lavaAmount) * LAVA_CONTACT_HEAT_PER_CUBIC_METER;
     }
 
     public static boolean tryFreezeWaterFromStoredCold(ServerLevel world, BlockPos pos, int amount) {
