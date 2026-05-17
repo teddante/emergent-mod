@@ -45,6 +45,8 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Unique
     private static final int emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS = FiniteFluidBudgetSettings.budgetDeferSpreadTicks();
     @Unique
+    private static final int emergent$MAX_HORIZONTAL_DIRECTIONS = 4;
+    @Unique
     private static final Map<ServerLevel, EmergentFiniteFluidBudget> emergent$FINITE_FLUID_BUDGETS = new WeakHashMap<>();
 
     @Shadow
@@ -305,6 +307,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // 4. If we don't have enough to fill all lowest neighbors, use a stable
                 // position-based ordering so the same world settles the same way each run.
 
+                int[] minLevelIndices = new int[emergent$MAX_HORIZONTAL_DIRECTIONS];
                 while (toDistribute > 0) {
                     // Find current minimum level among valid neighbors that we can flow into
                     int minLevel = 9; // Max is 8
@@ -317,30 +320,32 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
 
                     // Collect all neighbors at this minimum level
-                    List<Integer> minLevelIndices = new ArrayList<>();
+                    int minLevelCount = 0;
                     for (int i = 0; i < 4; i++) {
                         if (canFlow[i] && neighborLevels[i] == minLevel && neighborLevels[i] < currentLevel) {
-                            minLevelIndices.add(i);
+                            minLevelIndices[minLevelCount] = i;
+                            minLevelCount++;
                         }
                     }
 
-                    if (minLevelIndices.isEmpty()) {
+                    if (minLevelCount == 0) {
                         break; // Should not happen given logic
                     }
 
                     // Do we have enough to give 1 to everyone?
-                    if (toDistribute >= minLevelIndices.size()) {
+                    if (toDistribute >= minLevelCount) {
                         // Yes, give 1 to all
-                        for (int index : minLevelIndices) {
+                        for (int i = 0; i < minLevelCount; i++) {
+                            int index = minLevelIndices[i];
                             neighborLevels[index]++;
                             currentLevel--; // Update virtual current level
                             toDistribute--;
                         }
                     } else {
                         // No, we must choose lucky winners
-                        sortDeterministically(minLevelIndices, pos);
+                        sortDeterministically(minLevelIndices, minLevelCount, pos);
                         for (int i = 0; i < toDistribute; i++) {
-                            int chosenIndex = minLevelIndices.get(i);
+                            int chosenIndex = minLevelIndices[i];
                             neighborLevels[chosenIndex]++;
                             currentLevel--;
                         }
@@ -785,8 +790,17 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
-    private void sortDeterministically(List<Integer> indices, BlockPos pos) {
-        indices.sort((left, right) -> Integer.compare(directionRank(pos, left), directionRank(pos, right)));
+    private void sortDeterministically(int[] indices, int count, BlockPos pos) {
+        for (int i = 1; i < count; i++) {
+            int value = indices[i];
+            int rank = directionRank(pos, value);
+            int j = i - 1;
+            while (j >= 0 && directionRank(pos, indices[j]) > rank) {
+                indices[j + 1] = indices[j];
+                j--;
+            }
+            indices[j + 1] = value;
+        }
     }
 
     @Unique
