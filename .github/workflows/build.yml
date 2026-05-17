@@ -2,7 +2,7 @@ name: Build Mod
 
 on:
   push:
-    branches: ["main", "fix/**", "feature/**", "docs/**"]
+    branches: ["main", "fix/**", "feature/**", "docs/**", "perf/**", "perf-*"]
   pull_request:
 
 permissions:

@@ -103,6 +103,74 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 20)
+    public void batchedRainfallMatchesRepeatedSingleSamples(GameTestHelper context) {
+        BlockPos repeatedPos = new BlockPos(5, 3, 2);
+        BlockPos batchedPos = new BlockPos(7, 3, 2);
+        context.setBlock(repeatedPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(batchedPos, Blocks.DIRT.defaultBlockState());
+
+        for (int i = 0; i < 4; i++) {
+            EnvironmentalExposure.addRainfall(
+                    context.getLevel(),
+                    context.absolutePos(repeatedPos),
+                    context.getBlockState(repeatedPos),
+                    1.0);
+        }
+        EnvironmentalExposure.addRainfall(
+                context.getLevel(),
+                context.absolutePos(batchedPos),
+                context.getBlockState(batchedPos),
+                1.0,
+                4);
+
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos)),
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos)),
+                "batched rain samples should store the same moisture as repeated vanilla precipitation samples");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void batchedAmbientDryingMatchesRepeatedSingleSamples(GameTestHelper context) {
+        BlockPos repeatedPos = new BlockPos(5, 3, 3);
+        BlockPos batchedPos = new BlockPos(7, 3, 3);
+        context.setBlock(repeatedPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(batchedPos, Blocks.DIRT.defaultBlockState());
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos), 0.7);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos), 0.7);
+
+        for (int i = 0; i < 4; i++) {
+            EnvironmentalExposure.applyAmbientSurfaceExchange(
+                    context.getLevel(),
+                    context.absolutePos(repeatedPos),
+                    context.getBlockState(repeatedPos),
+                    1.0F,
+                    true,
+                    0,
+                    1.0,
+                    1.0,
+                    1.0);
+        }
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(batchedPos),
+                context.getBlockState(batchedPos),
+                1.0F,
+                true,
+                0,
+                1.0,
+                1.0,
+                1.0,
+                4);
+
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos)),
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos)),
+                "batched ambient drying should remove the same moisture as repeated single samples");
+        context.succeed();
+    }
+
     @GameTest(maxTicks = 40)
     public void finiteWaterPrefersDownwardFlow(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
