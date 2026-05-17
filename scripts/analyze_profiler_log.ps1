@@ -120,10 +120,45 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     }
 }
 
+function Add-LagCorrelation([System.Collections.Generic.List[string]]$Summary, [array]$LagLines, [array]$ProfilerLines) {
+    $Summary.Add("")
+    $Summary.Add("Minecraft lag warnings:")
+    if ($LagLines.Count -eq 0) {
+        $Summary.Add("  none")
+        return
+    }
+
+    $maxRunningMs = 0L
+    $maxBehindTicks = 0L
+    foreach ($line in $LagLines) {
+        if ($line -match "Running ([0-9]+)ms or ([0-9]+) ticks behind") {
+            $maxRunningMs = [Math]::Max($maxRunningMs, [long]$Matches[1])
+            $maxBehindTicks = [Math]::Max($maxBehindTicks, [long]$Matches[2])
+        }
+    }
+
+    $maxProfilerMs = 0.0
+    foreach ($line in $ProfilerLines) {
+        $maxProfilerMs = [Math]::Max($maxProfilerMs, (Get-ProfilerValue $line))
+    }
+
+    $Summary.Add(("  count={0} maxRunningMs={1} maxBehindTicks={2} maxEmergentProfilerMs={3:N3}" -f `
+                $LagLines.Count, $maxRunningMs, $maxBehindTicks, $maxProfilerMs))
+
+    if ($ProfilerLines.Count -eq 0) {
+        $Summary.Add("  interpretation=lag warnings exist but no Emergent profiler lines were found; lower slowMs or investigate non-Emergent work.")
+    } elseif ($maxRunningMs -gt 0 -and ($maxProfilerMs * 4.0) -lt $maxRunningMs) {
+        $Summary.Add("  interpretation=lag warnings are much larger than Emergent profiler spikes; likely outside instrumented Emergent systems or hidden inside unprofiled code.")
+    } else {
+        $Summary.Add("  interpretation=Emergent profiler spikes are in the same order as lag warnings; inspect subsystem and chunk summaries above.")
+    }
+}
+
 $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
 $logLines = Get-Content -LiteralPath $resolvedPath
 $allProfilerLines = @($logLines | Where-Object { $_ -like "*Emergent profiler:*" })
 $profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt $WarmupTicks })
+$lagLines = @($logLines | Where-Object { $_ -like "*Can't keep up!*" })
 $counterTotals = @{}
 $chunkTotals = @{}
 foreach ($line in $profilerLines) {
@@ -161,6 +196,7 @@ if ($counterTotals.Count -eq 0) {
 }
 
 Add-FiniteFluidDiagnosis $summary $counterTotals $chunkTotals $Top
+Add-LagCorrelation $summary $lagLines $profilerLines
 
 $summary.Add("")
 $summary.Add("Top chunk hotspots:")
