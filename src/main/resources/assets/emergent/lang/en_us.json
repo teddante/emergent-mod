@@ -43,7 +43,7 @@
   "emergent.config.material_reactions": "Material Reactions",
   "emergent.config.material_reactions.tooltip": "Tag-driven block reactions for fire, rain, growth, heat, ash, traffic wear, and material stress.",
   "emergent.config.boundless_enchanting": "Boundless Enchanting",
-  "emergent.config.boundless_enchanting.tooltip": "Removes anvil prior-work penalties and the Too Expensive cap, and lets matching enchantments combine past vanilla max levels.",
+  "emergent.config.boundless_enchanting.tooltip": "Spends enchanting and anvil costs as raw XP energy, removes anvil caps, combines stored enchantment work, and lets supported over-cap effects spend that work.",
   "emergent.config.unrestricted_enchantments": "Unrestricted Enchantments",
   "emergent.config.unrestricted_enchantments.tooltip": "Allows mutually exclusive enchantments to coexist, such as Protection variants or Sharpness with Smite.",
   "emergent.config.boundless_brewing": "Boundless Brewing",
