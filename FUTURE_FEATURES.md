@@ -2,11 +2,14 @@
 
 This file tracks likely next work without turning the README into a changelog. Keep it concise and update it when a feature moves from idea to implementation.
 
-## Current Integration Theme
+## Current PR Stack
 
-The active draft PR is a broad environmental physics integration. It covers shared runtime state for moisture, heat, cold, ash, sediment, traffic wear, structural stress, fluid flow, erosion, fire aftermath, rain puddles, plant growth, and impact/thermal/explosion interactions.
+The active work is split across stacked draft PRs:
 
-No more unrelated features should be added to that PR. New work should move to a focused branch unless it is directly required to stabilize the current environmental integration.
+- PR #3, `fix/water-erosion-physics`, integrates the broad environmental physics layer: shared runtime state for moisture, heat, cold, ash, sediment, traffic wear, structural stress, fluid flow, erosion, fire aftermath, rain puddles, plant growth, and impact/thermal/explosion interactions.
+- PR #4, `perf-environmental-scheduler`, is stacked on PR #3 and focuses on slow environmental scheduling, finite-fluid quiescence, profiling, and headless performance checks.
+
+No more unrelated features should be added to either PR. New gameplay systems should move to a focused branch from updated `main` once the current stack is merged, unless the work is directly required to stabilize the existing environmental integration.
 
 ## Implemented Or In Draft
 
@@ -24,6 +27,8 @@ No more unrelated features should be added to that PR. New work should move to a
 - Biome-aware drying, wetting, solar heat, and vegetation stress.
 - Moisture/ash-assisted rain growth.
 - Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
+- Opt-in Emergent tick profiler with finite-fluid water/lava counters, heated block summaries, and finite-fluid chunk hotspots.
+- Headless stress/perf GameTests and compact `scripts/dev_perf.ps1` summaries.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
@@ -32,9 +37,10 @@ No more unrelated features should be added to that PR. New work should move to a
 ## High-Priority Next Work
 
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
-- Add representative performance profiling with finite fluids, rain, fire, traffic, heat/cold exposure, and large render/simulation distances.
+- Use finite-fluid chunk hotspot output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, or genuinely active fluid movement.
+- Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss.
 - Design the experience-energy layer so XP, sculk charge, enchanting, anvils, books, and enchantment output all use one shared quantity instead of unrelated costs.
-- Split or close broad draft PRs once the integration work stabilizes; use focused branches for unrelated features.
+- Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
 - README/config/PR documentation pass before release.
 
