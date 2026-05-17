@@ -102,7 +102,7 @@ Weather and climate affect the same shared environmental memory.
 
 ### Dynamic XP And Sculk
 
-Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. The model treats raw XP points as the shared experience-energy unit and keeps vanilla levels as the display/storage curve. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value. With boundless enchanting enabled, enchanting table and anvil level costs are spent as equivalent raw XP points using the same vanilla nonlinear level curve instead of treating every level label as equal energy. Enchanted items and books also expose an energy budget derived from vanilla enchantment anvil costs and levels; enchanted books keep vanilla's half-cost application rule. Repair enchantments that exceed their vanilla maximum can convert raw XP into durability faster in proportion to their stored repair-enchantment work.
+Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. The model treats raw XP points as the shared experience-energy unit and keeps vanilla levels as the display/storage curve. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value. With boundless enchanting enabled, enchanting table and anvil level costs are spent as equivalent raw XP points using the same vanilla nonlinear level curve instead of treating every level label as equal energy. Enchanted items and books also expose an energy budget derived from vanilla enchantment anvil costs and levels; enchanted books keep vanilla's half-cost application rule. Repair enchantments that exceed their vanilla maximum can convert raw XP into durability faster in proportion to their stored repair-enchantment work, and constant ignite enchantments such as Flame can turn extra stored work into longer burn duration.
 
 Sculk shrieker summoning can also be widened beyond vanilla's default restrictions.
 
@@ -113,6 +113,7 @@ Optional systems can relax selected vanilla limits:
 - Anvil prior-work penalties and the Too Expensive cap can be removed.
 - Matching enchantments can combine past vanilla max levels by combining both inputs' stored enchantment work budget.
 - Repair enchantments above their vanilla cap can output proportionally more durability repair per XP point.
+- Constant ignite enchantments above their vanilla cap can output proportionally longer burn duration when they have stored extra enchantment work.
 - Mutually exclusive enchantments can coexist.
 - Redstone can repeatedly extend potion duration.
 - Glowstone can repeatedly raise potion strength.

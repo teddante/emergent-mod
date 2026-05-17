@@ -1366,6 +1366,27 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void boundlessFlameIgniteDurationScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> flame = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FLAME);
+        ItemStack ordinaryBow = new ItemStack(Items.BOW);
+        ItemStack energeticBow = new ItemStack(Items.BOW);
+        EnchantmentHelper.updateEnchantments(ordinaryBow, enchantments -> enchantments.set(flame, 1));
+        EnchantmentHelper.updateEnchantments(energeticBow, enchantments -> enchantments.set(flame, 4));
+
+        float vanillaSeconds = 100.0F;
+        float ordinarySeconds = ExperienceEnergy.igniteDurationFromStoredEnergy(ordinaryBow, 1, vanillaSeconds);
+        float energeticSeconds = ExperienceEnergy.igniteDurationFromStoredEnergy(energeticBow, 4, vanillaSeconds);
+
+        context.assertTrue(ordinarySeconds == vanillaSeconds,
+                "vanilla-level Flame should keep vanilla's projectile burn duration");
+        context.assertTrue(energeticSeconds == vanillaSeconds * 4.0F,
+                "boundless Flame should turn stored enchantment work into longer projectile ignition");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void anvilMergesEnchantmentEnergyBudgets(GameTestHelper context) {
         Holder<Enchantment> sharpness = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)

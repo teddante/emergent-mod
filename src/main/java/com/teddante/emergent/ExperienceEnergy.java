@@ -9,7 +9,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.ConditionalEffect;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.enchantment.TargetedConditionalEffect;
+import net.minecraft.world.item.enchantment.effects.EnchantmentEntityEffect;
+import net.minecraft.world.item.enchantment.effects.Ignite;
 
 /**
  * Shared XP-as-energy helpers.
@@ -228,6 +232,68 @@ public final class ExperienceEnergy {
 
         long repairedDurability = Mth.floor(vanillaDurability * strongestEnergyRatio);
         return repairedDurability >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) repairedDurability;
+    }
+
+    public static float igniteDurationFromStoredEnergy(ItemStack itemStack, int enchantmentLevel, float vanillaSeconds) {
+        if (itemStack.isEmpty() || enchantmentLevel <= 0 || vanillaSeconds <= 0.0F) {
+            return vanillaSeconds;
+        }
+
+        double strongestEnergyRatio = 1.0;
+        for (Object2IntMap.Entry<Holder<Enchantment>> entry : EnchantmentHelper.getEnchantmentsForCrafting(itemStack).entrySet()) {
+            Enchantment enchantment = entry.getKey().value();
+            int level = Math.max(0, entry.getIntValue());
+            int vanillaMaxLevel = Math.max(1, enchantment.getMaxLevel());
+            if (level != enchantmentLevel || level <= vanillaMaxLevel || !hasConstantIgniteOutput(enchantment, level, vanillaMaxLevel, vanillaSeconds)) {
+                continue;
+            }
+
+            strongestEnergyRatio = Math.max(
+                    strongestEnergyRatio,
+                    enchantmentOutputEnergyRatio(level, vanillaMaxLevel, enchantment.getAnvilCost()));
+        }
+
+        double adjustedSeconds = vanillaSeconds * strongestEnergyRatio;
+        return adjustedSeconds >= Float.MAX_VALUE ? Float.MAX_VALUE : (float) adjustedSeconds;
+    }
+
+    private static boolean hasConstantIgniteOutput(Enchantment enchantment, int level, int vanillaMaxLevel, float vanillaSeconds) {
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.PROJECTILE_SPAWNED)) {
+            if (isMatchingConstantIgnite(effect.effect(), level, vanillaMaxLevel, vanillaSeconds)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_PIERCING_ATTACK)) {
+            if (isMatchingConstantIgnite(effect.effect(), level, vanillaMaxLevel, vanillaSeconds)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.HIT_BLOCK)) {
+            if (isMatchingConstantIgnite(effect.effect(), level, vanillaMaxLevel, vanillaSeconds)) {
+                return true;
+            }
+        }
+        for (TargetedConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_ATTACK)) {
+            if (isMatchingConstantIgnite(effect.effect(), level, vanillaMaxLevel, vanillaSeconds)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isMatchingConstantIgnite(
+            EnchantmentEntityEffect effect,
+            int level,
+            int vanillaMaxLevel,
+            float vanillaSeconds) {
+        if (!(effect instanceof Ignite ignite)) {
+            return false;
+        }
+
+        float levelSeconds = ignite.duration().calculate(level);
+        float vanillaMaxSeconds = ignite.duration().calculate(vanillaMaxLevel);
+        return Math.abs(levelSeconds - vanillaSeconds) < 0.001F
+                && levelSeconds <= vanillaMaxSeconds + 0.001F;
     }
 
     public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {

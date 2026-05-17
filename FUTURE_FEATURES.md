@@ -34,6 +34,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path through a shared raw-XP experience-energy helper, plus whole-level raw XP spending for boundless enchanting and anvil costs.
 - Enchanted item/book budget helpers that derive work from vanilla enchantment anvil costs and levels, then convert that work into raw XP through the shared vanilla level curve.
 - Repair enchantment output above the vanilla cap scales durability repaired per raw XP by stored repair-enchantment work, preserving vanilla-level Mending behavior.
+- Constant ignite enchantments above the vanilla cap scale burn duration by stored ignite-enchantment work, preserving vanilla-level Flame behavior.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
 - Mod Menu / Cloth Config screen for broad feature gates.

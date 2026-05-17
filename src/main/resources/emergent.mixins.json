@@ -32,7 +32,8 @@
 		"AnvilMenuMixin",
 		"EnchantmentMenuMixin",
 		"PotionBrewingMixin",
-		"EnchantmentHelperMixin"
+		"EnchantmentHelperMixin",
+		"IgniteMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
