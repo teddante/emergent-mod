@@ -76,6 +76,7 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $thermalReactions = Get-CounterTotal $CounterTotals "finite_fluid_thermal_reactions"
     $thinSettled = Get-CounterTotal $CounterTotals "finite_fluid_thin_settled"
     $stableSources = Get-CounterTotal $CounterTotals "finite_fluid_stable_sources"
+    $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
 
     $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions
     $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
@@ -89,8 +90,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $Summary.Add("Finite fluid diagnosis:")
     $Summary.Add(("  ticks={0} water={1} lava={2} activeSchedules={3} quietSkips={4} quietRatio={5:N1}% workEvents={6} workPerTick={7:N1}%" -f `
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
-    $Summary.Add(("  settledThin={0} stableSources={1} horizontalMoves={2} downwardMoves={3} thermalReactions={4}" -f `
-                $thinSettled, $stableSources, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} horizontalMoves={3} downwardMoves={4} thermalReactions={5}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if (!$hasScheduleCounters) {
         $Summary.Add("  scheduleCounters=missing; this log was probably captured before active/quiet schedule counters were added.")
     }

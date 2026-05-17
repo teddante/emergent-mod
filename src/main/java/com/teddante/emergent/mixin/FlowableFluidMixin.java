@@ -169,7 +169,9 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
 
                     // Update below
-                    setWaterLevel(world, below, newBelowLevel, false);
+                    if (!setWaterLevel(world, below, newBelowLevel, false)) {
+                        return;
+                    }
                     emergent$transferSuspendedSediment(world, pos, blockState, below, transfer, startingLevel);
 
                     // Update current position after transferring water down
@@ -208,6 +210,13 @@ public abstract class FlowableFluidMixin extends Fluid {
         // drain it horizontally.
         if (blockState.getBlock() instanceof LiquidBlockContainer) {
             EmergentProfiler.count(world, "finite_fluid_waterloggable_quiet", 1);
+            return;
+        }
+
+        String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (quietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + quietTickReason + "_skips", 1);
             return;
         }
 
@@ -335,7 +344,9 @@ public abstract class FlowableFluidMixin extends Fluid {
                         }
 
                         // Optimization: The implementation of setWaterLevel does extensive checks.
-                        setWaterLevel(world, neighbors[i], neighborLevels[i], false);
+                        if (!setWaterLevel(world, neighbors[i], neighborLevels[i], false)) {
+                            continue;
+                        }
                         emergent$transferSuspendedSediment(world, pos, blockState, neighbors[i], movedAmount, startingLevel);
                         emergent$scheduleFiniteFluidIfActive(world, neighbors[i], fluid, neighborLevels[i], tickDelay);
                         actualMovedHorizontally += movedAmount;
@@ -675,6 +686,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             return null;
         }
 
+        boolean blockedByWaterloggableNeighbor = false;
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             BlockPos targetPos = pos.relative(direction);
             BlockState targetState = world.getBlockState(targetPos);
@@ -683,7 +695,11 @@ public abstract class FlowableFluidMixin extends Fluid {
                 return null;
             }
             if (isWaterloggableTarget(world, targetPos, targetState)) {
-                return amount >= 8 && WaterPhysics.isWater(fluid) ? null : "waterloggable";
+                if (amount >= 8 && WaterPhysics.isWater(fluid)) {
+                    return null;
+                }
+                blockedByWaterloggableNeighbor = true;
+                continue;
             }
             if (canFlowInto(world, targetPos, targetState, direction)) {
                 int targetAmount = WaterPhysics.isSameFluid(fluid, targetFluidState) ? targetFluidState.getAmount() : 0;
@@ -693,7 +709,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             }
         }
 
-        return "no_work";
+        return blockedByWaterloggableNeighbor ? "waterloggable" : "no_work";
     }
 
     @Unique

@@ -456,6 +456,48 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 80)
+    public void partialWaterloggableNeighborDoesNotBlockOtherFlowPath(GameTestHelper context) {
+        BlockPos sourcePos = WATER_POS;
+        BlockPos firstTarget = sourcePos.relative(Direction.EAST);
+        BlockPos secondTarget = firstTarget.relative(Direction.EAST);
+        BlockPos waterloggableNeighbor = firstTarget.relative(Direction.NORTH);
+
+        context.setBlock(sourcePos.below(), Blocks.STONE);
+        context.setBlock(firstTarget.below(), Blocks.STONE);
+        context.setBlock(secondTarget.below(), Blocks.STONE);
+        context.setBlock(waterloggableNeighbor.below(), Blocks.STONE);
+        context.setBlock(sourcePos, Blocks.AIR);
+        context.setBlock(firstTarget, Blocks.AIR);
+        context.setBlock(secondTarget, Blocks.AIR);
+        context.setBlock(sourcePos.relative(Direction.NORTH), Blocks.STONE);
+        context.setBlock(sourcePos.relative(Direction.SOUTH), Blocks.STONE);
+        context.setBlock(sourcePos.relative(Direction.WEST), Blocks.STONE);
+        context.setBlock(firstTarget.relative(Direction.SOUTH), Blocks.STONE);
+        context.setBlock(secondTarget.relative(Direction.NORTH), Blocks.STONE);
+        context.setBlock(secondTarget.relative(Direction.SOUTH), Blocks.STONE);
+        context.setBlock(secondTarget.relative(Direction.EAST), Blocks.STONE);
+        context.setBlock(waterloggableNeighbor, Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false));
+        context.setBlock(sourcePos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 3));
+        context.assertTrue(fluidAmount(context, sourcePos, Fluids.WATER) == 5,
+                "test fixture should start with five finite water units");
+
+        context.getLevel().scheduleTick(context.absolutePos(sourcePos), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(30, () -> {
+            int sourceAmount = fluidAmount(context, sourcePos, Fluids.WATER);
+            int firstTargetAmount = fluidAmount(context, firstTarget, Fluids.WATER);
+            int secondTargetAmount = fluidAmount(context, secondTarget, Fluids.WATER);
+            int waterloggedNeighborAmount = fluidAmount(context, waterloggableNeighbor, Fluids.WATER);
+            context.assertTrue(secondTargetAmount > 0,
+                    "a partial water layer beside a waterloggable block should still keep flowing into other open lower-pressure cells; amounts="
+                            + sourceAmount + "," + firstTargetAmount + "," + secondTargetAmount + "," + waterloggedNeighborAmount);
+            context.assertFalse(context.getBlockState(waterloggableNeighbor).getValue(BlockStateProperties.WATERLOGGED),
+                    "partial finite water should not waterlog a block unless it has source-equivalent volume");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
     public void finiteLavaUsesSlowerDownwardFlow(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
         context.setBlock(BELOW_WATER_POS, Blocks.AIR);
