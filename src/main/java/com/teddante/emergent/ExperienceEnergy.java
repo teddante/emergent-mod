@@ -67,4 +67,33 @@ public final class ExperienceEnergy {
         }
         return level;
     }
+
+    public static int rawPointsForWholeLevelCost(int currentLevel, int levelCost) {
+        if (currentLevel <= 0 || levelCost <= 0) {
+            return 0;
+        }
+
+        int targetLevel = Math.max(0, currentLevel - levelCost);
+        return pointsForLevel(currentLevel) - pointsForLevel(targetLevel);
+    }
+
+    public static int wholeLevelsAffordableFromRawPoints(int currentLevel, int rawPoints) {
+        if (currentLevel <= 0 || rawPoints <= 0) {
+            return 0;
+        }
+
+        int affordableLevels = 0;
+        int remainingPoints = rawPoints;
+        for (int level = currentLevel; level > 0; level--) {
+            int nextLevelCost = pointsForLevel(level) - pointsForLevel(level - 1);
+            if (remainingPoints < nextLevelCost) {
+                break;
+            }
+
+            remainingPoints -= nextLevelCost;
+            affordableLevels++;
+        }
+
+        return affordableLevels;
+    }
 }

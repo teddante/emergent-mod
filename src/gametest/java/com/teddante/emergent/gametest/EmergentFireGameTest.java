@@ -1226,6 +1226,25 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void experienceEnergyConvertsLevelCostsToRawPoints(GameTestHelper context) {
+        int lowCost = ExperienceEnergy.rawPointsForWholeLevelCost(10, 3);
+        int highCost = ExperienceEnergy.rawPointsForWholeLevelCost(30, 3);
+        int exactHighCost = ExperienceEnergy.pointsForLevel(30) - ExperienceEnergy.pointsForLevel(27);
+
+        context.assertTrue(lowCost > 0,
+                "a visible level cost should map to raw XP points");
+        context.assertTrue(highCost > lowCost,
+                "the same visible level cost should represent more raw XP at higher levels");
+        context.assertTrue(highCost == exactHighCost,
+                "whole-level cost conversion should use the vanilla nonlinear level curve");
+        context.assertTrue(ExperienceEnergy.wholeLevelsAffordableFromRawPoints(30, highCost - 1) == 2,
+                "raw XP just below a three-level high-level cost should only afford two whole levels");
+        context.assertTrue(ExperienceEnergy.wholeLevelsAffordableFromRawPoints(30, highCost) == 3,
+                "raw XP equal to a three-level high-level cost should afford exactly three whole levels");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
         int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
         int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);
