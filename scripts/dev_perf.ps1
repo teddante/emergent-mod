@@ -164,12 +164,19 @@ $summaryPath = Join-Path $reportDir "headless-perf-$stamp.summary.txt"
 $gradleArgs = @("--no-daemon", "runGameTest")
 
 $stressScenariosEnabled = !$SkipStressScenarios
+$effectiveSlowMs = $SlowMs
+if ($MaxProfilerMs -gt 0 -and $MaxProfilerMs -lt $effectiveSlowMs) {
+    $effectiveSlowMs = $MaxProfilerMs
+}
+if (($RequireBudgetDeferrals -or $RequireChunkBudgetDeferrals) -and $effectiveSlowMs -gt 1) {
+    $effectiveSlowMs = 1
+}
 
-Write-Step "Running headless GameTests with Emergent profiler slowMs=$SlowMs stress=$stressScenariosEnabled"
+Write-Step "Running headless GameTests with Emergent profiler slowMs=$effectiveSlowMs stress=$stressScenariosEnabled"
 $oldJavaToolOptions = $env:JAVA_TOOL_OPTIONS
 $activeFluidBudgetOption = if ($ActiveFluidBudget -gt 0) { " -Demergent.finiteFluid.activeTickBudget=$ActiveFluidBudget" } else { "" }
 $activeFluidChunkBudgetOption = if ($ActiveFluidChunkBudget -gt 0) { " -Demergent.finiteFluid.activeChunkTickBudget=$ActiveFluidChunkBudget" } else { "" }
-$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$SlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())$activeFluidBudgetOption$activeFluidChunkBudgetOption"
+$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$effectiveSlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())$activeFluidBudgetOption$activeFluidChunkBudgetOption"
 $oldErrorActionPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = "Continue"
@@ -205,7 +212,10 @@ $worstProfilerLines = @($profilerLines |
 $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent headless perf summary")
 $summary.Add("Log: $logPath")
-$summary.Add("Profiler slowMs: $SlowMs")
+$summary.Add("Profiler slowMs: $effectiveSlowMs")
+if ($effectiveSlowMs -ne $SlowMs) {
+    $summary.Add("Requested profiler slowMs: $SlowMs")
+}
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("Stress scenarios: $stressScenariosEnabled")
 if ($ActiveFluidBudget -gt 0) {
