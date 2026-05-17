@@ -30,6 +30,7 @@
 		"FlowableFluidMixin",
 		"ServerWorldMixin",
 		"AnvilMenuMixin",
+		"EnchantmentMenuMixin",
 		"PotionBrewingMixin",
 		"EnchantmentHelperMixin"
 	],

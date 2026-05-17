@@ -1245,6 +1245,20 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void experienceEnergyPreservesProgressWhenSpendingRawCosts(GameTestHelper context) {
+        int rawBefore = ExperienceEnergy.rawPointsAtLevelProgress(30, 0.5F);
+        int rawCost = ExperienceEnergy.rawPointsForWholeLevelCost(30, 3);
+        ExperienceEnergy.LevelProgress after = ExperienceEnergy.progressAfterWholeLevelCost(30, 0.5F, 3);
+        int rawAfter = ExperienceEnergy.rawPointsAtLevelProgress(after.level(), after.progress());
+
+        context.assertTrue(Math.abs(rawAfter - (rawBefore - rawCost)) <= 1,
+                "spending a whole-level cost as raw XP should preserve fractional progress energy within Minecraft's progress-bar precision");
+        context.assertTrue(after.level() == 27 && after.progress() > 0.0F,
+                "half a high-level bar should remain as progress after a three-level raw XP spend");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
         int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
         int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);

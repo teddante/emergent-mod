@@ -8,7 +8,7 @@ The active work is split across stacked draft PRs:
 
 - PR #3, `fix/water-erosion-physics`, integrates the broad environmental physics layer: shared runtime state for moisture, heat, cold, ash, sediment, traffic wear, structural stress, fluid flow, erosion, fire aftermath, rain puddles, plant growth, and impact/thermal/explosion interactions.
 - PR #4, `perf-environmental-scheduler`, is stacked on PR #3 and focuses on slow environmental scheduling, finite-fluid quiescence, profiling, and headless performance checks.
-- PR #5, `feature/experience-energy-model`, is stacked on PR #4 and introduces raw XP points as the shared experience-energy quantity used by dynamic entity rewards, the vanilla sculk catalyst path, and whole-level cost conversion helpers.
+- PR #5, `feature/experience-energy-model`, is stacked on PR #4 and introduces raw XP points as the shared experience-energy quantity used by dynamic entity rewards, the vanilla sculk catalyst path, and whole-level cost spending for enchanting/anvils.
 
 No more unrelated features should be added to PR #3 or PR #4. Experience-energy follow-through should stay in focused branches stacked on PR #5 until the current stack is merged.
 
@@ -30,7 +30,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
 - Opt-in Emergent tick profiler with finite-fluid water/lava counters, active-schedule counters, quiet schedule/tick-skip reason counters, heated block summaries, finite-fluid chunk hotspots, and traffic contact-cell hotspots when traffic becomes a slow contributor.
 - Headless stress/perf GameTests, compact `scripts/dev_perf.ps1` summaries, and saved-log analysis via `scripts/analyze_profiler_log.ps1` covering stable fluids, multi-chunk finite water, sloped finite-water channels, surface weather, fire scans, traffic contact patches, lava/water thermal reactions, finite-fluid active/quiet diagnosis, and `Can't keep up!` correlation.
-- Dynamic entity XP feeding the vanilla XP/sculk catalyst path through a shared raw-XP experience-energy helper, plus whole-level cost conversion helpers for future enchanting/anvil work.
+- Dynamic entity XP feeding the vanilla XP/sculk catalyst path through a shared raw-XP experience-energy helper, plus whole-level raw XP spending for boundless enchanting and anvil costs.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
 - Mod Menu / Cloth Config screen for broad feature gates.
@@ -40,7 +40,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
 - Use finite-fluid chunk hotspot output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, or genuinely active fluid movement.
 - Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially larger player-made fluid systems and any Prism logs that do not resemble the current basin/channel stress cases.
-- Extend the experience-energy layer so enchanting, anvils, books, and enchantment output all use the same raw-XP quantity already used by entity rewards, sculk charge, and level-cost conversion helpers.
+- Extend the experience-energy layer so books and enchantment output use the same raw-XP quantity already used by entity rewards, sculk charge, and boundless enchanting/anvil spending.
 - Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
 - README/config/PR documentation pass before release.
@@ -53,7 +53,7 @@ Proposed shared flow:
 
 - Living entities expose death energy from health, estimated body mass, armor, toughness, and later maybe active effects or equipment.
 - Vanilla XP orbs and sculk catalyst charge read that same energy through the central living-entity reward path.
-- Enchanting tables and anvils should spend raw XP energy, not arbitrary level labels, while still presenting vanilla-compatible levels in the UI. Whole-level cost conversion helpers exist; runtime spending still needs a dedicated design and compatibility pass.
+- Enchanting tables and anvils spend raw XP energy for whole-level costs when boundless enchanting is enabled, while still presenting vanilla-compatible levels in the UI.
 - Enchanted books and items can store an energy budget derived from their enchantment levels and rarity.
 - Stronger enchantment effects should have explainable output: added damage, protection, duration, speed, durability savings, or utility work should scale from stored energy and use rate.
 - Merging enchanted items should combine stored energy and resolve levels from that budget, rather than only applying a hard max-level rule.

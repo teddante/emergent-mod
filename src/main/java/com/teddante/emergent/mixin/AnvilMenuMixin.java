@@ -1,10 +1,12 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.ExperienceEnergy;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,6 +30,20 @@ public abstract class AnvilMenuMixin {
         }
 
         return stack.getOrDefault(component, fallback);
+    }
+
+    @Redirect(
+            method = "onTake",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/player/Player;giveExperienceLevels(I)V"))
+    private void emergent$spendAnvilCostAsRawExperienceEnergy(Player player, int amount) {
+        if (EmergentConfig.get().boundlessEnchanting && amount < 0) {
+            ExperienceEnergy.spendWholeLevelCostAsRawEnergy(player, -amount);
+            return;
+        }
+
+        player.giveExperienceLevels(amount);
     }
 
     @Redirect(

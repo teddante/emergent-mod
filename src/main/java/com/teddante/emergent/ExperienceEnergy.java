@@ -1,6 +1,8 @@
 package com.teddante.emergent;
 
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * Shared XP-as-energy helpers.
@@ -14,6 +16,9 @@ public final class ExperienceEnergy {
     private static final double ARMOR_RESILIENCE_SCALE = 0.65;
 
     private ExperienceEnergy() {
+    }
+
+    public record LevelProgress(int level, float progress) {
     }
 
     public static int livingDeathEnergyPoints(
@@ -95,5 +100,57 @@ public final class ExperienceEnergy {
         }
 
         return affordableLevels;
+    }
+
+    public static int rawPointsAtLevelProgress(int level, float progress) {
+        int basePoints = pointsForLevel(level);
+        float clampedProgress = Mth.clamp(progress, 0.0F, 1.0F);
+        long progressPoints = Mth.floor(clampedProgress * pointsNeededForNextLevel(level));
+        long total = (long) basePoints + progressPoints;
+        return total >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) total;
+    }
+
+    public static LevelProgress levelProgressForRawPoints(int points) {
+        int safePoints = Math.max(0, points);
+        int level = levelForPoints(safePoints);
+        int levelFloor = pointsForLevel(level);
+        int remainder = safePoints - levelFloor;
+        float progress = remainder <= 0 ? 0.0F : (float) remainder / pointsNeededForNextLevel(level);
+        return new LevelProgress(level, progress);
+    }
+
+    public static LevelProgress progressAfterWholeLevelCost(int currentLevel, float currentProgress, int levelCost) {
+        int currentRawPoints = rawPointsAtLevelProgress(currentLevel, currentProgress);
+        int rawCost = rawPointsForWholeLevelCost(currentLevel, levelCost);
+        return levelProgressForRawPoints(Math.max(0, currentRawPoints - rawCost));
+    }
+
+    public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {
+        spendWholeLevelCostAsRawEnergy(player, ItemStack.EMPTY, levelCost, false);
+    }
+
+    public static void spendWholeLevelCostAsRawEnergy(
+            Player player,
+            ItemStack enchantedItem,
+            int levelCost,
+            boolean rerollEnchantmentSeed) {
+        if (player.hasInfiniteMaterials()) {
+            if (rerollEnchantmentSeed) {
+                player.onEnchantmentPerformed(enchantedItem, 0);
+            }
+            return;
+        }
+
+        int remainingRawPoints = Math.max(
+                0,
+                rawPointsAtLevelProgress(player.experienceLevel, player.experienceProgress)
+                        - rawPointsForWholeLevelCost(player.experienceLevel, levelCost));
+        LevelProgress remainingProgress = levelProgressForRawPoints(remainingRawPoints);
+        player.experienceLevel = remainingProgress.level();
+        player.experienceProgress = remainingProgress.progress();
+        player.totalExperience = remainingRawPoints;
+        if (rerollEnchantmentSeed) {
+            player.onEnchantmentPerformed(enchantedItem, 0);
+        }
     }
 }
