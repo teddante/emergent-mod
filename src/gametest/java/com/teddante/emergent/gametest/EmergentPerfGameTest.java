@@ -172,6 +172,102 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         context.runAtTickTime(170, context::succeed);
     }
 
+    @GameTest(maxTicks = 220, padding = 18)
+    public void stressFlowingFiniteWaterChannel(GameTestHelper context) {
+        if (!ENABLED) {
+            context.succeed();
+            return;
+        }
+
+        BlockPos origin = new BlockPos(2, 9, 2);
+        int length = 16;
+        int width = 4;
+        final int[] expectedWaterAmount = {0};
+
+        for (int x = -1; x <= length; x++) {
+            for (int z = -1; z <= width; z++) {
+                for (int y = -5; y <= 2; y++) {
+                    context.setBlock(origin.offset(x, y, z), Blocks.AIR);
+                }
+            }
+        }
+
+        for (int x = -1; x <= length; x++) {
+            for (int z = -1; z <= width; z++) {
+                for (int y = -5; y <= 1; y++) {
+                    if (x == -1 || x == length || z == -1 || z == width) {
+                        context.setBlock(origin.offset(x, y, z), Blocks.STONE);
+                    }
+                }
+            }
+        }
+
+        for (int x = 0; x < length; x++) {
+            int floorY = flowingChannelFloorY(x);
+            for (int z = 0; z < width; z++) {
+                context.setBlock(origin.offset(x, floorY - 1, z), Blocks.STONE);
+                context.setBlock(origin.offset(x, floorY, z), Blocks.AIR);
+                context.setBlock(origin.offset(x, floorY + 1, z), Blocks.AIR);
+            }
+        }
+
+        for (int x = 0; x < 6; x++) {
+            int floorY = flowingChannelFloorY(x);
+            for (int z = 0; z < width; z++) {
+                BlockPos waterPos = origin.offset(x, floorY, z);
+                int amount = 8;
+                context.setBlock(waterPos, Fluids.WATER.getFlowing(amount, false).createLegacyBlock());
+                expectedWaterAmount[0] += amount;
+                context.getLevel().scheduleTick(context.absolutePos(waterPos), Fluids.WATER, 1);
+            }
+        }
+
+        for (int tick = 10; tick <= 150; tick += 10) {
+            context.runAtTickTime(tick, () -> {
+                for (int x = 0; x < length; x++) {
+                    for (int y = flowingChannelFloorY(x); y <= 1; y++) {
+                        for (int z = 0; z < width; z++) {
+                            BlockPos pos = origin.offset(x, y, z);
+                            if (context.getBlockState(pos).getFluidState().is(Fluids.WATER)) {
+                                context.getLevel().scheduleTick(context.absolutePos(pos), Fluids.WATER, 1);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        context.runAtTickTime(190, () -> {
+            int actualWaterAmount = 0;
+            int lowerChannelWater = 0;
+            int furthestWetX = -1;
+            for (int x = 0; x < length; x++) {
+                for (int y = -5; y <= 1; y++) {
+                    for (int z = 0; z < width; z++) {
+                        int amount = context.getBlockState(origin.offset(x, y, z)).getFluidState().getAmount();
+                        actualWaterAmount += amount;
+                        if (amount > 0) {
+                            furthestWetX = Math.max(furthestWetX, x);
+                        }
+                        if (x >= length - 4) {
+                            lowerChannelWater += amount;
+                        }
+                    }
+                }
+            }
+
+            if (actualWaterAmount != expectedWaterAmount[0]) {
+                context.fail("flowing finite water channel did not conserve volume; expected="
+                        + expectedWaterAmount[0] + " actual=" + actualWaterAmount);
+                return;
+            }
+            context.assertTrue(
+                    lowerChannelWater > 0 || furthestWetX >= length / 2,
+                    "finite water should travel down the sloped channel; furthestWetX=" + furthestWetX);
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 80, padding = 8)
     public void stressSurfaceWeatherQueue(GameTestHelper context) {
         if (!ENABLED) {
@@ -357,5 +453,9 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
             EmergentConfig.get().materialReactions = materialReactions;
             EmergentConfig.get().rainAccumulation = rainAccumulation;
         }
+    }
+
+    private static int flowingChannelFloorY(int x) {
+        return -(x / 4);
     }
 }

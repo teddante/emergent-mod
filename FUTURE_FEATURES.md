@@ -28,7 +28,7 @@ No more unrelated features should be added to either PR. New gameplay systems sh
 - Moisture/ash-assisted rain growth.
 - Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
 - Opt-in Emergent tick profiler with finite-fluid water/lava counters, heated block summaries, finite-fluid chunk hotspots, and traffic contact-cell hotspots when traffic becomes a slow contributor.
-- Headless stress/perf GameTests and compact `scripts/dev_perf.ps1` summaries covering stable fluids, multi-chunk finite water, surface weather, fire scans, traffic contact patches, and lava/water thermal reactions.
+- Headless stress/perf GameTests and compact `scripts/dev_perf.ps1` summaries covering stable fluids, multi-chunk finite water, sloped finite-water channels, surface weather, fire scans, traffic contact patches, and lava/water thermal reactions.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
@@ -38,7 +38,7 @@ No more unrelated features should be added to either PR. New gameplay systems sh
 
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
 - Use finite-fluid chunk hotspot output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, or genuinely active fluid movement.
-- Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially flowing-river style terrain and player-made large fluid systems.
+- Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially larger player-made fluid systems and any Prism logs that do not resemble the current basin/channel stress cases.
 - Design the experience-energy layer so XP, sculk charge, enchanting, anvils, books, and enchantment output all use one shared quantity instead of unrelated costs.
 - Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
