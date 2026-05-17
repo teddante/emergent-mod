@@ -4,6 +4,7 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.FiniteFluidBudgetSettings;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.WaterPhysics;
@@ -40,11 +41,9 @@ import java.util.WeakHashMap;
 @Mixin(FlowingFluid.class)
 public abstract class FlowableFluidMixin extends Fluid {
     @Unique
-    private static final int emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET = Integer.getInteger(
-            "emergent.finiteFluid.activeTickBudget",
-            4096);
+    private static final int emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET = FiniteFluidBudgetSettings.activeTickBudget();
     @Unique
-    private static final int emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS = 4;
+    private static final int emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS = FiniteFluidBudgetSettings.budgetDeferSpreadTicks();
     @Unique
     private static final Map<ServerLevel, EmergentFiniteFluidBudget> emergent$FINITE_FLUID_BUDGETS = new WeakHashMap<>();
 
