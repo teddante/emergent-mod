@@ -7,6 +7,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 
@@ -192,6 +193,41 @@ public final class ExperienceEnergy {
                 + enchantmentLevelBudget(safeIncoming, safeAnvilCost);
         long mergedLevel = combinedBudget / safeAnvilCost;
         return (int) Math.min(MAX_ENCHANTMENT_LEVEL, mergedLevel);
+    }
+
+    public static double enchantmentOutputEnergyRatio(int enchantmentLevel, int vanillaMaxLevel, int anvilCost) {
+        int safeLevel = Math.max(0, enchantmentLevel);
+        int safeVanillaMax = Math.max(1, vanillaMaxLevel);
+        int safeAnvilCost = Math.max(1, anvilCost);
+        int baselineBudget = enchantmentLevelBudget(safeVanillaMax, safeAnvilCost);
+        if (baselineBudget <= 0) {
+            return 1.0;
+        }
+
+        return Math.max(0.0, (double) enchantmentLevelBudget(safeLevel, safeAnvilCost) / baselineBudget);
+    }
+
+    public static int repairDurabilityFromStoredEnergy(ItemStack itemStack, int vanillaDurability) {
+        if (vanillaDurability <= 0) {
+            return 0;
+        }
+
+        double strongestEnergyRatio = 1.0;
+        for (Object2IntMap.Entry<Holder<Enchantment>> entry : EnchantmentHelper.getEnchantmentsForCrafting(itemStack).entrySet()) {
+            Enchantment enchantment = entry.getKey().value();
+            int level = Math.max(0, entry.getIntValue());
+            int vanillaMaxLevel = Math.max(1, enchantment.getMaxLevel());
+            if (level <= vanillaMaxLevel || !enchantment.effects().has(EnchantmentEffectComponents.REPAIR_WITH_XP)) {
+                continue;
+            }
+
+            strongestEnergyRatio = Math.max(
+                    strongestEnergyRatio,
+                    enchantmentOutputEnergyRatio(level, vanillaMaxLevel, enchantment.getAnvilCost()));
+        }
+
+        long repairedDurability = Mth.floor(vanillaDurability * strongestEnergyRatio);
+        return repairedDurability >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) repairedDurability;
     }
 
     public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {

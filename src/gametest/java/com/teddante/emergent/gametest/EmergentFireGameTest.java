@@ -1340,6 +1340,32 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void boundlessMendingRepairOutputScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> mending = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MENDING);
+        ItemStack ordinaryPick = new ItemStack(Items.DIAMOND_PICKAXE);
+        ItemStack energeticPick = new ItemStack(Items.DIAMOND_PICKAXE);
+        EnchantmentHelper.updateEnchantments(ordinaryPick, enchantments -> enchantments.set(mending, 1));
+        EnchantmentHelper.updateEnchantments(energeticPick, enchantments -> enchantments.set(mending, 4));
+
+        int ordinaryRepair = EnchantmentHelper.modifyDurabilityToRepairFromXp(context.getLevel(), ordinaryPick, 3);
+        int energeticRepair = EnchantmentHelper.modifyDurabilityToRepairFromXp(context.getLevel(), energeticPick, 3);
+        double outputRatio = ExperienceEnergy.enchantmentOutputEnergyRatio(
+                4,
+                mending.value().getMaxLevel(),
+                mending.value().getAnvilCost());
+
+        context.assertTrue(ordinaryRepair == 6,
+                "vanilla-level Mending should still repair two durability per raw XP point");
+        context.assertTrue(outputRatio == 4.0,
+                "Mending IV stores four times the vanilla repair enchantment work budget");
+        context.assertTrue(energeticRepair == ordinaryRepair * 4,
+                "boundless repair output should spend raw XP with power proportional to stored repair energy");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void anvilMergesEnchantmentEnergyBudgets(GameTestHelper context) {
         Holder<Enchantment> sharpness = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
