@@ -101,8 +101,34 @@ function Get-TopChunkText([hashtable]$ChunkTotals, [int]$TopChunks) {
     return ($top | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
 }
 
+function Get-StartupDiagnostics([array]$LogLines) {
+    $profilerEnabled = $false
+    $slowMs = ""
+    $activeBudget = ""
+    $chunkBudget = ""
+
+    foreach ($line in $LogLines) {
+        if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
+            $profilerEnabled = $true
+            $slowMs = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid work budget: ([0-9]+) cells/tick") {
+            $activeBudget = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
+            $chunkBudget = $Matches[1]
+        }
+    }
+
+    [PSCustomObject]@{
+        ProfilerEnabled = $profilerEnabled
+        SlowMs = $slowMs
+        ActiveBudget = $activeBudget
+        ChunkBudget = $chunkBudget
+    }
+}
+
 function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     $lines = Get-LogLines $File.FullName
+    $startup = Get-StartupDiagnostics $lines
     $profilerLines = @($lines | Where-Object {
         $_ -like "*Emergent profiler:*" -and (Get-ProfilerTick $_) -gt $WarmupTicks
     })
@@ -157,6 +183,10 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         BudgetDeferrals = $budgetDeferrals
         ChunkDeferrals = $chunkDeferrals
         Format = $format
+        StartupProfilerEnabled = $startup.ProfilerEnabled
+        StartupSlowMs = $startup.SlowMs
+        StartupActiveBudget = $startup.ActiveBudget
+        StartupChunkBudget = $startup.ChunkBudget
         TopChunks = Get-TopChunkText $chunkTotals $TopChunks
     }
 }
@@ -179,9 +209,14 @@ if ($files.Count -eq 0) {
 } else {
     $measurements = @($files | ForEach-Object { Measure-Log $_ $WarmupTicks $TopChunks })
     foreach ($item in $measurements) {
-        $summary.Add(("{0} [{1}] profiler={2} maxMs={3:N3} lag={4} maxLagMs={5} behind={6} finiteTicks={7} budgetDeferrals={8} chunkDeferrals={9}" -f `
+        $startupText = "profiler=" + $(if ($item.StartupProfilerEnabled) { "on" } else { "off" }) +
+                " slowMs=" + $(if ($item.StartupSlowMs -ne "") { $item.StartupSlowMs } else { "-" }) +
+                " budget=" + $(if ($item.StartupActiveBudget -ne "") { $item.StartupActiveBudget } else { "-" }) +
+                "/" + $(if ($item.StartupChunkBudget -ne "") { $item.StartupChunkBudget } else { "-" })
+        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10}" -f `
                     $item.Name,
                     $item.Format,
+                    $startupText,
                     $item.ProfilerLines,
                     $item.MaxProfilerMs,
                     $item.LagWarnings,
@@ -206,6 +241,8 @@ if ($files.Count -eq 0) {
                 @($measurements | Where-Object { $_.Format -eq "no-profiler" }).Count))
     if ($currentLogs.Count -eq 0 -and $preBudgetLogs.Count -gt 0) {
         $summary.Add("interpretation=no current-format finite-fluid profiler log was found; retest with the latest copied jar before tuning budgets.")
+    } elseif ($lagOnlyLogs.Count -gt 0 -and @($measurements | Where-Object { $_.StartupProfilerEnabled }).Count -eq 0) {
+        $summary.Add("interpretation=lag warnings exist, but no scanned log shows the Emergent profiler startup line; enable -Demergent.profiler=true before using these logs for Emergent budget tuning.")
     } elseif ($lagOnlyLogs.Count -gt 0) {
         $summary.Add("interpretation=some lag warnings have no Emergent profiler line; compare with Minecraft/other-mod load before changing Emergent budgets.")
     } elseif ($currentLogs.Count -gt 0) {

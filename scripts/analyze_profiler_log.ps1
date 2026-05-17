@@ -193,6 +193,31 @@ function Add-LagCorrelation([System.Collections.Generic.List[string]]$Summary, [
     }
 }
 
+function Get-StartupDiagnostics([array]$LogLines) {
+    $profilerEnabled = $false
+    $slowMs = ""
+    $activeBudget = ""
+    $chunkBudget = ""
+
+    foreach ($line in $LogLines) {
+        if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
+            $profilerEnabled = $true
+            $slowMs = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid work budget: ([0-9]+) cells/tick") {
+            $activeBudget = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
+            $chunkBudget = $Matches[1]
+        }
+    }
+
+    [PSCustomObject]@{
+        ProfilerEnabled = $profilerEnabled
+        SlowMs = $slowMs
+        ActiveBudget = $activeBudget
+        ChunkBudget = $chunkBudget
+    }
+}
+
 function Get-LogLines([string]$ResolvedPath) {
     if (!$ResolvedPath.EndsWith(".gz", [System.StringComparison]::OrdinalIgnoreCase)) {
         return @(Get-Content -LiteralPath $ResolvedPath)
@@ -226,6 +251,7 @@ function Get-LogLines([string]$ResolvedPath) {
 
 $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
 $logLines = Get-LogLines $resolvedPath
+$startup = Get-StartupDiagnostics $logLines
 $allProfilerLines = @($logLines | Where-Object { $_ -like "*Emergent profiler:*" })
 $profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt $WarmupTicks })
 $lagLines = @($logLines | Where-Object { $_ -like "*Can't keep up!*" })
@@ -244,6 +270,11 @@ $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log summary")
 $summary.Add("Log: $resolvedPath")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
+$summary.Add(("Startup: profilerEnabled={0} slowMs={1} finiteFluidBudget={2} finiteFluidChunkBudget={3}" -f `
+            $startup.ProfilerEnabled,
+            $(if ($startup.SlowMs -ne "") { $startup.SlowMs } else { "-" }),
+            $(if ($startup.ActiveBudget -ne "") { $startup.ActiveBudget } else { "-" }),
+            $(if ($startup.ChunkBudget -ne "") { $startup.ChunkBudget } else { "-" })))
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 $summary.Add("")
 $summary.Add("Worst profiler ticks:")

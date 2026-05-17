@@ -249,7 +249,7 @@ To scan a whole Prism log folder or `build\reports\emergent-profiler` without op
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\analyze_profiler_log_directory.ps1 -Directory "C:\path\to\logs" -TopFiles 12
 ```
 
-The saved-log analyzers accept plain `.log` files and archived `.log.gz` files. They summarize vanilla `Can't keep up!` warnings, profiler format age, finite-fluid budget deferrals, and top finite-fluid chunks.
+The saved-log analyzers accept plain `.log` files and archived `.log.gz` files. They summarize vanilla `Can't keep up!` warnings, profiler startup state, active finite-fluid budget values, profiler format age, finite-fluid budget deferrals, and top finite-fluid chunks.
 If the finite-fluid diagnosis says schedule, budget, or quiet-cache counters are missing, the log was captured with an older test jar; launch the current copied jar once and analyze the new `latest.log` before making scheduler decisions.
 
 See [FUTURE_FEATURES.md](FUTURE_FEATURES.md) for current tracking and likely next work.
