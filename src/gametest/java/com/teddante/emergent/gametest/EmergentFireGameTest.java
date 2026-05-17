@@ -1369,6 +1369,27 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void disabledBoundlessEnchantingKeepsVanillaMendingRate(GameTestHelper context) {
+        Holder<Enchantment> mending = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MENDING);
+        ItemStack energeticPick = new ItemStack(Items.DIAMOND_PICKAXE);
+        EnchantmentHelper.updateEnchantments(energeticPick, enchantments -> enchantments.set(mending, 4));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            int repair = EnchantmentHelper.modifyDurabilityToRepairFromXp(context.getLevel(), energeticPick, 3);
+            context.assertTrue(repair == 6,
+                    "when boundless enchanting is disabled, high stored Mending work should not alter vanilla repair rate");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void boundlessFlameIgniteDurationScalesWithStoredEnergy(GameTestHelper context) {
         Holder<Enchantment> flame = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
