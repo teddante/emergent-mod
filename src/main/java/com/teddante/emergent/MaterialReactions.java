@@ -203,6 +203,7 @@ public final class MaterialReactions {
             charredState = charredState.setValue(RotatedPillarBlock.AXIS, state.getValue(RotatedPillarBlock.AXIS));
         }
 
+        leaveCharAshResidue(world, pos, state);
         world.setBlock(pos, charredState, 3);
         world.playSound(null, pos, SoundEvents.FIRE_EXTINGUISH, SoundSource.BLOCKS, 0.4f, 0.8f);
         return true;
@@ -298,6 +299,19 @@ public final class MaterialReactions {
 
     private static void leaveAshResidue(ServerLevel world, BlockPos pos, BlockState burnedState) {
         double ashKilograms = MaterialPhysicsProfiles.ashKilogramsFromBurnedBlock(burnedState);
+        if (ashKilograms <= 0.0) {
+            return;
+        }
+
+        BlockPos residuePos = pos.below();
+        BlockState residueState = world.getBlockState(residuePos);
+        if (!residueState.isAir() && residueState.getFluidState().isEmpty()) {
+            EnvironmentalExposure.addAshResidue(world, residuePos, residueState, ashKilograms);
+        }
+    }
+
+    private static void leaveCharAshResidue(ServerLevel world, BlockPos pos, BlockState charredState) {
+        double ashKilograms = MaterialPhysicsProfiles.ashKilogramsFromCharredSurface(charredState);
         if (ashKilograms <= 0.0) {
             return;
         }

@@ -117,6 +117,37 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void charredLogLeavesSurfaceAshResidue(GameTestHelper context) {
+        BlockPos supportPos = TEST_POS.below();
+        context.setBlock(supportPos, Blocks.DIRT);
+        context.setBlock(TEST_POS, Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.Z));
+
+        MaterialReactions.exposeToFire(
+                context.getLevel(),
+                context.absolutePos(TEST_POS),
+                context.getBlockState(TEST_POS),
+                16.0f,
+                RandomSource.create(42));
+
+        context.assertBlockPresent(Blocks.STRIPPED_OAK_LOG, TEST_POS);
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(supportPos), context.getBlockState(supportPos)) > 0.0,
+                "charred wood should shed surface ash into the same residue memory used by rain and growth");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void charAshIsLessThanWholeLogBurnAsh(GameTestHelper context) {
+        double charAsh = MaterialPhysicsProfiles.ashKilogramsFromCharredSurface(Blocks.OAK_LOG.defaultBlockState());
+        double burnAsh = MaterialPhysicsProfiles.ashKilogramsFromBurnedBlock(Blocks.OAK_LOG.defaultBlockState());
+
+        context.assertTrue(charAsh > 0.0, "a charred wood surface should leave some ash residue");
+        context.assertTrue(charAsh < burnAsh,
+                "surface charring should produce less ash than consuming the whole log");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void sustainedFireExposureCharsLogDeterministically(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.OAK_LOG.defaultBlockState().setValue(RotatedPillarBlock.AXIS, Direction.Axis.Z));
         RandomSource random = RandomSource.create(12);

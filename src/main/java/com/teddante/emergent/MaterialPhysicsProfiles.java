@@ -7,6 +7,8 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class MaterialPhysicsProfiles {
     private static final double DEFAULT_SOLID_ABSORPTION = 0.12;
     private static final double GAME_MASS_KG_SCALE = 0.01;
+    private static final double CHARRED_SURFACE_DEPTH_METERS = 0.02;
+    private static final double WOOD_SURFACE_ASH_YIELD_FRACTION = 0.05;
 
     private MaterialPhysicsProfiles() {
     }
@@ -202,6 +204,17 @@ public final class MaterialPhysicsProfiles {
         }
 
         return 0.0;
+    }
+
+    public static double ashKilogramsFromCharredSurface(BlockState state) {
+        if (!state.is(BlockTags.LOGS)) {
+            return 0.0;
+        }
+
+        return densityKilogramsPerCubicMeter(state)
+                * EnvironmentalExposure.BLOCK_VOLUME_CUBIC_METERS
+                * CHARRED_SURFACE_DEPTH_METERS
+                * WOOD_SURFACE_ASH_YIELD_FRACTION;
     }
 
     public static double dryFireExposureMultiplier(BlockState state, double moisture, double storedHeat) {
