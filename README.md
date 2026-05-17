@@ -58,6 +58,7 @@ Rain and water feed the same surface-memory model:
 - Soil, mud, sand, and grass soak more moisture before puddles appear.
 - Puddle formation consumes stored surface moisture instead of creating free water.
 - Puddles and flowing water can wash ash into suspended sediment.
+- Slow rain, snow, drying, and climate samples are queued through a deterministic scheduler so busy weather does not all execute inside one vanilla precipitation tick.
 
 Hydraulic erosion is driven by actual water movement when finite flow is enabled:
 
@@ -187,6 +188,7 @@ Emergent prefers vanilla APIs, block tags, item tags, block states, inventories,
 - Most features use non-destructive injections where practical.
 - Feature categories are broad enough for modpack use without adding a config toggle for every tiny interaction.
 - Runtime environmental memory is not saved as world data unless a later system explicitly introduces persistence.
+- Slow surface-weather work is batched and weighted so delayed samples still apply the physical rain/drying opportunity that accumulated.
 - Dynamic XP uses the vanilla living-entity reward query, so sculk catalysts and XP orbs stay on the native path.
 
 ## Development

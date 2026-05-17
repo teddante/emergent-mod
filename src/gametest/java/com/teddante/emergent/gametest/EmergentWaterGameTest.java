@@ -1,6 +1,7 @@
 package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalScheduler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FireWetness;
@@ -62,6 +63,44 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 "the default GameTest overworld should not use Nether-style environmental water evaporation");
         context.assertBlockPresent(Blocks.WATER, WATER_POS);
         context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void schedulerProbabilityAccumulatesDelayedSamples(GameTestHelper context) {
+        double singleSampleChance = 0.1;
+        double threeSampleChance = EnvironmentalScheduler.probabilityOverSamples(singleSampleChance, 3);
+
+        assertClose(
+                EnvironmentalScheduler.probabilityOverSamples(singleSampleChance, 1),
+                singleSampleChance,
+                "one queued sample should preserve the original chance");
+        assertClose(
+                threeSampleChance,
+                1.0 - Math.pow(0.9, 3),
+                "queued samples should combine as independent physical opportunities");
+        context.assertTrue(threeSampleChance > singleSampleChance && threeSampleChance < singleSampleChance * 3.0,
+                "accumulated probability should grow without becoming a linear certainty");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 30)
+    public void schedulerCoalescesRepeatedSurfaceSamples(GameTestHelper context) {
+        BlockPos samplePos = new BlockPos(6, 3, 6);
+
+        EnvironmentalScheduler.enqueueSurfaceWeatherSample(context.getLevel(), context.absolutePos(samplePos));
+        EnvironmentalScheduler.enqueueSurfaceWeatherSample(context.getLevel(), context.absolutePos(samplePos));
+
+        context.assertTrue(
+                EnvironmentalScheduler.pendingSurfaceWeatherSampleWeightForTests(context.getLevel(), context.absolutePos(samplePos)) == 2,
+                "repeated samples for the same surface should merge into one weighted pending job");
+
+        context.runAfterDelay(12, () -> {
+            EnvironmentalScheduler.tickWorldForTests(context.getLevel());
+            context.assertTrue(
+                    EnvironmentalScheduler.pendingSurfaceWeatherSampleWeightForTests(context.getLevel(), context.absolutePos(samplePos)) == 0,
+                    "due environmental samples should drain from the scheduler queue");
+            context.succeed();
+        });
     }
 
     @GameTest(maxTicks = 40)

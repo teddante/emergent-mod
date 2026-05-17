@@ -1,6 +1,7 @@
 package com.teddante.emergent;
 
 import net.fabricmc.api.ModInitializer;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ public class Emergent implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		EmergentConfig.load();
+		ServerTickEvents.END_LEVEL_TICK.register(EnvironmentalScheduler::tickWorld);
 		LOGGER.info("Emergent mod initialized.");
 	}
 }

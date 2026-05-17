@@ -358,7 +358,11 @@ public final class MaterialReactions {
     }
 
     public static void tryRainOxidize(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
-        if (!state.is(MaterialReactionTags.RAIN_OXIDIZES) || random.nextFloat() > 0.08f) {
+        tryRainOxidize(world, pos, state, random, 0.08);
+    }
+
+    public static void tryRainOxidize(ServerLevel world, BlockPos pos, BlockState state, RandomSource random, double chance) {
+        if (!state.is(MaterialReactionTags.RAIN_OXIDIZES) || random.nextDouble() > chance) {
             return;
         }
 
@@ -368,7 +372,11 @@ public final class MaterialReactions {
     }
 
     public static void tryRainGrow(ServerLevel world, BlockPos pos, BlockState state, RandomSource random) {
-        if (!state.is(MaterialReactionTags.RAIN_GROWS) || random.nextFloat() > rainGrowthChance(world, pos, state)) {
+        tryRainGrow(world, pos, state, random, rainGrowthChance(world, pos, state));
+    }
+
+    public static void tryRainGrow(ServerLevel world, BlockPos pos, BlockState state, RandomSource random, double chance) {
+        if (!state.is(MaterialReactionTags.RAIN_GROWS) || random.nextDouble() > chance) {
             return;
         }
 

@@ -23,6 +23,7 @@ No more unrelated features should be added to that PR. New work should move to a
 - Heat/cold exposure, conduction, evaporation, freezing, snow/ice melt, thermal shock, and frost wedging.
 - Biome-aware drying, wetting, solar heat, and vegetation stress.
 - Moisture/ash-assisted rain growth.
+- Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
@@ -30,9 +31,9 @@ No more unrelated features should be added to that PR. New work should move to a
 
 ## High-Priority Next Work
 
-- Environmental scheduler: active cells, wake events, deterministic staggering, and elapsed-time integration for slow systems.
+- Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
+- Add representative performance profiling with finite fluids, rain, fire, traffic, heat/cold exposure, and large render/simulation distances.
 - Split or close broad draft PRs once the integration work stabilizes; use focused branches for unrelated features.
-- Performance profiling with a representative world using finite fluids, rain, fire, traffic, and heat/cold exposure.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
 - README/config/PR documentation pass before release.
 
