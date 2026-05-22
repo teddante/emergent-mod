@@ -201,7 +201,8 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         boolean belowWaterloggable = isWaterloggableTarget(world, below, belowBlockState);
-        if (canFlowInto(world, below, belowBlockState, Direction.DOWN) && (!belowWaterloggable || currentLevel >= 8)) {
+        if (emergent$canFlowInto(world, below, belowBlockState, belowFluidState, fluid, Direction.DOWN)
+                && (!belowWaterloggable || currentLevel >= 8)) {
             int belowLevel = WaterPhysics.isSameFluid(fluid, belowFluidState) ? belowFluidState.getAmount() : 0;
             int spaceBelow = 8 - belowLevel;
 
@@ -291,6 +292,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         for (Direction dir : Direction.Plane.HORIZONTAL) {
             BlockPos neighborPos = pos.relative(dir);
             BlockState neighborBlockState = world.getBlockState(neighborPos);
+            FluidState neighborFluidState = neighborBlockState.getFluidState();
             neighbors[idx] = neighborPos;
             directions[idx] = dir;
 
@@ -300,9 +302,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 EmergentProfiler.count(world, "finite_fluid_thermal_reactions", 1);
                 updateSourceAfterThermalReaction(world, pos, blockState, fluid, tickDelay, thermalResult);
                 return;
-            } else if (canFlowInto(world, neighborPos, neighborBlockState, dir)
+            } else if (emergent$canFlowInto(world, neighborPos, neighborBlockState, neighborFluidState, fluid, dir)
                     && !isWaterloggableTarget(world, neighborPos, neighborBlockState)) {
-                FluidState neighborFluidState = neighborBlockState.getFluidState();
                 int neighborLevel = WaterPhysics.isSameFluid(fluid, neighborFluidState)
                         ? neighborFluidState.getAmount()
                         : 0;
@@ -392,10 +393,11 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // Apply changes to world
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
-                        int movedAmount = Math.max(0, neighborLevels[i]
-                                - (WaterPhysics.isSameFluid(fluid, world.getFluidState(neighbors[i]))
-                                        ? world.getFluidState(neighbors[i]).getAmount()
-                                        : 0));
+                        FluidState neighborFluidState = world.getFluidState(neighbors[i]);
+                        int existingNeighborLevel = WaterPhysics.isSameFluid(fluid, neighborFluidState)
+                                ? neighborFluidState.getAmount()
+                                : 0;
+                        int movedAmount = Math.max(0, neighborLevels[i] - existingNeighborLevel);
                         if (movedAmount <= 0) {
                             continue;
                         }
@@ -559,8 +561,9 @@ public abstract class FlowableFluidMixin extends Fluid {
             return false;
         }
 
-        if (canFlowInto(world, below, belowState, Direction.DOWN)
-                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$canFlowInto(world, below, belowState, belowFluidState, fluid, Direction.DOWN)
+                && emergent$targetCanAcceptSourceFluid(world, below, belowState, belowFluidState, fluid)) {
             return false;
         }
 
@@ -576,8 +579,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 return false;
             }
 
-            if (canFlowInto(world, targetPos, targetState, direction)
-                    && emergent$targetCanAcceptSourceFluid(world, targetPos, targetState, fluid)) {
+            if (emergent$canFlowInto(world, targetPos, targetState, targetFluidState, fluid, direction)
+                    && emergent$targetCanAcceptSourceFluid(world, targetPos, targetState, targetFluidState, fluid)) {
                 return false;
             }
         }
@@ -587,7 +590,16 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private boolean emergent$targetCanAcceptSourceFluid(ServerLevel world, BlockPos pos, BlockState state, Fluid fluid) {
-        FluidState targetFluidState = state.getFluidState();
+        return emergent$targetCanAcceptSourceFluid(world, pos, state, state.getFluidState(), fluid);
+    }
+
+    @Unique
+    private boolean emergent$targetCanAcceptSourceFluid(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            FluidState targetFluidState,
+            Fluid fluid) {
         if (WaterPhysics.isSameFluid(fluid, targetFluidState)) {
             return targetFluidState.getAmount() < 8;
         }
@@ -607,8 +619,17 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Unique
     private boolean canFlowInto(ServerLevel world, BlockPos pos, BlockState state, Direction direction) {
         Fluid fluid = (Fluid) (Object) this;
-        FluidState targetFluidState = state.getFluidState();
+        return emergent$canFlowInto(world, pos, state, state.getFluidState(), fluid, direction);
+    }
 
+    @Unique
+    private boolean emergent$canFlowInto(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            FluidState targetFluidState,
+            Fluid fluid,
+            Direction direction) {
         if (state.isAir())
             return true;
         if (WaterPhysics.isSameFluid(fluid, targetFluidState))
@@ -617,7 +638,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             return true;
         if (!targetFluidState.isEmpty())
             return false;
-        return state.canBeReplaced((Fluid) (Object) this);
+        return state.canBeReplaced(fluid);
     }
 
     @Unique
@@ -867,11 +888,12 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         BlockPos below = pos.below();
         BlockState belowState = world.getBlockState(below);
-        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
             return null;
         }
-        if (canFlowInto(world, below, belowState, Direction.DOWN)
-                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+        if (emergent$canFlowInto(world, below, belowState, belowFluidState, fluid, Direction.DOWN)
+                && emergent$targetCanAcceptSourceFluid(world, below, belowState, belowFluidState, fluid)) {
             return null;
         }
 
@@ -890,7 +912,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 blockedByWaterloggableNeighbor = true;
                 continue;
             }
-            if (canFlowInto(world, targetPos, targetState, direction)) {
+            if (emergent$canFlowInto(world, targetPos, targetState, targetFluidState, fluid, direction)) {
                 int targetAmount = WaterPhysics.isSameFluid(fluid, targetFluidState) ? targetFluidState.getAmount() : 0;
                 if (targetAmount < amount) {
                     return null;
