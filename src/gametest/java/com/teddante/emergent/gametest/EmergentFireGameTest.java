@@ -1424,6 +1424,67 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void levelBasedKnockbackEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> knockback = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.KNOCKBACK);
+        Player attacker = context.makeMockPlayer(GameType.CREATIVE);
+        LivingEntity victim = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        ItemStack vanillaSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(vanillaSword, enchantments -> enchantments.set(knockback, 2));
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(knockback, 4));
+
+        float vanillaKnockback = EnchantmentHelper.modifyKnockback(
+                context.getLevel(),
+                vanillaSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                0.0F);
+        float energeticKnockback = EnchantmentHelper.modifyKnockback(
+                context.getLevel(),
+                energeticSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                0.0F);
+
+        context.assertTrue(Math.abs(vanillaKnockback - 2.0F) < 0.001F,
+                "Knockback II should keep vanilla's level-based knockback value");
+        context.assertTrue(Math.abs(energeticKnockback - 4.0F) < 0.001F,
+                "over-cap Knockback should already spend stored work through vanilla's level-based knockback component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedProjectileCountEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> multishot = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MULTISHOT);
+        Player shooter = context.makeMockPlayer(GameType.CREATIVE);
+        ItemStack vanillaCrossbow = new ItemStack(Items.CROSSBOW);
+        ItemStack energeticCrossbow = new ItemStack(Items.CROSSBOW);
+        EnchantmentHelper.updateEnchantments(vanillaCrossbow, enchantments -> enchantments.set(multishot, 1));
+        EnchantmentHelper.updateEnchantments(energeticCrossbow, enchantments -> enchantments.set(multishot, 3));
+
+        int vanillaProjectiles = EnchantmentHelper.processProjectileCount(
+                context.getLevel(),
+                vanillaCrossbow,
+                shooter,
+                1);
+        int energeticProjectiles = EnchantmentHelper.processProjectileCount(
+                context.getLevel(),
+                energeticCrossbow,
+                shooter,
+                1);
+
+        context.assertTrue(vanillaProjectiles == 3,
+                "Multishot I should keep vanilla's level-based projectile count");
+        context.assertTrue(energeticProjectiles == 7,
+                "over-cap Multishot should already spend stored work through vanilla's level-based projectile-count component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void boundlessThornsDamageOutputScalesWithStoredEnergy(GameTestHelper context) {
         Holder<Enchantment> thorns = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
