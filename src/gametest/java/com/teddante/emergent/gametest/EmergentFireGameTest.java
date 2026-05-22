@@ -1766,6 +1766,56 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void disabledBoundlessEnchantingKeepsVanillaMenuLevelSpending(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.ENCHANTING_TABLE);
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            Player enchantingPlayer = context.makeMockPlayer(GameType.SURVIVAL);
+            enchantingPlayer.experienceLevel = 30;
+            enchantingPlayer.experienceProgress = 0.5F;
+            EnchantmentMenu enchantmentMenu = new EnchantmentMenu(
+                    0,
+                    enchantingPlayer.getInventory(),
+                    ContainerLevelAccess.create(context.getLevel(), context.absolutePos(TEST_POS)));
+            enchantmentMenu.getSlot(0).set(new ItemStack(Items.DIAMOND_SWORD));
+            enchantmentMenu.getSlot(1).set(new ItemStack(Items.LAPIS_LAZULI, 3));
+
+            context.assertTrue(enchantmentMenu.clickMenuButton(enchantingPlayer, 0),
+                    "vanilla enchanting table setup should still produce a payable option");
+            context.assertTrue(enchantingPlayer.experienceLevel == 29 && Math.abs(enchantingPlayer.experienceProgress - 0.5F) < 0.001F,
+                    "when boundless enchanting is disabled, the enchanting table should keep vanilla whole-level subtraction");
+
+            Player anvilPlayer = context.makeMockPlayer(GameType.SURVIVAL);
+            anvilPlayer.experienceLevel = 30;
+            anvilPlayer.experienceProgress = 0.5F;
+            AnvilMenu anvilMenu = new AnvilMenu(0, anvilPlayer.getInventory());
+            ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+            ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+            EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
+            EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
+            anvilMenu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+            anvilMenu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+            ItemStack result = anvilMenu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            int visibleCost = anvilMenu.getCost();
+
+            context.assertTrue(!result.isEmpty() && visibleCost > 0,
+                    "vanilla anvil setup should still produce a payable result");
+            anvilMenu.getSlot(AnvilMenu.RESULT_SLOT).onTake(anvilPlayer, result);
+            context.assertTrue(anvilPlayer.experienceLevel == 30 - visibleCost
+                            && Math.abs(anvilPlayer.experienceProgress - 0.5F) < 0.001F,
+                    "when boundless enchanting is disabled, the anvil should keep vanilla whole-level subtraction");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
         int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
         int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);
