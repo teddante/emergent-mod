@@ -16,6 +16,7 @@ import net.minecraft.world.item.enchantment.effects.AllOf;
 import net.minecraft.world.item.enchantment.effects.ChangeItemDamage;
 import net.minecraft.world.item.enchantment.effects.DamageEntity;
 import net.minecraft.world.item.enchantment.effects.EnchantmentEntityEffect;
+import net.minecraft.world.item.enchantment.effects.ExplodeEffect;
 import net.minecraft.world.item.enchantment.effects.Ignite;
 
 /**
@@ -316,6 +317,34 @@ public final class ExperienceEnergy {
         return adjustedDamage >= Integer.MAX_VALUE ? Integer.MAX_VALUE : (int) adjustedDamage;
     }
 
+    public static float explosionRadiusFromStoredEnergy(
+            ItemStack itemStack,
+            int enchantmentLevel,
+            ExplodeEffect sourceEffect,
+            float vanillaRadius) {
+        if (itemStack.isEmpty() || enchantmentLevel <= 0 || vanillaRadius <= 0.0F) {
+            return vanillaRadius;
+        }
+
+        double strongestEnergyRatio = 1.0;
+        for (Object2IntMap.Entry<Holder<Enchantment>> entry : EnchantmentHelper.getEnchantmentsForCrafting(itemStack).entrySet()) {
+            Enchantment enchantment = entry.getKey().value();
+            int level = Math.max(0, entry.getIntValue());
+            int vanillaMaxLevel = Math.max(1, enchantment.getMaxLevel());
+            if (level != enchantmentLevel || level <= vanillaMaxLevel
+                    || !hasConstantExplosionRadiusOutput(enchantment, sourceEffect, level, vanillaMaxLevel, vanillaRadius)) {
+                continue;
+            }
+
+            strongestEnergyRatio = Math.max(
+                    strongestEnergyRatio,
+                    enchantmentOutputEnergyRatio(level, vanillaMaxLevel, enchantment.getAnvilCost()));
+        }
+
+        double adjustedRadius = vanillaRadius * Math.cbrt(strongestEnergyRatio);
+        return adjustedRadius >= Float.MAX_VALUE ? Float.MAX_VALUE : (float) adjustedRadius;
+    }
+
     private static boolean hasConstantIgniteOutput(Enchantment enchantment, int level, int vanillaMaxLevel, float vanillaSeconds) {
         for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.PROJECTILE_SPAWNED)) {
             if (isMatchingConstantIgnite(effect.effect(), level, vanillaMaxLevel, vanillaSeconds)) {
@@ -462,6 +491,59 @@ public final class ExperienceEnergy {
         int levelCost = Mth.floor(itemDamage.amount().calculate(level));
         int vanillaMaxCost = Mth.floor(itemDamage.amount().calculate(vanillaMaxLevel));
         return levelCost == vanillaMaxCost && vanillaDamage == levelCost;
+    }
+
+    private static boolean hasConstantExplosionRadiusOutput(
+            Enchantment enchantment,
+            ExplodeEffect sourceEffect,
+            int level,
+            int vanillaMaxLevel,
+            float vanillaRadius) {
+        for (TargetedConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_ATTACK)) {
+            if (isMatchingConstantExplosionRadius(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaRadius)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_PIERCING_ATTACK)) {
+            if (isMatchingConstantExplosionRadius(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaRadius)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.PROJECTILE_SPAWNED)) {
+            if (isMatchingConstantExplosionRadius(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaRadius)) {
+                return true;
+            }
+        }
+        for (ConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.HIT_BLOCK)) {
+            if (isMatchingConstantExplosionRadius(effect.effect(), sourceEffect, level, vanillaMaxLevel, vanillaRadius)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isMatchingConstantExplosionRadius(
+            EnchantmentEntityEffect effect,
+            ExplodeEffect sourceEffect,
+            int level,
+            int vanillaMaxLevel,
+            float vanillaRadius) {
+        if (effect instanceof AllOf.EntityEffects allOf) {
+            for (EnchantmentEntityEffect childEffect : allOf.effects()) {
+                if (isMatchingConstantExplosionRadius(childEffect, sourceEffect, level, vanillaMaxLevel, vanillaRadius)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (!(effect instanceof ExplodeEffect explodeEffect) || !explodeEffect.equals(sourceEffect)) {
+            return false;
+        }
+
+        float levelRadius = Math.max(explodeEffect.radius().calculate(level), 0.0F);
+        float vanillaMaxRadius = Math.max(explodeEffect.radius().calculate(vanillaMaxLevel), 0.0F);
+        return Math.abs(levelRadius - vanillaRadius) < 0.001F
+                && levelRadius <= vanillaMaxRadius + 0.001F;
     }
 
     public static void spendWholeLevelCostAsRawEnergy(Player player, int levelCost) {

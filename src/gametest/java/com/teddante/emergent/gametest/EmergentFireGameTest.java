@@ -21,6 +21,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,12 +35,17 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantedItemInUse;
 import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.enchantment.LevelBasedValue;
+import net.minecraft.world.item.enchantment.TargetedConditionalEffect;
+import net.minecraft.world.item.enchantment.effects.AllOf;
 import net.minecraft.world.item.enchantment.effects.ChangeItemDamage;
 import net.minecraft.world.item.enchantment.effects.DamageEntity;
+import net.minecraft.world.item.enchantment.effects.EnchantmentEntityEffect;
+import net.minecraft.world.item.enchantment.effects.ExplodeEffect;
 import net.minecraft.world.item.enchantment.effects.Ignite;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
@@ -1665,6 +1671,67 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void boundlessWindBurstExplosionRadiusScalesWithStoredEnergyVolume(GameTestHelper context) {
+        Holder<Enchantment> windBurst = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.WIND_BURST);
+        ExplodeEffect windBurstExplosion = firstExplodeEffect(windBurst.value());
+        ItemStack ordinaryMace = new ItemStack(Items.MACE);
+        ItemStack energeticMace = new ItemStack(Items.MACE);
+        EnchantmentHelper.updateEnchantments(ordinaryMace, enchantments -> enchantments.set(windBurst, 3));
+        EnchantmentHelper.updateEnchantments(energeticMace, enchantments -> enchantments.set(windBurst, 6));
+
+        float vanillaRadius = Math.max(windBurstExplosion.radius().calculate(3), 0.0F);
+        float ordinaryRadius = ExperienceEnergy.explosionRadiusFromStoredEnergy(ordinaryMace, 3, windBurstExplosion, vanillaRadius);
+        float energeticRadius = ExperienceEnergy.explosionRadiusFromStoredEnergy(energeticMace, 6, windBurstExplosion, vanillaRadius);
+        double expectedEnergeticRadius = vanillaRadius * Math.cbrt(ExperienceEnergy.enchantmentOutputEnergyRatio(
+                6,
+                windBurst.value().getMaxLevel(),
+                windBurst.value().getAnvilCost()));
+
+        context.assertTrue(Math.abs(ordinaryRadius - vanillaRadius) < 0.001F,
+                "vanilla-level Wind Burst should keep vanilla's fixed explosion radius");
+        context.assertTrue(Math.abs(energeticRadius - expectedEnergeticRadius) < 0.001F,
+                "over-cap fixed explosion radius should scale by cube root of stored work so influenced volume tracks energy");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void explodeEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> windBurst = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.WIND_BURST);
+        ExplodeEffect windBurstExplosion = firstExplodeEffect(windBurst.value());
+        ItemStack energeticMace = new ItemStack(Items.MACE);
+        EnchantmentHelper.updateEnchantments(energeticMace, enchantments -> enchantments.set(windBurst, 6));
+        Entity source = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticMace, null, null, ignored -> {
+        });
+        Vec3 center = Vec3.atBottomCenterOf(context.absolutePos(TEST_POS.above()));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            Vec3 targetPos = Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST, 4).above());
+            LivingEntity vanillaRangeTarget = context.spawn(EntityType.COW, targetPos);
+            EmergentConfig.get().boundlessEnchanting = false;
+            windBurstExplosion.apply(context.getLevel(), 6, item, source, center);
+            double vanillaImpulse = vanillaRangeTarget.getDeltaMovement().lengthSqr();
+            vanillaRangeTarget.discard();
+
+            LivingEntity boundlessRangeTarget = context.spawn(EntityType.COW, targetPos);
+            EmergentConfig.get().boundlessEnchanting = true;
+            windBurstExplosion.apply(context.getLevel(), 6, item, source, center);
+            double boundlessImpulse = boundlessRangeTarget.getDeltaMovement().lengthSqr();
+            context.assertTrue(boundlessImpulse > vanillaImpulse * 1.15,
+                    "when boundless enchanting is enabled, fixed explosion effects should scale through the real vanilla effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void anvilMergesEnchantmentEnergyBudgets(GameTestHelper context) {
         Holder<Enchantment> sharpness = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
@@ -2051,6 +2118,31 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
             target.discard();
         }
         return maxDamage;
+    }
+
+    private static ExplodeEffect firstExplodeEffect(Enchantment enchantment) {
+        for (TargetedConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_ATTACK)) {
+            ExplodeEffect explodeEffect = firstExplodeEffect(effect.effect());
+            if (explodeEffect != null) {
+                return explodeEffect;
+            }
+        }
+        throw new AssertionError("expected enchantment to contain an explosion effect");
+    }
+
+    private static ExplodeEffect firstExplodeEffect(EnchantmentEntityEffect effect) {
+        if (effect instanceof ExplodeEffect explodeEffect) {
+            return explodeEffect;
+        }
+        if (effect instanceof AllOf.EntityEffects allOf) {
+            for (EnchantmentEntityEffect childEffect : allOf.effects()) {
+                ExplodeEffect explodeEffect = firstExplodeEffect(childEffect);
+                if (explodeEffect != null) {
+                    return explodeEffect;
+                }
+            }
+        }
+        return null;
     }
 
     private static void assertClose(double actual, double expected, String message) {
