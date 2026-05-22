@@ -28,6 +28,8 @@ import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.EnchantmentMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantedItemInUse;
@@ -1718,6 +1720,44 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                     "anvil take should preserve fractional raw XP progress after spending energy");
             context.assertTrue(player.totalExperience == ExperienceEnergy.rawPointsAtLevelProgress(expected.level(), expected.progress()),
                     "anvil take should keep total raw XP storage synchronized with the new level progress");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void enchantingTableSpendsVisibleCostAsRawExperienceEnergy(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.ENCHANTING_TABLE);
+        Player player = context.makeMockPlayer(GameType.SURVIVAL);
+        player.experienceLevel = 30;
+        player.experienceProgress = 0.5F;
+        player.totalExperience = ExperienceEnergy.rawPointsAtLevelProgress(player.experienceLevel, player.experienceProgress);
+        EnchantmentMenu menu = new EnchantmentMenu(
+                0,
+                player.getInventory(),
+                ContainerLevelAccess.create(context.getLevel(), context.absolutePos(TEST_POS)));
+        ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+        menu.getSlot(0).set(sword);
+        menu.getSlot(1).set(new ItemStack(Items.LAPIS_LAZULI, 3));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            int buttonId = 0;
+            int visibleCost = buttonId + 1;
+            ExperienceEnergy.LevelProgress expected = ExperienceEnergy.progressAfterWholeLevelCost(30, 0.5F, visibleCost);
+            boolean enchanted = menu.clickMenuButton(player, buttonId);
+
+            context.assertTrue(enchanted,
+                    "enchanting table setup should produce a payable enchantment before testing raw XP spending");
+            context.assertTrue(player.experienceLevel == expected.level(),
+                    "enchanting table should spend the visible lapis option cost as raw XP through the nonlinear level curve");
+            context.assertTrue(Math.abs(player.experienceProgress - expected.progress()) < 0.001F,
+                    "enchanting table should preserve fractional raw XP progress after spending energy");
+            context.assertTrue(player.totalExperience == ExperienceEnergy.rawPointsAtLevelProgress(expected.level(), expected.progress()),
+                    "enchanting table should keep total raw XP storage synchronized with the new level progress");
         } finally {
             EmergentConfig.get().boundlessEnchanting = previous;
         }
