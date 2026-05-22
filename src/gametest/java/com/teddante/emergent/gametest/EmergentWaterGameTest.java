@@ -645,6 +645,30 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void finiteWaterThermalSignatureTracksStoredHeat(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        int heatedSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertTrue(quietSignature != heatedSignature,
+                "stored heat should change the finite-water thermal cache signature");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
         BlockPos stonePos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
@@ -739,6 +763,38 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
 
         context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void quietFiniteWaterCacheWakesWhenStoredHeatChanges(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        scheduleCurrentFluidTick(context, WATER_POS);
+
+        context.runAfterDelay(10, () -> {
+            context.assertTrue(
+                    context.getBlockState(WATER_POS).getFluidState().getAmount() == 2,
+                    "ordinary shallow water should settle quietly before heat is added");
+            EnvironmentalExposure.addHeat(
+                    context.getLevel(),
+                    context.absolutePos(WATER_POS),
+                    context.getBlockState(WATER_POS),
+                    0.5);
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) > 0.35,
+                    "stored heat should remain above the shallow-water evaporation threshold when the wakeup is scheduled");
+            context.getLevel().scheduleTick(
+                    context.absolutePos(WATER_POS),
+                    context.getBlockState(WATER_POS).getFluidState().getType(),
+                    1);
+        });
+        context.runAfterDelay(20, () -> scheduleCurrentFluidTick(context, WATER_POS));
+        context.runAfterDelay(30, () -> scheduleCurrentFluidTick(context, WATER_POS));
+
+        context.runAfterDelay(60, () -> {
             context.assertBlockPresent(Blocks.AIR, WATER_POS);
             context.succeed();
         });
@@ -1346,6 +1402,13 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     private static int fluidAmount(GameTestHelper context, BlockPos pos, Fluid fluid) {
         FluidState fluidState = context.getBlockState(pos).getFluidState();
         return fluidState.getType().isSame(fluid) ? fluidState.getAmount() : 0;
+    }
+
+    private static void scheduleCurrentFluidTick(GameTestHelper context, BlockPos pos) {
+        FluidState fluidState = context.getBlockState(pos).getFluidState();
+        if (!fluidState.isEmpty()) {
+            context.getLevel().scheduleTick(context.absolutePos(pos), fluidState.getType(), 1);
+        }
     }
 
     private static void assertClose(double actual, double expected, String message) {

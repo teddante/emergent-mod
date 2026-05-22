@@ -99,9 +99,29 @@ public abstract class FlowableFluidMixin extends Fluid {
         int startingLevel = currentLevel;
         int tickDelay = fluid.getTickDelay(world);
 
-        if (WaterPhysics.isWater(fluid)) {
+        boolean isWater = WaterPhysics.isWater(fluid);
+        boolean isLava = WaterPhysics.isLava(fluid);
+        if (isWater) {
             EmergentProfiler.count(world, "finite_fluid_water_ticks", 1);
             EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_WATER, pos);
+        }
+        if (isLava) {
+            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
+            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
+        }
+
+        String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (cachedQuietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_hits", 1);
+            if (isWater) {
+                EmergentProfiler.count(world, "finite_fluid_water_thermal_cache_skips", 1);
+            }
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + cachedQuietTickReason + "_skips", 1);
+            return;
+        }
+
+        if (isWater) {
             if (!ThermalPhysics.finiteWaterMayChangeThermally(world, pos, currentLevel)) {
                 EmergentProfiler.count(world, "finite_fluid_water_thermal_quiet_skips", 1);
             } else {
@@ -130,19 +150,6 @@ public abstract class FlowableFluidMixin extends Fluid {
                     return;
                 }
             }
-        }
-        boolean isLava = WaterPhysics.isLava(fluid);
-        if (isLava) {
-            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
-            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
-        }
-
-        String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
-        if (cachedQuietTickReason != null) {
-            EmergentProfiler.count(world, "finite_fluid_quiet_cache_hits", 1);
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + cachedQuietTickReason + "_skips", 1);
-            return;
         }
 
         if (currentLevel >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
@@ -851,7 +858,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             return null;
         }
 
-        long fingerprint = emergent$finiteFluidQuietFingerprint(world, pos);
+        long fingerprint = emergent$finiteFluidQuietFingerprint(world, pos, fluid, amount);
         return entry.fingerprint == fingerprint ? entry.reason : null;
     }
 
@@ -868,18 +875,23 @@ public abstract class FlowableFluidMixin extends Fluid {
         cache.put(pos.asLong(), new EmergentFiniteFluidQuietCacheEntry(
                 fluid,
                 amount,
-                emergent$finiteFluidQuietFingerprint(world, pos),
+                emergent$finiteFluidQuietFingerprint(world, pos, fluid, amount),
                 reason));
     }
 
     @Unique
-    private long emergent$finiteFluidQuietFingerprint(ServerLevel world, BlockPos pos) {
+    private long emergent$finiteFluidQuietFingerprint(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
         long fingerprint = 0xcbf29ce484222325L;
         fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos);
         fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos.below());
         fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos.above());
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos.relative(direction));
+        }
+        if (WaterPhysics.isWater(fluid)) {
+            fingerprint = emergent$mixFiniteFluidFingerprint(
+                    fingerprint,
+                    ThermalPhysics.finiteWaterThermalSignature(world, pos, amount));
         }
         return fingerprint;
     }
