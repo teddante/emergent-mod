@@ -10,6 +10,7 @@ The active work is split across stacked draft PRs:
 - PR #4, `perf-environmental-scheduler`, is stacked on PR #3 and focuses on slow environmental scheduling, finite-fluid quiescence, profiling, and headless performance checks.
 - PR #5, `feature/experience-energy-model`, is stacked on PR #4 and introduces raw XP points as the shared experience-energy quantity used by dynamic entity rewards and the vanilla sculk catalyst path.
 - PR #6, `perf/finite-fluid-budget`, is stacked on PR #4 and adds deterministic global/per-chunk finite-fluid scheduled-tick inspection and neighbour-scan active-work budgeting, thermal-aware quiet-state caching, and diagnostics for inspection claims/deferrals, budget claims/deferrals, quiet-cache hits, thermal-cache skips, and water/lava chunk hotspots. The current server-friendly default is `256` active cells per tick, `64` active cells per chunk, and an inspection/admission budget eight times those active-work limits.
+- PR #7, `feature/enchantment-energy-costs`, is stacked on PR #5 and follows the experience-energy layer through real enchanting/anvil spending, stored enchantment work, anvil merges, supported over-cap enchantment outputs, and README/config tooltip coverage.
 
 No more unrelated features should be added to PR #3 or PR #4. Performance stabilization can continue on PR #6, and experience-energy follow-through can continue in focused branches stacked on PR #5. New unrelated gameplay systems should move to a focused branch from updated `main` once the current stack is merged, unless the work is directly required to stabilize the existing environmental integration.
 
@@ -30,10 +31,10 @@ No more unrelated features should be added to PR #3 or PR #4. Performance stabil
 - Moisture/ash-assisted rain growth.
 - Deterministic scheduler for slow surface-weather samples, including weighted queued rain, snow, drying, puddle, and climate updates.
 - Opt-in Emergent tick profiler with finite-fluid water/lava counters, active-schedule counters, quiet schedule/tick-skip reason counters, quiet-cache hit counters, heated block summaries, finite-fluid chunk hotspots, and traffic contact-cell hotspots when traffic becomes a slow contributor.
-- Deterministic finite-fluid budget that runs cheap quiet checks first, reuses exact local-neighborhood quiet proofs when the block/fluid and relevant water thermal fingerprint has not changed, then defers excess scheduled-tick inspection and neighbour-scan/active work instead of dropping it. It now includes lava contact heating plus both global and per-chunk caps so one hot chunk cannot monopolize all loaded-world fluid work, with profiler counters for inspection claims/deferrals and active-work budget claims/deferrals.
+- Deterministic finite-fluid budget that runs cheap quiet checks first, admits scheduled ticks through inspection budgets before local-neighborhood quiet-cache fingerprinting, then defers excess inspection and neighbour-scan/active work instead of dropping it. It now includes thermal-aware quiet caching, lava contact heating, both global and per-chunk caps so one hot chunk cannot monopolize all loaded-world fluid work, and profiler counters for inspection claims/deferrals, active-work budget claims/deferrals, cache hits, and thermal skips.
 - Headless stress/perf GameTests, compact `scripts/dev_perf.ps1` summaries with optional max-ms regression gates, single-log analysis via `scripts/analyze_profiler_log.ps1`, and directory scanning via `scripts/analyze_profiler_log_directory.ps1` covering stable fluids, multi-chunk finite water, broad shallow finite-water shelves, concentrated one-chunk finite-water and finite-lava hotspots, sloped finite-water channels, surface weather, fire scans, traffic contact patches, lava/water thermal reactions, finite-fluid active/quiet diagnosis, lava heat pacing, profiler-format age, and `Can't keep up!` correlation.
 - Dynamic entity XP feeding the vanilla XP/sculk catalyst path.
-- Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
+- Boundless enchanting, raw-XP level spending, stored enchantment work, over-cap repair/ignite/damage/explosion outputs, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.
 - Mod Menu / Cloth Config screen for broad feature gates.
 
@@ -42,7 +43,7 @@ No more unrelated features should be added to PR #3 or PR #4. Performance stabil
 - Extend the environmental scheduler beyond surface weather into other slow active cells where profiling proves it helps.
 - Use finite-fluid chunk hotspot and budget-deferral output from real Prism logs to identify whether heavy ticking comes from one loaded area, stale wakeups, genuinely active fluid movement, or an active-work budget that needs tuning.
 - Add broader representative performance scenarios only where they cover real-world lag patterns that the current headless tests miss, especially larger player-made fluid systems and any Prism logs that do not resemble the current basin/channel stress cases.
-- Design the experience-energy layer so XP, sculk charge, enchanting, anvils, books, and enchantment output all use one shared quantity instead of unrelated costs.
+- Continue tightening the experience-energy layer so XP, sculk charge, enchanting, anvils, books, and supported enchantment outputs use one shared quantity instead of unrelated costs.
 - Merge or close the current draft PR stack in order once the integration work stabilizes; use focused branches for unrelated features.
 - Manual gameplay feel pass for fire spread duration, rain puddle pacing, sediment deposition, freeze-thaw stress, traffic wear, and dynamic XP/sculk charge.
 - README/config/PR documentation pass before release.
