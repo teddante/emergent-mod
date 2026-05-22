@@ -10,6 +10,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 
 - If repeated work reveals a better project workflow, update this file with the generalized lesson. Keep additions short, durable, and broadly useful; avoid recording one-off fixes, temporary preferences, or details that belong in code comments, README usage notes, tests, or PR descriptions.
 - Prefer improvements that reduce future mistakes, tool calls, token use, manual testing, branch confusion, stale Minecraft-version assumptions, or unverifiable claims.
+- Improve the improvement loop itself when friction repeats: make the guidance clearer, faster, easier to verify, or easier to prune. Treat process edits like code edits by keeping them evidence-based, scoped, and useful to future agents rather than aspirational.
 - When adding process guidance, keep it current for the active Minecraft/Fabric toolchain and verify against local project reality before codifying it.
 
 ## Implementation Principles
