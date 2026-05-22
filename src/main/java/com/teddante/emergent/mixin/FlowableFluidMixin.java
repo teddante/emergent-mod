@@ -557,13 +557,12 @@ public abstract class FlowableFluidMixin extends Fluid {
     private boolean emergent$isStableFiniteSource(ServerLevel world, BlockPos pos, Fluid fluid) {
         BlockPos below = pos.below();
         BlockState belowState = world.getBlockState(below);
-        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
             return false;
         }
 
-        FluidState belowFluidState = belowState.getFluidState();
-        if (emergent$canFlowInto(world, below, belowState, belowFluidState, fluid, Direction.DOWN)
-                && emergent$targetCanAcceptSourceFluid(world, below, belowState, belowFluidState, fluid)) {
+        if (emergent$targetCanAcceptFiniteFluid(world, below, belowState, belowFluidState, fluid)) {
             return false;
         }
 
@@ -579,8 +578,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 return false;
             }
 
-            if (emergent$canFlowInto(world, targetPos, targetState, targetFluidState, fluid, direction)
-                    && emergent$targetCanAcceptSourceFluid(world, targetPos, targetState, targetFluidState, fluid)) {
+            if (emergent$targetCanAcceptFiniteFluid(world, targetPos, targetState, targetFluidState, fluid)) {
                 return false;
             }
         }
@@ -589,12 +587,7 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
-    private boolean emergent$targetCanAcceptSourceFluid(ServerLevel world, BlockPos pos, BlockState state, Fluid fluid) {
-        return emergent$targetCanAcceptSourceFluid(world, pos, state, state.getFluidState(), fluid);
-    }
-
-    @Unique
-    private boolean emergent$targetCanAcceptSourceFluid(
+    private boolean emergent$targetCanAcceptFiniteFluid(
             ServerLevel world,
             BlockPos pos,
             BlockState state,
@@ -892,8 +885,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
             return null;
         }
-        if (emergent$canFlowInto(world, below, belowState, belowFluidState, fluid, Direction.DOWN)
-                && emergent$targetCanAcceptSourceFluid(world, below, belowState, belowFluidState, fluid)) {
+        if (emergent$targetCanAcceptFiniteFluid(world, below, belowState, belowFluidState, fluid)) {
             return null;
         }
 
@@ -905,6 +897,12 @@ public abstract class FlowableFluidMixin extends Fluid {
             if (emergent$fluidContactWouldReact(fluid, targetFluidState)) {
                 return null;
             }
+            if (WaterPhysics.isSameFluid(fluid, targetFluidState)) {
+                if (targetFluidState.getAmount() < amount) {
+                    return null;
+                }
+                continue;
+            }
             if (isWaterloggableTarget(world, targetPos, targetState)) {
                 if (amount >= 8 && WaterPhysics.isWater(fluid)) {
                     return null;
@@ -912,11 +910,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 blockedByWaterloggableNeighbor = true;
                 continue;
             }
-            if (emergent$canFlowInto(world, targetPos, targetState, targetFluidState, fluid, direction)) {
-                int targetAmount = WaterPhysics.isSameFluid(fluid, targetFluidState) ? targetFluidState.getAmount() : 0;
-                if (targetAmount < amount) {
-                    return null;
-                }
+            if (emergent$targetCanAcceptFiniteFluid(world, targetPos, targetState, targetFluidState, fluid)) {
+                return null;
             }
         }
 
