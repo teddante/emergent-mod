@@ -36,7 +36,11 @@ public final class FiniteFluidQuietCache {
                 ignored -> new LinkedHashMap<>(MAX_ENTRIES, 0.75F, true) {
                     @Override
                     protected boolean removeEldestEntry(Map.Entry<Long, CacheEntry> eldest) {
-                        return size() > MAX_ENTRIES;
+                        boolean shouldRemove = size() > MAX_ENTRIES;
+                        if (shouldRemove) {
+                            EmergentProfiler.count(world, "finite_fluid_quiet_cache_evictions", 1);
+                        }
+                        return shouldRemove;
                     }
                 });
         cache.put(pos.asLong(), new CacheEntry(fluid, amount, reason));
