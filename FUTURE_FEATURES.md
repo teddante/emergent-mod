@@ -37,6 +37,7 @@ No more unrelated features should be added to PR #3 or PR #4. Experience-energy 
 - Repair enchantment output above the vanilla cap scales durability repaired per raw XP by stored repair-enchantment work, preserving vanilla-level Mending behavior.
 - Constant ignite enchantments above the vanilla cap scale burn duration by stored ignite-enchantment work, preserving vanilla-level Flame behavior.
 - Fixed returned-damage enchantment effects such as Thorns scale damage output by stored damage-effect work above the vanilla cap while preserving vanilla-level damage and level-based trigger chance.
+- Fixed item-damage costs paired with scaled returned-damage effects also scale by stored work, so stronger over-cap Thorns spends proportionally more armor durability instead of creating free output.
 - Advanced tooltips expose an enchanted item or book's derived Emergent work budget when Boundless Enchanting is enabled, without adding a new normal-play UI surface.
 - Boundless enchanting, unrestricted enchantment compatibility, and boundless brewing.
 - Command-line smoke checks and server GameTests.

@@ -36,6 +36,7 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.enchantment.LevelBasedValue;
+import net.minecraft.world.item.enchantment.effects.ChangeItemDamage;
 import net.minecraft.world.item.enchantment.effects.DamageEntity;
 import net.minecraft.world.item.enchantment.effects.Ignite;
 import net.minecraft.world.level.GameType;
@@ -1434,6 +1435,57 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "vanilla-level Thorns should keep vanilla's fixed returned-damage range");
         context.assertTrue(Math.abs(energeticDamage - 10.0F) < 0.001F,
                 "over-cap Thorns should convert stored work into stronger fixed returned damage");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void boundlessThornsItemDamageCostScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        ChangeItemDamage thornsItemDamage = new ChangeItemDamage(LevelBasedValue.constant(2.0F));
+        ItemStack ordinaryChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(ordinaryChestplate, enchantments -> enchantments.set(thorns, 3));
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+
+        int ordinaryCost = ExperienceEnergy.itemDamageCostFromStoredEnergy(ordinaryChestplate, 3, thornsItemDamage, 2);
+        int energeticCost = ExperienceEnergy.itemDamageCostFromStoredEnergy(energeticChestplate, 6, thornsItemDamage, 2);
+
+        context.assertTrue(ordinaryCost == 2,
+                "vanilla-level Thorns should keep vanilla's returned-damage durability cost");
+        context.assertTrue(energeticCost == 4,
+                "over-cap Thorns should spend proportionally more armor durability for stronger returned damage");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void changeItemDamageEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+        ChangeItemDamage thornsItemDamage = new ChangeItemDamage(LevelBasedValue.constant(2.0F));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticChestplate, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            thornsItemDamage.apply(context.getLevel(), 6, item, context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.above())), Vec3.atBottomCenterOf(TEST_POS.above()));
+            context.assertTrue(energeticChestplate.getDamageValue() == 2,
+                    "when boundless enchanting is disabled, fixed item-damage effects should keep vanilla cost");
+
+            energeticChestplate.setDamageValue(0);
+            EmergentConfig.get().boundlessEnchanting = true;
+            thornsItemDamage.apply(context.getLevel(), 6, item, context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST).above())), Vec3.atBottomCenterOf(TEST_POS.above()));
+            context.assertTrue(energeticChestplate.getDamageValue() == 4,
+                    "when boundless enchanting is enabled, fixed item-damage effects should scale through the real effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
         context.succeed();
     }
 
