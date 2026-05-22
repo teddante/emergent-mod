@@ -114,6 +114,10 @@ public abstract class FlowableFluidMixin extends Fluid {
             EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
         }
 
+        if (!emergent$claimFiniteFluidInspectionSlot(world, pos, fluid, tickDelay)) {
+            return;
+        }
+
         String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
         if (cachedQuietTickReason != null) {
             EmergentProfiler.count(world, "finite_fluid_quiet_cache_hits", 1);
@@ -122,10 +126,6 @@ public abstract class FlowableFluidMixin extends Fluid {
             }
             EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
             EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + cachedQuietTickReason + "_skips", 1);
-            return;
-        }
-
-        if (!emergent$claimFiniteFluidInspectionSlot(world, pos, fluid, tickDelay)) {
             return;
         }
 
