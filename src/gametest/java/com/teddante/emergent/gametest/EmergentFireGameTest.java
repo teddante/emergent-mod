@@ -1540,6 +1540,46 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void levelBasedIgniteEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> fireAspect = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FIRE_ASPECT);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(fireAspect, 4));
+        float vanillaSecondsAtLevel = 16.0F;
+        float adjustedSeconds = ExperienceEnergy.igniteDurationFromStoredEnergy(energeticSword, 4, vanillaSecondsAtLevel);
+
+        context.assertTrue(adjustedSeconds == vanillaSecondsAtLevel,
+                "over-cap Fire Aspect should already spend stored work through vanilla's level-based ignite duration");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedIgniteEffectDoesNotDoubleScaleThroughRealPath(GameTestHelper context) {
+        Holder<Enchantment> fireAspect = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FIRE_ASPECT);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(fireAspect, 4));
+        LivingEntity target = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        Ignite ignite = new Ignite(LevelBasedValue.perLevel(4.0F));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticSword, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            ignite.apply(context.getLevel(), 4, item, target, target.position());
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.assertTrue(target.getRemainingFireTicks() == 320,
+                "real level-based ignite effects should scale once through vanilla, not again through stored work");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void igniteEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
         Holder<Enchantment> flame = context.getLevel().registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT)
