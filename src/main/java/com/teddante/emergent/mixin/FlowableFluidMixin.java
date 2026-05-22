@@ -4,13 +4,13 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.FiniteFluidQuietCache;
 import com.teddante.emergent.FiniteFluidBudgetSettings;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.WaterPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
@@ -56,11 +56,7 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Unique
     private static final int emergent$MAX_HORIZONTAL_DIRECTIONS = 4;
     @Unique
-    private static final int emergent$FINITE_FLUID_QUIET_CACHE_MAX_ENTRIES = 32_768;
-    @Unique
     private static final Map<ServerLevel, EmergentFiniteFluidBudget> emergent$FINITE_FLUID_BUDGETS = new WeakHashMap<>();
-    @Unique
-    private static final Map<ServerLevel, Map<Long, EmergentFiniteFluidQuietCacheEntry>> emergent$FINITE_FLUID_QUIET_CACHES = new WeakHashMap<>();
 
     @Shadow
     public abstract FluidState getFlowing(int level, boolean falling);
@@ -907,66 +903,12 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private String emergent$cachedFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        Map<Long, EmergentFiniteFluidQuietCacheEntry> cache = emergent$FINITE_FLUID_QUIET_CACHES.get(world);
-        if (cache == null) {
-            return null;
-        }
-
-        EmergentFiniteFluidQuietCacheEntry entry = cache.get(pos.asLong());
-        if (entry == null || entry.fluid != fluid || entry.amount != amount) {
-            return null;
-        }
-
-        long fingerprint = emergent$finiteFluidQuietFingerprint(world, pos, fluid, amount);
-        return entry.fingerprint == fingerprint ? entry.reason : null;
+        return FiniteFluidQuietCache.reason(world, pos, fluid, amount);
     }
 
     @Unique
     private void emergent$rememberFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount, String reason) {
-        Map<Long, EmergentFiniteFluidQuietCacheEntry> cache = emergent$FINITE_FLUID_QUIET_CACHES.computeIfAbsent(
-                world,
-                ignored -> new LinkedHashMap<>(emergent$FINITE_FLUID_QUIET_CACHE_MAX_ENTRIES, 0.75F, true) {
-                    @Override
-                    protected boolean removeEldestEntry(Map.Entry<Long, EmergentFiniteFluidQuietCacheEntry> eldest) {
-                        return size() > emergent$FINITE_FLUID_QUIET_CACHE_MAX_ENTRIES;
-                    }
-                });
-        cache.put(pos.asLong(), new EmergentFiniteFluidQuietCacheEntry(
-                fluid,
-                amount,
-                emergent$finiteFluidQuietFingerprint(world, pos, fluid, amount),
-                reason));
-    }
-
-    @Unique
-    private long emergent$finiteFluidQuietFingerprint(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        long fingerprint = 0xcbf29ce484222325L;
-        fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos);
-        fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos.below());
-        fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos.above());
-        for (Direction direction : Direction.Plane.HORIZONTAL) {
-            fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, world, pos.relative(direction));
-        }
-        if (WaterPhysics.isWater(fluid)) {
-            fingerprint = emergent$mixFiniteFluidFingerprint(
-                    fingerprint,
-                    ThermalPhysics.finiteWaterThermalSignature(world, pos, amount));
-        }
-        return fingerprint;
-    }
-
-    @Unique
-    private long emergent$mixFiniteFluidFingerprint(long fingerprint, ServerLevel world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        FluidState fluidState = state.getFluidState();
-        fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, Block.getId(state));
-        fingerprint = emergent$mixFiniteFluidFingerprint(fingerprint, BuiltInRegistries.FLUID.getId(fluidState.getType()));
-        return emergent$mixFiniteFluidFingerprint(fingerprint, fluidState.getAmount());
-    }
-
-    @Unique
-    private long emergent$mixFiniteFluidFingerprint(long fingerprint, int value) {
-        return (fingerprint ^ value) * 0x100000001b3L;
+        FiniteFluidQuietCache.remember(world, pos, fluid, amount, reason);
     }
 
     @Unique
@@ -1016,9 +958,5 @@ public abstract class FlowableFluidMixin extends Fluid {
         private EmergentFiniteFluidBudget(long gameTime) {
             this.gameTime = gameTime;
         }
-    }
-
-    @Unique
-    private record EmergentFiniteFluidQuietCacheEntry(Fluid fluid, int amount, long fingerprint, String reason) {
     }
 }

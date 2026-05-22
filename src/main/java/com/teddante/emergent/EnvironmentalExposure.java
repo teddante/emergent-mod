@@ -638,6 +638,7 @@ public final class EnvironmentalExposure {
         if (levelExposure != null) {
             levelExposure.remove(pos.asLong());
         }
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
     }
 
     private static double hydraulicWear(ServerLevel world, BlockPos pos, BlockState state) {
@@ -703,6 +704,7 @@ public final class EnvironmentalExposure {
         }
 
         EXPOSURES.computeIfAbsent(world, ignored -> new HashMap<>()).put(pos.asLong(), entry);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
     }
 
     private static void update(ServerLevel world, BlockPos pos, EntryUpdater updater) {
@@ -723,6 +725,7 @@ public final class EnvironmentalExposure {
         } else {
             levelExposure.put(key, updated);
         }
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
     }
 
     private interface EntryUpdater {
