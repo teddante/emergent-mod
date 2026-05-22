@@ -2035,8 +2035,8 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         int zombieReward = zombie.getExperienceReward(context.getLevel(), null);
         int ravagerReward = ravager.getExperienceReward(context.getLevel(), null);
 
-        context.assertTrue(zombieReward == DynamicExperience.rewardAfterVanillaProcessing(zombie, 5),
-                "the central vanilla experience query should use the dynamic physical formula");
+        context.assertTrue(zombieReward == DynamicExperience.baseRewardForVanillaProcessing(zombie, 5),
+                "the central vanilla experience query should feed the dynamic physical formula into vanilla processing");
         context.assertTrue(ravagerReward > zombieReward,
                 "sculk catalysts and XP orbs should see more charge from a larger, tougher entity");
         context.succeed();

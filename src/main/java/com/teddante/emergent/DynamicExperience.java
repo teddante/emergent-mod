@@ -19,12 +19,12 @@ public final class DynamicExperience {
                 entity.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS));
     }
 
-    public static int rewardAfterVanillaProcessing(LivingEntity entity, int vanillaReward) {
+    public static int baseRewardForVanillaProcessing(LivingEntity entity, int vanillaBaseReward) {
         if (entity instanceof Player || entity.isBaby()) {
-            return vanillaReward;
+            return vanillaBaseReward;
         }
 
-        return Math.max(vanillaReward, baseExperienceReward(entity, vanillaReward));
+        return Math.max(vanillaBaseReward, baseExperienceReward(entity, vanillaBaseReward));
     }
 
     public static int baseExperienceFromMeasurements(
