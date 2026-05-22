@@ -1746,13 +1746,23 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
         EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
 
-        menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
-        menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
-        ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
-        int resultLevel = EnchantmentHelper.getEnchantmentsForCrafting(result).getLevel(sharpness);
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+            ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            int resultLevel = EnchantmentHelper.getEnchantmentsForCrafting(result).getLevel(sharpness);
+            int visibleCost = menu.getCost();
+            int expectedWorkCost = sharpness.value().getAnvilCost() * resultLevel;
 
-        context.assertTrue(resultLevel == 10,
-                "anvil output should merge both inputs' stored enchantment work budget through the real menu path");
+            context.assertTrue(resultLevel == 10,
+                    "anvil output should merge both inputs' stored enchantment work budget through the real menu path");
+            context.assertTrue(visibleCost == expectedWorkCost,
+                    "boundless anvil cost should charge for the merged stored work level shown in the output");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
         context.succeed();
     }
 

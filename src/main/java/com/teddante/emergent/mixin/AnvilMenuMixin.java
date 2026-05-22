@@ -26,10 +26,13 @@ import java.util.Map;
 @Mixin(AnvilMenu.class)
 public abstract class AnvilMenuMixin {
     @Unique
+    private final Map<Holder<Enchantment>, Integer> emergent$currentAnvilEnchantments = new HashMap<>();
+    @Unique
     private final Map<Holder<Enchantment>, Integer> emergent$incomingAnvilEnchantments = new HashMap<>();
 
     @Inject(method = "createResult", at = @At("HEAD"))
     private void emergent$clearIncomingEnchantments(CallbackInfo ci) {
+        emergent$currentAnvilEnchantments.clear();
         emergent$incomingAnvilEnchantments.clear();
     }
 
@@ -64,12 +67,35 @@ public abstract class AnvilMenuMixin {
             method = "createResult",
             at = @At(
                     value = "INVOKE",
+                    target = "Lnet/minecraft/world/item/enchantment/ItemEnchantments$Mutable;getLevel(Lnet/minecraft/core/Holder;)I"))
+    private int emergent$captureCurrentEnchantmentLevel(
+            ItemEnchantments.Mutable enchantments,
+            Holder<Enchantment> enchantment) {
+        int level = enchantments.getLevel(enchantment);
+        if (EmergentConfig.get().boundlessEnchanting) {
+            emergent$currentAnvilEnchantments.put(enchantment, level);
+        }
+        return level;
+    }
+
+    @Redirect(
+            method = "createResult",
+            at = @At(
+                    value = "INVOKE",
                     target = "Lit/unimi/dsi/fastutil/objects/Object2IntMap$Entry;getIntValue()I",
                     remap = false))
     private int emergent$captureIncomingEnchantmentLevel(Object2IntMap.Entry<Holder<Enchantment>> entry) {
         int level = entry.getIntValue();
         if (EmergentConfig.get().boundlessEnchanting) {
-            emergent$incomingAnvilEnchantments.put(entry.getKey(), level);
+            Holder<Enchantment> enchantment = entry.getKey();
+            emergent$incomingAnvilEnchantments.put(enchantment, level);
+            int currentLevel = emergent$currentAnvilEnchantments.getOrDefault(enchantment, 0);
+            if (currentLevel > 0 && level > 0) {
+                return ExperienceEnergy.mergedEnchantmentLevelFromEnergy(
+                        currentLevel,
+                        level,
+                        enchantment.value().getAnvilCost());
+            }
         }
         return level;
     }
