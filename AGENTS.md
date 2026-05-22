@@ -47,6 +47,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 - Commit coherent working chunks after verification when practical. Use clear commit messages. Do not tag every commit.
 - Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required manual validation is done.
 - Do not block every inner-loop push on `gh pr checks --watch`. Prefer local smoke/perf gates first, then check CI synchronously when build tooling changed, a failure is suspected, the PR is being readied, or the user needs a definitive remote status now.
+- Optimize for real elapsed time as well as tokens: avoid long watches and repeated broad commands when a short bounded poll, targeted search, or local gate gives enough evidence for the next decision.
 - Use issues for reproducible bugs and concrete feature ideas with versions, logs, mod lists, and reproduction steps when relevant.
 - Use SemVer in `gradle.properties`: patch for compatible fixes/tuning, minor for compatible feature systems, major for breaking config/data behavior or dropping a supported Minecraft line. `0.y.z` still means early development.
 - Only tag tested public builds. Releases should come from annotated `vMAJOR.MINOR.PATCH` tags after smoke checks and release notes are ready.
