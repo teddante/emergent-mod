@@ -37,6 +37,7 @@ import net.minecraft.world.item.enchantment.EnchantedItemInUse;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.EnchantmentInstance;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.enchantment.LevelBasedValue;
@@ -62,6 +63,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 public class EmergentFireGameTest implements CustomTestMethodInvoker {
     private static final BlockPos TEST_POS = new BlockPos(2, 3, 2);
@@ -1903,6 +1906,39 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
             ItemEnchantments enchantments = EnchantmentHelper.getEnchantmentsForCrafting(unrestrictedResult);
             context.assertTrue(enchantments.getLevel(sharpness) == 1 && enchantments.getLevel(smite) == 1,
                     "when unrestricted enchantments are enabled, the real anvil path should keep both mutually exclusive combat enchantments");
+        } finally {
+            EmergentConfig.get().unrestrictedEnchantments = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void unrestrictedEnchantmentsGateControlsHelperCompatibility(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Holder<Enchantment> smite = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SMITE);
+
+        boolean previous = EmergentConfig.get().unrestrictedEnchantments;
+        try {
+            EmergentConfig.get().unrestrictedEnchantments = false;
+            context.assertFalse(EnchantmentHelper.isEnchantmentCompatible(List.of(sharpness), smite),
+                    "vanilla helper compatibility should reject Smite when Sharpness is already present");
+            List<EnchantmentInstance> vanillaOptions = new ArrayList<>(List.of(new EnchantmentInstance(smite, 1)));
+            EnchantmentHelper.filterCompatibleEnchantments(vanillaOptions, new EnchantmentInstance(sharpness, 1));
+            context.assertTrue(vanillaOptions.isEmpty(),
+                    "vanilla enchantment selection should filter mutually exclusive options");
+
+            EmergentConfig.get().unrestrictedEnchantments = true;
+            context.assertTrue(EnchantmentHelper.isEnchantmentCompatible(List.of(sharpness), smite),
+                    "unrestricted enchantments should make helper compatibility accept Smite with Sharpness");
+            List<EnchantmentInstance> unrestrictedOptions = new ArrayList<>(List.of(new EnchantmentInstance(smite, 1)));
+            EnchantmentHelper.filterCompatibleEnchantments(unrestrictedOptions, new EnchantmentInstance(sharpness, 1));
+            context.assertTrue(unrestrictedOptions.size() == 1 && unrestrictedOptions.getFirst().enchantment().equals(smite),
+                    "unrestricted enchantments should keep mutually exclusive options during helper filtering");
         } finally {
             EmergentConfig.get().unrestrictedEnchantments = previous;
         }
