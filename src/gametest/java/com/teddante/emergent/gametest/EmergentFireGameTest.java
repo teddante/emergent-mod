@@ -1883,6 +1883,34 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void unrestrictedEnchantmentsGateControlsAnvilCompatibility(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Holder<Enchantment> smite = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SMITE);
+
+        boolean previous = EmergentConfig.get().unrestrictedEnchantments;
+        try {
+            EmergentConfig.get().unrestrictedEnchantments = false;
+            ItemStack vanillaResult = anvilResultForTwoEnchantedSwords(context, sharpness, smite);
+            context.assertTrue(EnchantmentHelper.getEnchantmentsForCrafting(vanillaResult).getLevel(smite) == 0,
+                    "when unrestricted enchantments are disabled, vanilla anvil compatibility should reject Smite on a Sharpness sword");
+
+            EmergentConfig.get().unrestrictedEnchantments = true;
+            ItemStack unrestrictedResult = anvilResultForTwoEnchantedSwords(context, sharpness, smite);
+            ItemEnchantments enchantments = EnchantmentHelper.getEnchantmentsForCrafting(unrestrictedResult);
+            context.assertTrue(enchantments.getLevel(sharpness) == 1 && enchantments.getLevel(smite) == 1,
+                    "when unrestricted enchantments are enabled, the real anvil path should keep both mutually exclusive combat enchantments");
+        } finally {
+            EmergentConfig.get().unrestrictedEnchantments = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
         int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
         int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);
@@ -2128,6 +2156,22 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
             }
         }
         throw new AssertionError("expected enchantment to contain an explosion effect");
+    }
+
+    private static ItemStack anvilResultForTwoEnchantedSwords(
+            GameTestHelper context,
+            Holder<Enchantment> first,
+            Holder<Enchantment> second) {
+        Player player = context.makeMockPlayer(GameType.SURVIVAL);
+        player.experienceLevel = 30;
+        AnvilMenu menu = new AnvilMenu(0, player.getInventory());
+        ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(first, 1));
+        EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(second, 1));
+        menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+        menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+        return menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().copy();
     }
 
     private static ExplodeEffect firstExplodeEffect(EnchantmentEntityEffect effect) {
