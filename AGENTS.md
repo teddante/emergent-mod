@@ -33,7 +33,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 
 - Prefer repeatable command-line validation before manual Minecraft testing.
 - Run `scripts/dev_smoke.ps1` for build, config/resource hygiene, jar inspection, server GameTests, and optional Prism copy.
-- Use `scripts/dev_perf.ps1` for token-efficient headless profiler runs. It enables opt-in stress GameTests by default, saves full logs under `build/reports/emergent-profiler`, and prints only the compact summary needed to diagnose subsystem cost. Use `-SlowMs 0` only when microscope-level counter totals are worth the extra log volume, and use `-ActiveFluidBudget 64 -ActiveFluidChunkBudget 32 -RequireBudgetDeferrals -RequireChunkBudgetDeferrals` when changing finite-fluid neighbour-scan or active-work budget behavior.
+- Use `scripts/dev_perf.ps1` for token-efficient headless profiler runs. It enables opt-in stress GameTests by default, saves full logs under `build/reports/emergent-profiler`, and prints only the compact summary needed to diagnose subsystem cost. Use `-SlowMs 0` only when microscope-level counter totals are worth the extra log volume, and use `-ActiveFluidBudget 64 -ActiveFluidChunkBudget 32 -RequireInspectionDeferrals -RequireBudgetDeferrals -RequireChunkBudgetDeferrals` when changing finite-fluid scheduled-tick inspection or active-work budget behavior.
 - Run Gradle-backed smoke/perf commands sequentially on Windows. Parallel Gradle runs can contend for build or log file locks and produce noisy failures.
 - Treat first-tick profiler spikes as warmup unless they reproduce after warmup or in a real loaded world.
 - Put deterministic gameplay and physics coverage in `src/gametest` when behavior can be checked without a manual client session.

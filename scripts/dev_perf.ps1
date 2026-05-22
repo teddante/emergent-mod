@@ -5,6 +5,7 @@ param(
     [double]$MaxProfilerMs = 0,
     [int]$ActiveFluidBudget = 0,
     [int]$ActiveFluidChunkBudget = 0,
+    [switch]$RequireInspectionDeferrals,
     [switch]$RequireBudgetDeferrals,
     [switch]$RequireChunkBudgetDeferrals,
     [switch]$SkipStressScenarios
@@ -96,6 +97,11 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $lavaHeat = Get-CounterTotal $CounterTotals "finite_fluid_lava_heat"
     $activeSchedules = Get-CounterTotal $CounterTotals "finite_fluid_active_schedules"
     $quietSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_schedule_skips"
+    $inspectionClaims = Get-CounterTotal $CounterTotals "finite_fluid_inspection_claims"
+    $inspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_deferrals"
+    $chunkInspectionClaims = Get-CounterTotal $CounterTotals "finite_fluid_inspection_chunk_claims"
+    $globalInspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_global_deferrals"
+    $chunkInspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_chunk_deferrals"
     $budgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_claims"
     $budgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_deferrals"
     $chunkBudgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_claims"
@@ -121,6 +127,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $Summary.Add("Finite fluid diagnosis:")
     $Summary.Add(("  ticks={0} water={1} lava={2} activeSchedules={3} quietSkips={4} quietRatio={5:N1}% workEvents={6} workPerTick={7:N1}%" -f `
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
+    $Summary.Add(("  inspectionClaims={0} chunkInspectionClaims={1} inspectionDeferrals={2} globalInspectionDeferrals={3} chunkInspectionDeferrals={4}" -f `
+                $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
     $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
                 $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
     $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} thermalQuietSkips={4} thermalCacheSkips={5} horizontalMoves={6} downwardMoves={7} thermalReactions={8}" -f `
@@ -144,7 +152,11 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     Add-TopChunkSummary $Summary $ChunkTotals "finite_water" "hottestFiniteWaterChunks" $Top
     Add-TopChunkSummary $Summary $ChunkTotals "finite_lava" "hottestFiniteLavaChunks" $Top
 
-    if ($budgetDeferrals -gt 0) {
+    if ($inspectionDeferrals -gt 0 -and $budgetDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid inspection and active work both exceeded budget and were deferred fairly; inspect chunk hotspots before raising either budget.")
+    } elseif ($inspectionDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid scheduled tick inspection exceeded the per-tick budget and was deferred fairly before expensive thermal/neighbour checks.")
+    } elseif ($budgetDeferrals -gt 0) {
         $Summary.Add("  interpretation=finite-fluid neighbour-scan/active work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
     } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
@@ -174,7 +186,7 @@ $effectiveSlowMs = $SlowMs
 if ($MaxProfilerMs -gt 0 -and $MaxProfilerMs -lt $effectiveSlowMs) {
     $effectiveSlowMs = $MaxProfilerMs
 }
-if (($RequireBudgetDeferrals -or $RequireChunkBudgetDeferrals) -and $effectiveSlowMs -gt 1) {
+if (($RequireInspectionDeferrals -or $RequireBudgetDeferrals -or $RequireChunkBudgetDeferrals) -and $effectiveSlowMs -gt 1) {
     $effectiveSlowMs = 1
 }
 
@@ -233,6 +245,9 @@ if ($ActiveFluidChunkBudget -gt 0) {
 if ($RequireBudgetDeferrals) {
     $summary.Add("Required budget deferrals: True")
 }
+if ($RequireInspectionDeferrals) {
+    $summary.Add("Required inspection deferrals: True")
+}
 if ($RequireChunkBudgetDeferrals) {
     $summary.Add("Required chunk budget deferrals: True")
 }
@@ -288,6 +303,10 @@ $summary | ForEach-Object { Write-Host $_ }
 
 if ($exitCode -ne 0) {
     throw "Headless perf run failed with exit code $exitCode. Full log: $logPath"
+}
+
+if ($RequireInspectionDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_inspection_deferrals") -le 0) {
+    throw "Expected finite fluid inspection deferrals, but none were recorded. Full log: $logPath"
 }
 
 if ($RequireBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_deferrals") -le 0) {

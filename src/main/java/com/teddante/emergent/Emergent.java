@@ -31,6 +31,10 @@ public class Emergent implements ModInitializer {
 					"Emergent finite fluid chunk work budget: {} cells/chunk/tick (override with -D{}=<cells>)",
 					FiniteFluidBudgetSettings.activeChunkTickBudget(),
 					FiniteFluidBudgetSettings.ACTIVE_CHUNK_TICK_BUDGET_PROPERTY);
+			LOGGER.info(
+					"Emergent finite fluid inspection budget: {} cells/tick and {} cells/chunk/tick",
+					FiniteFluidBudgetSettings.inspectionTickBudget(),
+					FiniteFluidBudgetSettings.inspectionChunkTickBudget());
 		}
 	}
 }

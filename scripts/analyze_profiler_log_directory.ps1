@@ -106,6 +106,8 @@ function Get-StartupDiagnostics([array]$LogLines) {
     $slowMs = ""
     $activeBudget = ""
     $chunkBudget = ""
+    $inspectionBudget = ""
+    $inspectionChunkBudget = ""
 
     foreach ($line in $LogLines) {
         if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
@@ -115,6 +117,9 @@ function Get-StartupDiagnostics([array]$LogLines) {
             $activeBudget = $Matches[1]
         } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
             $chunkBudget = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid inspection budget: ([0-9]+) cells/tick and ([0-9]+) cells/chunk/tick") {
+            $inspectionBudget = $Matches[1]
+            $inspectionChunkBudget = $Matches[2]
         }
     }
 
@@ -123,6 +128,8 @@ function Get-StartupDiagnostics([array]$LogLines) {
         SlowMs = $slowMs
         ActiveBudget = $activeBudget
         ChunkBudget = $chunkBudget
+        InspectionBudget = $inspectionBudget
+        InspectionChunkBudget = $inspectionChunkBudget
     }
 }
 
@@ -156,6 +163,10 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
             $counterTotals.ContainsKey("finite_fluid_budget_deferrals") -or
             $counterTotals.ContainsKey("finite_fluid_budget_chunk_claims") -or
             $counterTotals.ContainsKey("finite_fluid_budget_chunk_deferrals")
+    $hasInspectionCounters = $counterTotals.ContainsKey("finite_fluid_inspection_claims") -or
+            $counterTotals.ContainsKey("finite_fluid_inspection_deferrals") -or
+            $counterTotals.ContainsKey("finite_fluid_inspection_chunk_claims") -or
+            $counterTotals.ContainsKey("finite_fluid_inspection_chunk_deferrals")
     $hasQuietCacheCounters = $counterTotals.ContainsKey("finite_fluid_quiet_cache_hits")
     $finiteTicks = Get-CounterTotal $counterTotals "finite_fluid_ticks"
     $lavaTicks = Get-CounterTotal $counterTotals "finite_fluid_lava_ticks"
@@ -169,6 +180,8 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         "pre-budget"
     } elseif (!$hasQuietCacheCounters) {
         "pre-cache"
+    } elseif (!$hasInspectionCounters) {
+        "pre-inspection-budget"
     } else {
         "current"
     }
@@ -191,6 +204,8 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         StartupSlowMs = $startup.SlowMs
         StartupActiveBudget = $startup.ActiveBudget
         StartupChunkBudget = $startup.ChunkBudget
+        StartupInspectionBudget = $startup.InspectionBudget
+        StartupInspectionChunkBudget = $startup.InspectionChunkBudget
         TopChunks = Get-TopChunkText $chunkTotals $TopChunks
     }
 }
@@ -216,7 +231,9 @@ if ($files.Count -eq 0) {
         $startupText = "profiler=" + $(if ($item.StartupProfilerEnabled) { "on" } else { "off" }) +
                 " slowMs=" + $(if ($item.StartupSlowMs -ne "") { $item.StartupSlowMs } else { "-" }) +
                 " budget=" + $(if ($item.StartupActiveBudget -ne "") { $item.StartupActiveBudget } else { "-" }) +
-                "/" + $(if ($item.StartupChunkBudget -ne "") { $item.StartupChunkBudget } else { "-" })
+                "/" + $(if ($item.StartupChunkBudget -ne "") { $item.StartupChunkBudget } else { "-" }) +
+                " inspection=" + $(if ($item.StartupInspectionBudget -ne "") { $item.StartupInspectionBudget } else { "-" }) +
+                "/" + $(if ($item.StartupInspectionChunkBudget -ne "") { $item.StartupInspectionChunkBudget } else { "-" })
         $lavaHeatPercent = ($item.LavaHeat * 100.0) / [Math]::Max(1L, $item.LavaTicks)
         $lavaText = if ($item.LavaTicks -gt 0 -or $item.LavaHeat -gt 0) {
             " lavaTicks=$($item.LavaTicks) lavaHeat=$($item.LavaHeat) lavaHeatPerLavaTick=$($lavaHeatPercent.ToString('N1'))%"
@@ -243,15 +260,19 @@ if ($files.Count -eq 0) {
 
     $currentLogs = @($measurements | Where-Object { $_.Format -eq "current" })
     $preBudgetLogs = @($measurements | Where-Object { $_.Format -eq "pre-budget" })
+    $preInspectionLogs = @($measurements | Where-Object { $_.Format -eq "pre-inspection-budget" })
     $lagOnlyLogs = @($measurements | Where-Object { $_.LagWarnings -gt 0 -and $_.ProfilerLines -eq 0 })
     $summary.Add("")
-    $summary.Add(("Format counts: current={0} pre-budget={1} pre-cache={2} no-profiler={3}" -f `
+    $summary.Add(("Format counts: current={0} pre-inspection-budget={1} pre-budget={2} pre-cache={3} no-profiler={4}" -f `
                 $currentLogs.Count,
+                $preInspectionLogs.Count,
                 $preBudgetLogs.Count,
                 @($measurements | Where-Object { $_.Format -eq "pre-cache" }).Count,
                 @($measurements | Where-Object { $_.Format -eq "no-profiler" }).Count))
     if ($currentLogs.Count -eq 0 -and $preBudgetLogs.Count -gt 0) {
         $summary.Add("interpretation=no current-format finite-fluid profiler log was found; retest with the latest copied jar before tuning budgets.")
+    } elseif ($currentLogs.Count -eq 0 -and $preInspectionLogs.Count -gt 0) {
+        $summary.Add("interpretation=logs have active-work budgets but not inspection-budget counters; retest with the latest copied jar before tuning scheduled tick admission.")
     } elseif ($lagOnlyLogs.Count -gt 0 -and @($measurements | Where-Object { $_.StartupProfilerEnabled }).Count -eq 0) {
         $summary.Add("interpretation=lag warnings exist, but no scanned log shows the Emergent profiler startup line; enable -Demergent.profiler=true before using these logs for Emergent budget tuning.")
     } elseif ($lagOnlyLogs.Count -gt 0) {
