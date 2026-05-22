@@ -46,6 +46,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 - Keep `main` buildable. Do feature and fix work on short-lived branches with clear names.
 - A branch/PR should have one reviewable purpose. If the current branch name no longer describes the next change, stop and create a new branch or explicitly choose a stacked PR.
 - Large integration PRs are acceptable while draft when systems are tightly coupled, but stop adding unrelated features once the scope starts drifting.
+- For stacked PRs, merge from the lowest base upward, then retarget or update dependent PRs onto the newly merged base. Keep dependent branches until their PRs are merged or intentionally closed.
 - Commit coherent working chunks after verification when practical. Use clear commit messages. Do not tag every commit.
 - Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required manual validation is done.
 - When editing long PR bodies from shell scripts, prefer a markdown body file and verify the result does not contain literal escape sequences such as `` `n`` or `` `r``.
