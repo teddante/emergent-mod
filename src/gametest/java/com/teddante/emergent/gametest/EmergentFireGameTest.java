@@ -1685,6 +1685,47 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void anvilTakeSpendsVisibleCostAsRawExperienceEnergy(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Player player = context.makeMockPlayer(GameType.SURVIVAL);
+        player.experienceLevel = 30;
+        player.experienceProgress = 0.5F;
+        player.totalExperience = ExperienceEnergy.rawPointsAtLevelProgress(player.experienceLevel, player.experienceProgress);
+        AnvilMenu menu = new AnvilMenu(0, player.getInventory());
+        ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
+        EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+            ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            int visibleCost = menu.getCost();
+            ExperienceEnergy.LevelProgress expected = ExperienceEnergy.progressAfterWholeLevelCost(30, 0.5F, visibleCost);
+
+            context.assertTrue(!result.isEmpty() && visibleCost > 0,
+                    "boundless anvil setup should produce a payable result before testing raw XP spending");
+            menu.getSlot(AnvilMenu.RESULT_SLOT).onTake(player, result);
+
+            context.assertTrue(player.experienceLevel == expected.level(),
+                    "anvil take should spend the visible cost as raw XP through the nonlinear level curve");
+            context.assertTrue(Math.abs(player.experienceProgress - expected.progress()) < 0.001F,
+                    "anvil take should preserve fractional raw XP progress after spending energy");
+            context.assertTrue(player.totalExperience == ExperienceEnergy.rawPointsAtLevelProgress(expected.level(), expected.progress()),
+                    "anvil take should keep total raw XP storage synchronized with the new level progress");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
         int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
         int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);
