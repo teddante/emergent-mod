@@ -14,6 +14,8 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -23,6 +25,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.material.LavaFluid;
+import net.minecraft.world.level.material.WaterFluid;
 
 import java.lang.reflect.Method;
 
@@ -347,6 +351,44 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)),
                 beforeMoisture,
                 "disabled rain accumulation should leave existing surface weather memory untouched");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 40)
+    public void finiteFluidToggleGatesVanillaSourceConversion(GameTestHelper context) {
+        boolean finiteWaterFlow = EmergentConfig.get().finiteWaterFlow;
+        boolean waterSourceConversion = context.getLevel().getGameRules().get(GameRules.WATER_SOURCE_CONVERSION);
+        boolean lavaSourceConversion = context.getLevel().getGameRules().get(GameRules.LAVA_SOURCE_CONVERSION);
+
+        try {
+            EmergentConfig.get().finiteWaterFlow = true;
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.assertFalse(canConvertToSource(WaterFluid.class, Fluids.WATER, context.getLevel()),
+                    "enabled finite flow should block vanilla water source conversion");
+            context.assertFalse(canConvertToSource(LavaFluid.class, Fluids.LAVA, context.getLevel()),
+                    "enabled finite flow should block vanilla lava source conversion");
+
+            EmergentConfig.get().finiteWaterFlow = false;
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.assertTrue(canConvertToSource(WaterFluid.class, Fluids.WATER, context.getLevel()),
+                    "disabled finite flow should restore vanilla water source conversion when the gamerule allows it");
+            context.assertTrue(canConvertToSource(LavaFluid.class, Fluids.LAVA, context.getLevel()),
+                    "disabled finite flow should restore vanilla lava source conversion when the gamerule allows it");
+
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, false, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, false, context.getLevel().getServer());
+            context.assertFalse(canConvertToSource(WaterFluid.class, Fluids.WATER, context.getLevel()),
+                    "disabled finite flow should still respect the vanilla water source conversion gamerule");
+            context.assertFalse(canConvertToSource(LavaFluid.class, Fluids.LAVA, context.getLevel()),
+                    "disabled finite flow should still respect the vanilla lava source conversion gamerule");
+        } finally {
+            EmergentConfig.get().finiteWaterFlow = finiteWaterFlow;
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, waterSourceConversion, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, lavaSourceConversion, context.getLevel().getServer());
+        }
+
         context.succeed();
     }
 
@@ -1731,6 +1773,16 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         FluidState fluidState = context.getBlockState(pos).getFluidState();
         if (!fluidState.isEmpty()) {
             context.getLevel().scheduleTick(context.absolutePos(pos), fluidState.getType(), 1);
+        }
+    }
+
+    private static boolean canConvertToSource(Class<?> fluidClass, Fluid fluid, ServerLevel level) {
+        try {
+            Method method = fluidClass.getDeclaredMethod("canConvertToSource", ServerLevel.class);
+            method.setAccessible(true);
+            return (Boolean) method.invoke(fluid, level);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not inspect source conversion hook for " + fluidClass.getSimpleName(), exception);
         }
     }
 
