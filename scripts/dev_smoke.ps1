@@ -44,6 +44,40 @@ function Write-Step {
     Write-Host "==> $Message"
 }
 
+function Write-GradleFailureSummary {
+    param(
+        [string[]]$BuildOutput,
+        [string]$LogPath
+    )
+
+    $patterns = @(
+        "All \d+ required tests passed",
+        "\d+ required tests failed",
+        "Game test failed",
+        "failed at",
+        "> Task .* FAILED",
+        "BUILD FAILED",
+        "Execution failed",
+        "Caused by:",
+        "FAILURE:"
+    )
+
+    $hints = @($BuildOutput | Where-Object {
+        $line = $_
+        [bool]($patterns | Where-Object { $line -match $_ } | Select-Object -First 1)
+    } | Select-Object -Last 60)
+
+    Write-Host "Gradle build failed. Full log: $LogPath"
+    if ($hints.Count -gt 0) {
+        Write-Host "Relevant failure lines:"
+        $hints | ForEach-Object { Write-Host $_ }
+        return
+    }
+
+    Write-Host "Last build log lines:"
+    $BuildOutput | Select-Object -Last 80 | ForEach-Object { Write-Host $_ }
+}
+
 function Assert-MixinConfig {
     Write-Step "Checking mixin config hygiene"
 
@@ -217,8 +251,20 @@ try {
             & $gradleWrapper build
             $gradleExitCode = $LASTEXITCODE
         } else {
-            $buildOutput = & $gradleWrapper build 2>&1
-            $gradleExitCode = $LASTEXITCODE
+            $reportDir = Join-Path $ProjectRoot "build\reports\emergent-smoke"
+            New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
+            $logPath = Join-Path $reportDir ("smoke-build-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+
+            $oldErrorActionPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = "Continue"
+                $buildOutput = @(& $gradleWrapper build *>&1 | ForEach-Object { $_.ToString() })
+                $gradleExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $oldErrorActionPreference
+            }
+
+            $buildOutput | Set-Content -Path $logPath -Encoding UTF8
             if ($gradleExitCode -eq 0) {
                 $buildOutput | Where-Object {
                     $_ -match "All \d+ required tests passed" -or $_ -match "BUILD SUCCESSFUL"
@@ -226,9 +272,7 @@ try {
                     Write-Host $_
                 }
             } else {
-                $buildOutput | ForEach-Object {
-                    Write-Host $_
-                }
+                Write-GradleFailureSummary -BuildOutput $buildOutput -LogPath $logPath
             }
         }
 
