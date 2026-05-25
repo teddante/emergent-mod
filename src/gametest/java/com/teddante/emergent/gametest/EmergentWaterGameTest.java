@@ -858,6 +858,30 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 80)
+    public void cachedQuietLavaStillAppliesContactHeat(GameTestHelper context) {
+        BlockPos lavaPos = WATER_POS;
+        BlockPos stonePos = lavaPos.relative(Direction.EAST);
+        containCell(context, lavaPos);
+        context.setBlock(lavaPos, Blocks.LAVA.defaultBlockState());
+        context.setBlock(stonePos, Blocks.STONE.defaultBlockState());
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(lavaPos),
+                Fluids.LAVA,
+                8,
+                "stable_source");
+        context.getLevel().scheduleTick(context.absolutePos(lavaPos), Fluids.LAVA, 1);
+
+        context.runAfterDelay(45, () -> {
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(stonePos), context.getBlockState(stonePos)) > 0.0,
+                    "cached quiet finite lava should still apply budgeted contact heat before skipping movement scans");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 20)
     public void lavaContactCanMeltAdjacentSnowLayer(GameTestHelper context) {
         BlockPos snowPos = WATER_POS.relative(Direction.EAST);
