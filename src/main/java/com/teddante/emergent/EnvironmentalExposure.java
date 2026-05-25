@@ -613,7 +613,17 @@ public final class EnvironmentalExposure {
     }
 
     public static void consumeAshResidue(ServerLevel world, BlockPos pos, BlockState state, double ashKilograms) {
-        update(world, pos, entry -> entry.withAshResidueKilograms(Math.max(0.0, entry.ashResidueKilograms() - ashKilograms)));
+        if (ashKilograms <= 0.0) {
+            return;
+        }
+
+        ExposureEntry entry = currentEntry(world, pos, state);
+        if (entry == null) {
+            return;
+        }
+
+        put(world, pos, entry.withAshResidueKilograms(Math.max(0.0, entry.ashResidueKilograms() - ashKilograms))
+                .withLastTick(world.getGameTime()));
     }
 
     public static void washAshResidue(ServerLevel world, BlockPos pos, BlockState state, double washAmount) {

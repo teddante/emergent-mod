@@ -165,6 +165,56 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void environmentalMemoryConsumesDiscardStaleState(GameTestHelper context) {
+        BlockPos sedimentPos = BELOW_WATER_POS;
+        BlockPos ashPos = sedimentPos.relative(Direction.EAST);
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(sedimentPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(ashPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(sedimentPos),
+                context.getBlockState(sedimentPos),
+                2.0);
+        EnvironmentalExposure.addAshResidue(
+                context.getLevel(),
+                context.absolutePos(ashPos),
+                context.getBlockState(ashPos),
+                2.0);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+
+        double consumedSediment = EnvironmentalExposure.consumeSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(sedimentPos),
+                Blocks.STONE.defaultBlockState());
+        EnvironmentalExposure.consumeAshResidue(
+                context.getLevel(),
+                context.absolutePos(ashPos),
+                Blocks.STONE.defaultBlockState(),
+                1.0);
+
+        context.assertTrue(consumedSediment == 0.0,
+                "consume helpers should not return sediment from stale block state memory");
+        context.assertTrue(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(sedimentPos), context.getBlockState(sedimentPos)) == 0.0,
+                "consume helpers should discard stale sediment memory");
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(ashPos), context.getBlockState(ashPos)) == 0.0,
+                "consume helpers should discard stale ash memory");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "discarding stale consumed memory should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentalMemoryDecayWakesNearbyQuietFluid(GameTestHelper context) {
         BlockPos surfacePos = BELOW_WATER_POS;
         BlockPos fluidPos = WATER_POS;
