@@ -102,6 +102,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $stableSources = Get-CounterTotal $CounterTotals "finite_fluid_stable_sources"
     $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
     $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
+    $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheEvictions = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_evictions"
 
     $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions + $lavaHeat
     $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
@@ -129,8 +131,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
     $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
                 $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
-    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} thermalQuietSkips={4} thermalCacheSkips={5} horizontalMoves={6} downwardMoves={7} thermalReactions={8}" -f `
-                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} quietCacheEvictions={5} thermalQuietSkips={6} thermalCacheSkips={7} horizontalMoves={8} downwardMoves={9} thermalReactions={10}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
         $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
     }

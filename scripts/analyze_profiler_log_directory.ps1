@@ -173,6 +173,10 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     $lavaHeat = Get-CounterTotal $counterTotals "finite_fluid_lava_heat"
     $budgetDeferrals = Get-CounterTotal $counterTotals "finite_fluid_budget_deferrals"
     $chunkDeferrals = Get-CounterTotal $counterTotals "finite_fluid_budget_chunk_deferrals"
+    $inspectionClaims = Get-CounterTotal $counterTotals "finite_fluid_inspection_claims"
+    $quietCacheHits = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_hits"
+    $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheEvictions = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_evictions"
 
     $format = if ($profilerLines.Count -eq 0) {
         "no-profiler"
@@ -199,6 +203,9 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         LavaHeat = $lavaHeat
         BudgetDeferrals = $budgetDeferrals
         ChunkDeferrals = $chunkDeferrals
+        QuietCacheHits = $quietCacheHits
+        EstimatedQuietCacheMisses = $quietCacheMisses
+        QuietCacheEvictions = $quietCacheEvictions
         Format = $format
         StartupProfilerEnabled = $startup.ProfilerEnabled
         StartupSlowMs = $startup.SlowMs
@@ -240,7 +247,7 @@ if ($files.Count -eq 0) {
         } else {
             ""
         }
-        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10}{11}" -f `
+        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} evictions={13}{14}" -f `
                     $item.Name,
                     $item.Format,
                     $startupText,
@@ -252,6 +259,9 @@ if ($files.Count -eq 0) {
                     $item.FiniteTicks,
                     $item.BudgetDeferrals,
                     $item.ChunkDeferrals,
+                    $item.QuietCacheHits,
+                    $item.EstimatedQuietCacheMisses,
+                    $item.QuietCacheEvictions,
                     $lavaText))
         if ($item.TopChunks -ne "-") {
             $summary.Add("  topChunks=$($item.TopChunks)")
