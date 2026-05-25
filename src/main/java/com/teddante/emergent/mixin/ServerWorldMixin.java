@@ -41,7 +41,7 @@ public abstract class ServerWorldMixin {
             return;
         }
 
-        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos, "block_update");
     }
 
     @Inject(method = "updateNeighborsAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;Lnet/minecraft/world/level/redstone/Orientation;)V", at = @At("HEAD"))
@@ -52,6 +52,6 @@ public abstract class ServerWorldMixin {
             CallbackInfo ci) {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
-        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos, "neighbor_update");
     }
 }

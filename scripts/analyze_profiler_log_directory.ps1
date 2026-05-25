@@ -128,6 +128,24 @@ function Get-TopPositionText([hashtable]$PositionTotals, [int]$TopChunks) {
     return ($top | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
 }
 
+function Get-TopInvalidationText([hashtable]$CounterTotals) {
+    $reasons = @(
+        @{ Name = "environmental_memory_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_update" },
+        @{ Name = "environmental_memory_stale"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_stale" },
+        @{ Name = "environmental_memory_decay"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_decay" },
+        @{ Name = "environmental_memory_clear"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_clear" },
+        @{ Name = "block_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_block_update" },
+        @{ Name = "neighbor_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_neighbor_update" },
+        @{ Name = "unknown"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_unknown" }
+    ) | Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }
+    $top = $reasons | Where-Object { $_.Value -gt 0 } | Select-Object -First 1
+    if (!$top) {
+        return "-"
+    }
+
+    return "$($top.Name):$($top.Value)"
+}
+
 function Get-StartupDiagnostics([array]$LogLines) {
     $profilerEnabled = $false
     $slowMs = ""
@@ -206,6 +224,8 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     $quietCacheHits = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_hits"
     $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
     $quietCacheSignatureMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_signature_misses"
+    $quietCacheInvalidations = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_invalidations"
+    $quietCacheInvalidatedEntries = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_invalidated_entries"
     $quietCacheEvictions = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_evictions"
 
     $format = if ($profilerLines.Count -eq 0) {
@@ -236,6 +256,8 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         QuietCacheHits = $quietCacheHits
         EstimatedQuietCacheMisses = $quietCacheMisses
         QuietCacheSignatureMisses = $quietCacheSignatureMisses
+        QuietCacheInvalidations = $quietCacheInvalidations
+        QuietCacheInvalidatedEntries = $quietCacheInvalidatedEntries
         QuietCacheEvictions = $quietCacheEvictions
         Format = $format
         StartupProfilerEnabled = $startup.ProfilerEnabled
@@ -246,6 +268,7 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         StartupInspectionChunkBudget = $startup.InspectionChunkBudget
         TopChunks = Get-TopChunkText $chunkTotals $TopChunks
         TopPositions = Get-TopPositionText $positionTotals $TopChunks
+        TopInvalidation = Get-TopInvalidationText $counterTotals
     }
 }
 
@@ -279,7 +302,7 @@ if ($files.Count -eq 0) {
         } else {
             ""
         }
-        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} signatureMisses={13} evictions={14}{15}" -f `
+        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} signatureMisses={13} invalidations={14}/{15} evictions={16}{17}" -f `
                     $item.Name,
                     $item.Format,
                     $startupText,
@@ -294,6 +317,8 @@ if ($files.Count -eq 0) {
                     $item.QuietCacheHits,
                     $item.EstimatedQuietCacheMisses,
                     $item.QuietCacheSignatureMisses,
+                    $item.QuietCacheInvalidations,
+                    $item.QuietCacheInvalidatedEntries,
                     $item.QuietCacheEvictions,
                     $lavaText))
         if ($item.TopChunks -ne "-") {
@@ -301,6 +326,9 @@ if ($files.Count -eq 0) {
         }
         if ($item.TopPositions -ne "-") {
             $summary.Add("  topPositions=$($item.TopPositions)")
+        }
+        if ($item.TopInvalidation -ne "-") {
+            $summary.Add("  topInvalidationReason=$($item.TopInvalidation)")
         }
     }
 

@@ -146,6 +146,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
     $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
     $quietCacheSignatureMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_signature_misses"
+    $quietCacheInvalidations = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidations"
+    $quietCacheInvalidatedEntries = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidated_entries"
     $quietCacheEvictions = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_evictions"
 
     $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions + $lavaHeat
@@ -162,8 +164,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
     $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
                 $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
-    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} quietCacheSignatureMisses={5} quietCacheEvictions={6} thermalQuietSkips={7} thermalCacheSkips={8} horizontalMoves={9} downwardMoves={10} thermalReactions={11}" -f `
-                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheSignatureMisses, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} quietCacheSignatureMisses={5} quietCacheInvalidations={6} quietCacheInvalidatedEntries={7} quietCacheEvictions={8} thermalQuietSkips={9} thermalCacheSkips={10} horizontalMoves={11} downwardMoves={12} thermalReactions={13}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheSignatureMisses, $quietCacheInvalidations, $quietCacheInvalidatedEntries, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
         $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
     }
@@ -177,6 +179,20 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $topQuiet = $quietReasons | Where-Object { $_.Value -gt 0 } | Select-Object -First 1
     if ($topQuiet) {
         $Summary.Add("  topQuietReason=$($topQuiet.Name):$($topQuiet.Value)")
+    }
+
+    $invalidationReasons = @(
+        @{ Name = "environmental_memory_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_update" },
+        @{ Name = "environmental_memory_stale"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_stale" },
+        @{ Name = "environmental_memory_decay"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_decay" },
+        @{ Name = "environmental_memory_clear"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_clear" },
+        @{ Name = "block_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_block_update" },
+        @{ Name = "neighbor_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_neighbor_update" },
+        @{ Name = "unknown"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_unknown" }
+    ) | Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }
+    $topInvalidation = $invalidationReasons | Where-Object { $_.Value -gt 0 } | Select-Object -First 1
+    if ($topInvalidation) {
+        $Summary.Add("  topInvalidationReason=$($topInvalidation.Name):$($topInvalidation.Value)")
     }
 
     Add-TopChunkSummary $Summary $ChunkTotals "finite_fluids" "hottestFiniteFluidChunks" $Top

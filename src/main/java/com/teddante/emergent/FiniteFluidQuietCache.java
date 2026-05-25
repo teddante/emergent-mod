@@ -59,14 +59,29 @@ public final class FiniteFluidQuietCache {
     }
 
     public static void invalidateNeighborhood(ServerLevel world, BlockPos pos) {
+        invalidateNeighborhood(world, pos, "unknown");
+    }
+
+    public static void invalidateNeighborhood(ServerLevel world, BlockPos pos, String reason) {
         Map<Long, CacheEntry> cache = CACHES.get(world);
         if (cache == null || cache.isEmpty()) {
             return;
         }
 
-        cache.remove(pos.asLong());
+        int removed = 0;
+        if (cache.remove(pos.asLong()) != null) {
+            removed++;
+        }
         for (Direction direction : Direction.values()) {
-            cache.remove(pos.relative(direction).asLong());
+            if (cache.remove(pos.relative(direction).asLong()) != null) {
+                removed++;
+            }
+        }
+
+        if (removed > 0) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_invalidations", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_invalidated_entries", removed);
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_invalidation_" + reason, 1);
         }
     }
 

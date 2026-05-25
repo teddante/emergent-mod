@@ -684,7 +684,7 @@ public final class EnvironmentalExposure {
         if (levelExposure != null) {
             levelExposure.remove(pos.asLong());
         }
-        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_clear");
     }
 
     private static double hydraulicWear(ServerLevel world, BlockPos pos, BlockState state) {
@@ -721,7 +721,7 @@ public final class EnvironmentalExposure {
 
         if (!entry.state().equals(state) || !entry.state().equals(world.getBlockState(pos))) {
             levelExposure.remove(key);
-            FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_stale");
             return null;
         }
 
@@ -729,7 +729,7 @@ public final class EnvironmentalExposure {
         if (!aged.equals(entry)) {
             if (aged.isEmpty()) {
                 levelExposure.remove(key);
-                FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+                FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_decay");
                 return null;
             }
             levelExposure.put(key, aged);
@@ -757,7 +757,7 @@ public final class EnvironmentalExposure {
         }
 
         EXPOSURES.computeIfAbsent(world, ignored -> new HashMap<>()).put(pos.asLong(), entry);
-        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_update");
     }
 
     private static void update(ServerLevel world, BlockPos pos, EntryUpdater updater) {
@@ -773,7 +773,7 @@ public final class EnvironmentalExposure {
         }
         if (!entry.state().equals(world.getBlockState(pos))) {
             levelExposure.remove(key);
-            FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_stale");
             return;
         }
 
@@ -783,7 +783,7 @@ public final class EnvironmentalExposure {
         } else {
             levelExposure.put(key, updated);
         }
-        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_update");
     }
 
     private interface EntryUpdater {
