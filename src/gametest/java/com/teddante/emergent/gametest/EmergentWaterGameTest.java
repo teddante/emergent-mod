@@ -38,6 +38,32 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void blockReplacementClearsEnvironmentalMemory(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.STONE);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                1.0);
+
+        context.setBlock(WATER_POS, Blocks.GLASS);
+        context.setBlock(WATER_POS, Blocks.STONE);
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                "environmental moisture should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                "environmental heat should not survive block replacement and restoration");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentEvaporationRemovesAnyFiniteWaterAmount(GameTestHelper context) {
         context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 8) == 0,
                 "a water-evaporating environment should remove source water like vanilla Nether bucket placement");

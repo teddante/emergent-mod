@@ -2,6 +2,7 @@ package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalScheduler;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.FiniteFluidQuietCache;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
@@ -35,6 +36,11 @@ public abstract class ServerWorldMixin {
             CallbackInfo ci) {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
+        if (!oldState.equals(currentState)) {
+            EnvironmentalExposure.clear(serverWorld, pos);
+            return;
+        }
+
         FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos);
     }
 
