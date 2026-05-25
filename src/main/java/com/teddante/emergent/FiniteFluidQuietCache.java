@@ -23,11 +23,21 @@ public final class FiniteFluidQuietCache {
     public static String reason(ServerLevel world, BlockPos pos, Fluid fluid, int amount, int environmentSignature) {
         Map<Long, CacheEntry> cache = CACHES.get(world);
         if (cache == null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_no_cache_misses", 1);
             return null;
         }
 
         CacheEntry entry = cache.get(pos.asLong());
-        if (entry == null || entry.fluid() != fluid || entry.amount() != amount) {
+        if (entry == null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_entry_misses", 1);
+            return null;
+        }
+        if (entry.fluid() != fluid) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_fluid_misses", 1);
+            return null;
+        }
+        if (entry.amount() != amount) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_amount_misses", 1);
             return null;
         }
         if (entry.environmentSignature() != environmentSignature) {
