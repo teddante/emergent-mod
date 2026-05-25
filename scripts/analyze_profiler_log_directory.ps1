@@ -54,7 +54,7 @@ function Get-ProfilerTick($Line) {
 }
 
 function Add-Counters($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "counters=(.*?)(?= chunks=| heat=|\))") {
+    if ($Line -notmatch "counters=(.*?)(?= chunks=| positions=| heat=|\))") {
         return
     }
 
@@ -69,11 +69,26 @@ function Add-Counters($Line, [hashtable]$Totals) {
 }
 
 function Add-Chunks($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "chunks=(.*?)(?= heat=|\))") {
+    if ($Line -notmatch "chunks=(.*?)(?= positions=| heat=|\))") {
         return
     }
 
     foreach ($match in [regex]::Matches($Matches[1], "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+):([0-9]+)")) {
+        $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
+        $value = [long]$match.Groups[3].Value
+        if (!$Totals.ContainsKey($name)) {
+            $Totals[$name] = 0L
+        }
+        $Totals[$name] += $value
+    }
+}
+
+function Add-Positions($Line, [hashtable]$Totals) {
+    if ($Line -notmatch "positions=(.*?)(?= heat=|\))") {
+        return
+    }
+
+    foreach ($match in [regex]::Matches($Matches[1], "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+,-?[0-9]+):([0-9]+)")) {
         $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
         $value = [long]$match.Groups[3].Value
         if (!$Totals.ContainsKey($name)) {
@@ -98,6 +113,18 @@ function Get-TopChunkText([hashtable]$ChunkTotals, [int]$TopChunks) {
     if ($top.Count -eq 0) {
         return "-"
     }
+    return ($top | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+}
+
+function Get-TopPositionText([hashtable]$PositionTotals, [int]$TopChunks) {
+    $top = @($PositionTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "finite_fluids@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First $TopChunks)
+    if ($top.Count -eq 0) {
+        return "-"
+    }
+
     return ($top | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
 }
 
@@ -142,12 +169,14 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     $lagLines = @($lines | Where-Object { $_ -like "*Can't keep up!*" })
     $counterTotals = @{}
     $chunkTotals = @{}
+    $positionTotals = @{}
     $maxProfilerMs = 0.0
 
     foreach ($line in $profilerLines) {
         $maxProfilerMs = [Math]::Max($maxProfilerMs, (Get-ProfilerValue $line))
         Add-Counters $line $counterTotals
         Add-Chunks $line $chunkTotals
+        Add-Positions $line $positionTotals
     }
 
     $maxRunningMs = 0L
@@ -214,6 +243,7 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         StartupInspectionBudget = $startup.InspectionBudget
         StartupInspectionChunkBudget = $startup.InspectionChunkBudget
         TopChunks = Get-TopChunkText $chunkTotals $TopChunks
+        TopPositions = Get-TopPositionText $positionTotals $TopChunks
     }
 }
 
@@ -265,6 +295,9 @@ if ($files.Count -eq 0) {
                     $lavaText))
         if ($item.TopChunks -ne "-") {
             $summary.Add("  topChunks=$($item.TopChunks)")
+        }
+        if ($item.TopPositions -ne "-") {
+            $summary.Add("  topPositions=$($item.TopPositions)")
         }
     }
 

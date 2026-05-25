@@ -91,6 +91,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         try {
         EmergentProfiler.count(world, "finite_fluid_ticks", 1);
         EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_FLUIDS, pos);
+        EmergentProfiler.recordPosition(world, EmergentProfiler.FINITE_FLUIDS, pos);
 
         int currentLevel = fluidState.getAmount();
         if (currentLevel <= 0)

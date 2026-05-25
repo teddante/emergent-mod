@@ -23,7 +23,7 @@ function Get-ProfilerTick($Line) {
 }
 
 function Add-Counters($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "counters=(.*?)(?= chunks=| heat=|\))") {
+    if ($Line -notmatch "counters=(.*?)(?= chunks=| positions=| heat=|\))") {
         return
     }
 
@@ -39,12 +39,28 @@ function Add-Counters($Line, [hashtable]$Totals) {
 }
 
 function Add-Chunks($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "chunks=(.*?)(?= heat=|\))") {
+    if ($Line -notmatch "chunks=(.*?)(?= positions=| heat=|\))") {
         return
     }
 
     $chunkText = $Matches[1]
     foreach ($match in [regex]::Matches($chunkText, "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+):([0-9]+)")) {
+        $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
+        $value = [long]$match.Groups[3].Value
+        if (!$Totals.ContainsKey($name)) {
+            $Totals[$name] = 0L
+        }
+        $Totals[$name] += $value
+    }
+}
+
+function Add-Positions($Line, [hashtable]$Totals) {
+    if ($Line -notmatch "positions=(.*?)(?= heat=|\))") {
+        return
+    }
+
+    $positionText = $Matches[1]
+    foreach ($match in [regex]::Matches($positionText, "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+,-?[0-9]+):([0-9]+)")) {
         $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
         $value = [long]$match.Groups[3].Value
         if (!$Totals.ContainsKey($name)) {
@@ -69,6 +85,17 @@ function Add-TopChunkSummary([System.Collections.Generic.List[string]]$Summary, 
     if ($topChunks.Count -gt 0) {
         $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
         $Summary.Add("  ${Label}=$chunkText")
+    }
+}
+
+function Add-TopPositionSummary([System.Collections.Generic.List[string]]$Summary, [hashtable]$PositionTotals, [string]$Prefix, [string]$Label, [int]$Top) {
+    $topPositions = @($PositionTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "$Prefix@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First ([Math]::Min(3, $Top)))
+    if ($topPositions.Count -gt 0) {
+        $positionText = ($topPositions | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+        $Summary.Add("  ${Label}=$positionText")
     }
 }
 
@@ -290,9 +317,11 @@ $profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt 
 $lagLines = @($logLines | Where-Object { $_ -like "*Can't keep up!*" })
 $counterTotals = @{}
 $chunkTotals = @{}
+$positionTotals = @{}
 foreach ($line in $profilerLines) {
     Add-Counters $line $counterTotals
     Add-Chunks $line $chunkTotals
+    Add-Positions $line $positionTotals
 }
 
 $worstProfilerLines = @($profilerLines |
@@ -332,6 +361,7 @@ if ($counterTotals.Count -eq 0) {
 }
 
 Add-FiniteFluidDiagnosis $summary $counterTotals $chunkTotals $Top
+Add-TopPositionSummary $summary $positionTotals "finite_fluids" "hottestFiniteFluidPositions" $Top
 Add-LagCorrelation $summary $lagLines $profilerLines
 
 $summary.Add("")
@@ -340,6 +370,17 @@ if ($chunkTotals.Count -eq 0) {
     $summary.Add("  none")
 } else {
     $chunkTotals.GetEnumerator() |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First $Top |
+        ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
+}
+
+$summary.Add("")
+$summary.Add("Top position hotspots:")
+if ($positionTotals.Count -eq 0) {
+    $summary.Add("  none")
+} else {
+    $positionTotals.GetEnumerator() |
         Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
         Select-Object -First $Top |
         ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }

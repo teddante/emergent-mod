@@ -37,7 +37,7 @@ function Get-ProfilerTick($Line) {
 }
 
 function Add-Counters($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "counters=(.*?)(?= chunks=| heat=|\))") {
+    if ($Line -notmatch "counters=(.*?)(?= chunks=| positions=| heat=|\))") {
         return
     }
 
@@ -53,7 +53,7 @@ function Add-Counters($Line, [hashtable]$Totals) {
 }
 
 function Add-Chunks($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "chunks=(.*?)(?= heat=|\))") {
+    if ($Line -notmatch "chunks=(.*?)(?= positions=| heat=|\))") {
         return
     }
 
