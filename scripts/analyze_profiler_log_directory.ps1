@@ -205,6 +205,7 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     $inspectionClaims = Get-CounterTotal $counterTotals "finite_fluid_inspection_claims"
     $quietCacheHits = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_hits"
     $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheSignatureMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_signature_misses"
     $quietCacheEvictions = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_evictions"
 
     $format = if ($profilerLines.Count -eq 0) {
@@ -234,6 +235,7 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         ChunkDeferrals = $chunkDeferrals
         QuietCacheHits = $quietCacheHits
         EstimatedQuietCacheMisses = $quietCacheMisses
+        QuietCacheSignatureMisses = $quietCacheSignatureMisses
         QuietCacheEvictions = $quietCacheEvictions
         Format = $format
         StartupProfilerEnabled = $startup.ProfilerEnabled
@@ -277,7 +279,7 @@ if ($files.Count -eq 0) {
         } else {
             ""
         }
-        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} evictions={13}{14}" -f `
+        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} signatureMisses={13} evictions={14}{15}" -f `
                     $item.Name,
                     $item.Format,
                     $startupText,
@@ -291,6 +293,7 @@ if ($files.Count -eq 0) {
                     $item.ChunkDeferrals,
                     $item.QuietCacheHits,
                     $item.EstimatedQuietCacheMisses,
+                    $item.QuietCacheSignatureMisses,
                     $item.QuietCacheEvictions,
                     $lavaText))
         if ($item.TopChunks -ne "-") {
