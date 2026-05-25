@@ -170,6 +170,34 @@ function Assert-ConfigHygiene {
             throw "Language file is missing config tooltip: emergent.config.$translationName.tooltip"
         }
     }
+
+    if (-not $lang.Contains("`"emergent.config.category.presets`"")) {
+        throw "Language file is missing config preset category label: emergent.config.category.presets"
+    }
+    if (-not $lang.Contains("`"emergent.config.preset`"")) {
+        throw "Language file is missing config preset selector label: emergent.config.preset"
+    }
+    if (-not $lang.Contains("`"emergent.config.preset.tooltip`"")) {
+        throw "Language file is missing config preset selector tooltip: emergent.config.preset.tooltip"
+    }
+
+    $presetMatch = [regex]::Match($configSource, 'public enum Preset\s*\{(?<body>[\s\S]*?)\s*;')
+    if (-not $presetMatch.Success) {
+        throw "EmergentConfig.Preset enum was not found."
+    }
+
+    $presets = @([regex]::Matches($presetMatch.Groups["body"].Value, '\b([A-Z][A-Z0-9_]*)\b') |
+        ForEach-Object { $_.Groups[1].Value })
+    if ($presets.Count -eq 0) {
+        throw "EmergentConfig.Preset has no enum values."
+    }
+
+    foreach ($preset in $presets) {
+        $translationName = $preset.ToLowerInvariant()
+        if (-not $lang.Contains("`"emergent.config.preset.$translationName`"")) {
+            throw "Language file is missing preset label: emergent.config.preset.$translationName"
+        }
+    }
 }
 
 function Assert-ResourceHygiene {
