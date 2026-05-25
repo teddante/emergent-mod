@@ -336,6 +336,7 @@ if ($files.Count -eq 0) {
     $preBudgetLogs = @($measurements | Where-Object { $_.Format -eq "pre-budget" })
     $preInspectionLogs = @($measurements | Where-Object { $_.Format -eq "pre-inspection-budget" })
     $lagOnlyLogs = @($measurements | Where-Object { $_.LagWarnings -gt 0 -and $_.ProfilerLines -eq 0 })
+    $latestMeasurement = $measurements | Select-Object -First 1
     $summary.Add("")
     $summary.Add(("Format counts: current={0} pre-inspection-budget={1} pre-budget={2} pre-cache={3} no-profiler={4}" -f `
                 $currentLogs.Count,
@@ -343,7 +344,9 @@ if ($files.Count -eq 0) {
                 $preBudgetLogs.Count,
                 @($measurements | Where-Object { $_.Format -eq "pre-cache" }).Count,
                 @($measurements | Where-Object { $_.Format -eq "no-profiler" }).Count))
-    if ($currentLogs.Count -eq 0 -and $preBudgetLogs.Count -gt 0) {
+    if ($latestMeasurement -and $latestMeasurement.LagWarnings -gt 0 -and !$latestMeasurement.StartupProfilerEnabled) {
+        $summary.Add("interpretation=latest scanned log has lag warnings but no Emergent profiler startup line; enable -Demergent.profiler=true -Demergent.profiler.slowMs=25 on the Prism instance and retest the latest jar before tuning budgets.")
+    } elseif ($currentLogs.Count -eq 0 -and $preBudgetLogs.Count -gt 0) {
         $summary.Add("interpretation=no current-format finite-fluid profiler log was found; retest with the latest copied jar before tuning budgets.")
     } elseif ($currentLogs.Count -eq 0 -and $preInspectionLogs.Count -gt 0) {
         $summary.Add("interpretation=logs have active-work budgets but not inspection-budget counters; retest with the latest copied jar before tuning scheduled tick admission.")
