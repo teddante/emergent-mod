@@ -12,6 +12,8 @@ Set-StrictMode -Version Latest
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $MixinConfigPath = Join-Path $ProjectRoot "src\main\resources\emergent.mixins.json"
 $MixinSourceDir = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\mixin"
+$GameTestModJsonPath = Join-Path $ProjectRoot "src\gametest\resources\fabric.mod.json"
+$GameTestSourceDir = Join-Path $ProjectRoot "src\gametest\java"
 $ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
 $McSourceDir = Join-Path $ProjectRoot "mc-src"
 $GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
@@ -215,6 +217,60 @@ function Assert-ConfigHygiene {
     }
 }
 
+function Assert-GameTestEntrypoints {
+    Write-Step "Checking GameTest entrypoint hygiene"
+
+    if (-not (Test-Path -LiteralPath $GameTestModJsonPath)) {
+        throw "Missing GameTest mod metadata: $GameTestModJsonPath"
+    }
+
+    $modJson = Get-Content -LiteralPath $GameTestModJsonPath -Raw | ConvertFrom-Json
+    $entrypoints = @($modJson.entrypoints.'fabric-gametest')
+    if ($entrypoints.Count -eq 0) {
+        throw "GameTest mod metadata must define at least one fabric-gametest entrypoint."
+    }
+
+    $entrypointSet = @{}
+    foreach ($entrypoint in $entrypoints) {
+        if ([string]::IsNullOrWhiteSpace($entrypoint)) {
+            throw "GameTest mod metadata contains a blank fabric-gametest entrypoint."
+        }
+
+        $entrypointSet[$entrypoint] = $true
+        $sourcePath = Join-Path $GameTestSourceDir (($entrypoint -replace '\.', '\') + ".java")
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "GameTest entrypoint has no source file: $entrypoint"
+        }
+
+        $sourceText = Get-Content -LiteralPath $sourcePath -Raw
+        if (-not $sourceText.Contains("@GameTest")) {
+            throw "GameTest entrypoint has no @GameTest methods: $entrypoint"
+        }
+    }
+
+    Get-ChildItem -LiteralPath $GameTestSourceDir -Recurse -Filter "*.java" | ForEach-Object {
+        $sourceText = Get-Content -LiteralPath $_.FullName -Raw
+        if (-not $sourceText.Contains("@GameTest")) {
+            return
+        }
+
+        if ($sourceText -notmatch "package\s+([A-Za-z0-9_.]+)\s*;") {
+            throw "GameTest source has @GameTest methods but no package declaration: $($_.FullName)"
+        }
+        $packageName = $Matches[1]
+
+        if ($sourceText -notmatch "public\s+class\s+([A-Za-z0-9_]+)") {
+            throw "GameTest source has @GameTest methods but no public class declaration: $($_.FullName)"
+        }
+        $className = $Matches[1]
+        $qualifiedName = "$packageName.$className"
+
+        if (-not $entrypointSet.ContainsKey($qualifiedName)) {
+            throw "GameTest class has @GameTest methods but is not registered as a fabric-gametest entrypoint: $qualifiedName"
+        }
+    }
+}
+
 function Assert-ResourceHygiene {
     Write-Step "Checking resource JSON hygiene"
 
@@ -328,6 +384,7 @@ try {
     Assert-MixinConfig
     Assert-ResourceHygiene
     Assert-ConfigHygiene
+    Assert-GameTestEntrypoints
 
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"
