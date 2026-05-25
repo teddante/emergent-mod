@@ -6,6 +6,7 @@ import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialPhysicsProfiles;
+import com.teddante.emergent.SurfaceWeatherPhysics;
 import com.teddante.emergent.ThermalPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
@@ -194,6 +195,33 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos)),
                 EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos)),
                 "batched ambient drying should remove the same moisture as repeated single samples");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void rainAccumulationToggleDisablesWeatherSampling(GameTestHelper context) {
+        BlockPos surfacePos = new BlockPos(5, 3, 4);
+        BlockPos samplePos = surfacePos.above();
+        context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(samplePos, Blocks.AIR);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos), 0.6);
+        double beforeMoisture = EnvironmentalExposure.moisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                context.getBlockState(surfacePos));
+        boolean rainAccumulation = EmergentConfig.get().rainAccumulation;
+
+        EmergentConfig.get().rainAccumulation = false;
+        try {
+            SurfaceWeatherPhysics.processWeatherSample(context.getLevel(), context.absolutePos(samplePos), 12);
+        } finally {
+            EmergentConfig.get().rainAccumulation = rainAccumulation;
+        }
+
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)),
+                beforeMoisture,
+                "disabled rain accumulation should leave existing surface weather memory untouched");
         context.succeed();
     }
 
