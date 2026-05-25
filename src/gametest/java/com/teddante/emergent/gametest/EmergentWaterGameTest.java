@@ -1060,6 +1060,45 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void quietFluidCacheRejectsAgedThermalSignature(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        BlockPos absoluteWaterPos = context.absolutePos(WATER_POS);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                absoluteWaterPos,
+                context.getBlockState(WATER_POS),
+                0.36);
+
+        int heatedSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                absoluteWaterPos,
+                2);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                absoluteWaterPos,
+                Fluids.WATER,
+                2,
+                "thin",
+                heatedSignature);
+
+        context.runAfterDelay(3, () -> {
+            int cooledSignature = ThermalPhysics.finiteWaterThermalSignature(
+                    context.getLevel(),
+                    absoluteWaterPos,
+                    2);
+            context.assertTrue(heatedSignature != cooledSignature,
+                    "aging stored heat below the evaporation threshold should change the finite-water thermal signature");
+            context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), absoluteWaterPos, context.getBlockState(WATER_POS)) > 0.0,
+                    "aged heat should still exist so the cache rejection is not relying on empty-memory cleanup");
+            context.assertTrue(
+                    FiniteFluidQuietCache.reason(context.getLevel(), absoluteWaterPos, Fluids.WATER, 2, cooledSignature) == null,
+                    "changed aged thermal signatures should force finite water to re-check heat and cold state");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 20)
     public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
         BlockPos stonePos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
