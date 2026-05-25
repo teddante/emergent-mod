@@ -15,6 +15,10 @@ $MixinSourceDir = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\mi
 $ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
 $McSourceDir = Join-Path $ProjectRoot "mc-src"
 $GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
+$ConfigSourcePath = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\EmergentConfig.java"
+$ConfigScreenPath = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\client\EmergentClothConfigScreen.java"
+$LangPath = Join-Path $ResourcesDir "assets\emergent\lang\en_us.json"
+$ReadmePath = Join-Path $ProjectRoot "README.md"
 
 function Read-GradleProperties {
     $properties = @{}
@@ -78,6 +82,12 @@ function Write-GradleFailureSummary {
     $BuildOutput | Select-Object -Last 80 | ForEach-Object { Write-Host $_ }
 }
 
+function ConvertTo-ConfigTranslationName {
+    param([string]$Name)
+
+    return ([regex]::Replace($Name, "([a-z0-9])([A-Z])", '$1_$2')).ToLowerInvariant()
+}
+
 function Assert-MixinConfig {
     Write-Step "Checking mixin config hygiene"
 
@@ -127,6 +137,37 @@ function Assert-MixinConfig {
         $className = $_.BaseName
         if (-not $declaredSet.ContainsKey($className)) {
             throw "Non-mixin helper class is inside the mixin package: $($_.FullName). Move helpers/duck interfaces outside com.teddante.emergent.mixin."
+        }
+    }
+}
+
+function Assert-ConfigHygiene {
+    Write-Step "Checking config surface hygiene"
+
+    $configSource = Get-Content -LiteralPath $ConfigSourcePath -Raw
+    $configScreen = Get-Content -LiteralPath $ConfigScreenPath -Raw
+    $lang = Get-Content -LiteralPath $LangPath -Raw
+    $readme = Get-Content -LiteralPath $ReadmePath -Raw
+
+    $fields = @([regex]::Matches($configSource, 'public boolean ([A-Za-z0-9_]+)\s*=') |
+        ForEach-Object { $_.Groups[1].Value })
+    if ($fields.Count -eq 0) {
+        throw "No public boolean config fields found in $ConfigSourcePath"
+    }
+
+    foreach ($field in $fields) {
+        $translationName = ConvertTo-ConfigTranslationName $field
+        if (-not $readme.Contains("`"$field`"")) {
+            throw "README config example is missing EmergentConfig field: $field"
+        }
+        if (-not $configScreen.Contains("config.$field")) {
+            throw "Cloth Config screen is missing EmergentConfig field: $field"
+        }
+        if (-not $lang.Contains("`"emergent.config.$translationName`"")) {
+            throw "Language file is missing config label: emergent.config.$translationName"
+        }
+        if (-not $lang.Contains("`"emergent.config.$translationName.tooltip`"")) {
+            throw "Language file is missing config tooltip: emergent.config.$translationName.tooltip"
         }
     }
 }
@@ -243,6 +284,7 @@ Push-Location $ProjectRoot
 try {
     Assert-MixinConfig
     Assert-ResourceHygiene
+    Assert-ConfigHygiene
 
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"

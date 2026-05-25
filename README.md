@@ -205,7 +205,7 @@ Fast local smoke check:
 .\scripts\dev_smoke.ps1
 ```
 
-The smoke script keeps full Gradle output under `build\reports\emergent-smoke` and prints compact success or failure lines, so failed GameTests can be diagnosed from the saved log without flooding the terminal.
+The smoke script checks mixins, resources, config/docs/UI coverage, and jar contents. It also keeps full Gradle output under `build\reports\emergent-smoke` and prints compact success or failure lines, so failed GameTests can be diagnosed from the saved log without flooding the terminal.
 
 Build, check mixin/resource hygiene, run server GameTests, inspect the jar, and copy the jar into the default Prism test instance:
 
