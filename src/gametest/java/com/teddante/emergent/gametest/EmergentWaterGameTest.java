@@ -95,6 +95,41 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void environmentalMemoryUpdateDiscardsStaleState(GameTestHelper context) {
+        BlockPos surfacePos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                Blocks.STONE.defaultBlockState(),
+                0.5);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                Blocks.STONE.defaultBlockState(),
+                1.0);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+
+        EnvironmentalExposure.clearHeat(context.getLevel(), context.absolutePos(surfacePos));
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) == 0.0,
+                "clear/update helpers should discard memory recorded for a stale block state");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "discarding stale memory through an update helper should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentEvaporationRemovesAnyFiniteWaterAmount(GameTestHelper context) {
         context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 8) == 0,
                 "a water-evaporating environment should remove source water like vanilla Nether bucket placement");

@@ -719,6 +719,11 @@ public final class EnvironmentalExposure {
         if (entry == null) {
             return;
         }
+        if (!entry.state().equals(world.getBlockState(pos))) {
+            levelExposure.remove(key);
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+            return;
+        }
 
         ExposureEntry updated = updater.update(age(world, entry)).withLastTick(world.getGameTime());
         if (updated.isEmpty()) {
