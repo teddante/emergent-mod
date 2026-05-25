@@ -817,6 +817,29 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void quietFluidCacheRejectsStaleThermalSignature(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        BlockPos absoluteWaterPos = context.absolutePos(WATER_POS);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                absoluteWaterPos,
+                Fluids.WATER,
+                2,
+                "thin",
+                10);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteWaterPos, Fluids.WATER, 2, 10) != null,
+                "matching thermal signatures should allow a finite-water quiet cache hit");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteWaterPos, Fluids.WATER, 2, 11) == null,
+                "changed thermal signatures should force finite water to re-check heat and cold state");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
         BlockPos stonePos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());

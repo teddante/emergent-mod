@@ -921,12 +921,20 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private String emergent$cachedFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        return FiniteFluidQuietCache.reason(world, pos, fluid, amount);
+        return FiniteFluidQuietCache.reason(world, pos, fluid, amount, emergent$finiteFluidEnvironmentSignature(world, pos, fluid, amount));
     }
 
     @Unique
     private void emergent$rememberFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount, String reason) {
-        FiniteFluidQuietCache.remember(world, pos, fluid, amount, reason);
+        FiniteFluidQuietCache.remember(world, pos, fluid, amount, reason, emergent$finiteFluidEnvironmentSignature(world, pos, fluid, amount));
+    }
+
+    @Unique
+    private int emergent$finiteFluidEnvironmentSignature(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (!WaterPhysics.isWater(fluid)) {
+            return 0;
+        }
+        return ThermalPhysics.finiteWaterThermalSignature(world, pos, amount);
     }
 
     @Unique
