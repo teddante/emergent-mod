@@ -198,6 +198,21 @@ function Assert-ConfigHygiene {
             throw "Language file is missing preset label: emergent.config.preset.$translationName"
         }
     }
+
+    foreach ($preset in $presets | Where-Object { $_ -ne "CUSTOM" }) {
+        $caseMatch = [regex]::Match(
+                $configSource,
+                "case\s+$preset\s*->\s*\{(?<body>[\s\S]*?)\n\s*\}")
+        if (-not $caseMatch.Success) {
+            throw "EmergentConfig.Preset.$preset has no switch case in applyPreset."
+        }
+
+        foreach ($field in $fields) {
+            if ($caseMatch.Groups["body"].Value -notmatch "\b$field\s*=") {
+                throw "EmergentConfig.Preset.$preset does not assign config field: $field"
+            }
+        }
+    }
 }
 
 function Assert-ResourceHygiene {
