@@ -42,26 +42,56 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     @GameTest(maxTicks = 20)
     public void blockReplacementClearsEnvironmentalMemory(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.STONE);
+        BlockState originalState = context.getBlockState(WATER_POS);
         EnvironmentalExposure.addMoisture(
                 context.getLevel(),
                 context.absolutePos(WATER_POS),
-                context.getBlockState(WATER_POS),
+                originalState,
                 0.5);
         EnvironmentalExposure.addHeat(
                 context.getLevel(),
                 context.absolutePos(WATER_POS),
-                context.getBlockState(WATER_POS),
+                originalState,
                 1.0);
+        EnvironmentalExposure.addCold(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addHydraulicWear(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addTrafficWear(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addVegetationStress(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addStructuralStress(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addSuspendedSediment(context.getLevel(), context.absolutePos(WATER_POS), originalState, 2.0);
+        EnvironmentalExposure.addAshResidue(context.getLevel(), context.absolutePos(WATER_POS), originalState, 2.0);
 
         context.setBlock(WATER_POS, Blocks.GLASS);
         context.setBlock(WATER_POS, Blocks.STONE);
+        BlockState restoredState = context.getBlockState(WATER_POS);
 
         context.assertTrue(
-                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
                 "environmental moisture should not survive block replacement and restoration");
         context.assertTrue(
-                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
                 "environmental heat should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "environmental cold should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.addHydraulicWear(context.getLevel(), context.absolutePos(WATER_POS), restoredState, 0.0) == 0.0,
+                "hydraulic wear should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.addTrafficWear(context.getLevel(), context.absolutePos(WATER_POS), restoredState, 0.0) == 0.0,
+                "traffic wear should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.vegetationStress(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "vegetation stress should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.structuralStress(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "structural stress should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "suspended sediment should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "ash residue should not survive block replacement and restoration");
         context.succeed();
     }
 
