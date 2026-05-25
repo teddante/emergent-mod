@@ -4,6 +4,7 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalScheduler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.FiniteFluidQuietCache;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialPhysicsProfiles;
 import com.teddante.emergent.SurfaceWeatherPhysics;
@@ -61,6 +62,35 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.assertTrue(
                 EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
                 "environmental heat should not survive block replacement and restoration");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void lazyEnvironmentalMemoryMismatchInvalidatesNearbyQuietFluid(GameTestHelper context) {
+        BlockPos surfacePos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(surfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos), 0.5);
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) != null,
+                "test fixture should start with cached quiet finite water");
+
+        EnvironmentalExposure.moisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                Blocks.DIRT.defaultBlockState());
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "discarding stale environmental memory should wake nearby quiet finite water");
         context.succeed();
     }
 

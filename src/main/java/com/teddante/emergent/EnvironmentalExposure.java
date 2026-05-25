@@ -670,6 +670,7 @@ public final class EnvironmentalExposure {
 
         if (!entry.state().equals(state)) {
             levelExposure.remove(key);
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
             return null;
         }
 
