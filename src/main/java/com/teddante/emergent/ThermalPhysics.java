@@ -161,6 +161,7 @@ public final class ThermalPhysics {
         BlockState supportState = world.getBlockState(supportPos);
         signature = 31 * signature + thermalHeatBucket(EnvironmentalExposure.heat(world, supportPos, supportState));
         signature = 31 * signature + thermalColdBucket(EnvironmentalExposure.cold(world, supportPos, supportState));
+        signature = 31 * signature + neighboringHeat(world, pos);
         return signature;
     }
 

@@ -818,6 +818,28 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void finiteWaterThermalSignatureTracksNeighborHeatSources(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK.defaultBlockState());
+        int heatedNeighborSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertTrue(quietSignature != heatedNeighborSignature,
+                "neighboring heat sources should change the finite-water thermal cache signature");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void quietFluidCacheRejectsStaleThermalSignature(GameTestHelper context) {
         context.setBlock(WATER_POS.below(), Blocks.STONE);
         context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
