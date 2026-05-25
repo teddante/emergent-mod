@@ -6,6 +6,7 @@
   "environment": "*",
   "entrypoints": {
     "fabric-gametest": [
+      "com.teddante.emergent.gametest.EmergentConfigGameTest",
       "com.teddante.emergent.gametest.EmergentWaterGameTest",
       "com.teddante.emergent.gametest.EmergentFireGameTest",
       "com.teddante.emergent.gametest.EmergentPerfGameTest"
