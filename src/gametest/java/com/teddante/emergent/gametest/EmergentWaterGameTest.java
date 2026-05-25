@@ -129,6 +129,33 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void quietCacheInvalidationStaysLocal(GameTestHelper context) {
+        BlockPos changedPos = WATER_POS;
+        BlockPos neighborPos = WATER_POS.relative(Direction.NORTH);
+        BlockPos diagonalPos = WATER_POS.relative(Direction.NORTH).relative(Direction.EAST);
+        BlockPos absoluteChangedPos = context.absolutePos(changedPos);
+        BlockPos absoluteNeighborPos = context.absolutePos(neighborPos);
+        BlockPos absoluteDiagonalPos = context.absolutePos(diagonalPos);
+
+        FiniteFluidQuietCache.remember(context.getLevel(), absoluteChangedPos, Fluids.WATER, 1, "thin");
+        FiniteFluidQuietCache.remember(context.getLevel(), absoluteNeighborPos, Fluids.WATER, 1, "thin");
+        FiniteFluidQuietCache.remember(context.getLevel(), absoluteDiagonalPos, Fluids.WATER, 1, "thin");
+
+        FiniteFluidQuietCache.invalidateNeighborhood(context.getLevel(), absoluteChangedPos, "unknown");
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteChangedPos, Fluids.WATER, 1) == null,
+                "invalidating a changed block should wake a quiet fluid cached at that block");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteNeighborPos, Fluids.WATER, 1) == null,
+                "invalidating a changed block should wake directly adjacent quiet fluids");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteDiagonalPos, Fluids.WATER, 1) != null,
+                "quiet-cache invalidation should not spill into diagonal cells that cannot touch the changed block");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentalMemoryWritesDiscardStaleState(GameTestHelper context) {
         BlockPos surfacePos = BELOW_WATER_POS;
         BlockPos fluidPos = WATER_POS;
