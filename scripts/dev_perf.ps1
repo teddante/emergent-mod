@@ -8,6 +8,7 @@ param(
     [switch]$RequireInspectionDeferrals,
     [switch]$RequireBudgetDeferrals,
     [switch]$RequireChunkBudgetDeferrals,
+    [switch]$TrackPositions,
     [switch]$SkipStressScenarios
 )
 
@@ -68,6 +69,22 @@ function Add-Chunks($Line, [hashtable]$Totals) {
     }
 }
 
+function Add-Positions($Line, [hashtable]$Totals) {
+    if ($Line -notmatch "positions=(.*?)(?= heat=|\))") {
+        return
+    }
+
+    $positionText = $Matches[1]
+    foreach ($match in [regex]::Matches($positionText, "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+,-?[0-9]+):([0-9]+)")) {
+        $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
+        $value = [long]$match.Groups[3].Value
+        if (!$Totals.ContainsKey($name)) {
+            $Totals[$name] = 0L
+        }
+        $Totals[$name] += $value
+    }
+}
+
 function Get-CounterTotal([hashtable]$Totals, [string]$Name) {
     if ($Totals.ContainsKey($Name)) {
         return [long]$Totals[$Name]
@@ -83,6 +100,17 @@ function Add-TopChunkSummary([System.Collections.Generic.List[string]]$Summary, 
     if ($topChunks.Count -gt 0) {
         $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
         $Summary.Add("  ${Label}=$chunkText")
+    }
+}
+
+function Add-TopPositionSummary([System.Collections.Generic.List[string]]$Summary, [hashtable]$PositionTotals, [string]$Prefix, [string]$Label, [int]$Top) {
+    $topPositions = @($PositionTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "$Prefix@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First ([Math]::Min(3, $Top)))
+    if ($topPositions.Count -gt 0) {
+        $positionText = ($topPositions | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+        $Summary.Add("  ${Label}=$positionText")
     }
 }
 
@@ -196,7 +224,8 @@ Write-Step "Running headless GameTests with Emergent profiler slowMs=$effectiveS
 $oldJavaToolOptions = $env:JAVA_TOOL_OPTIONS
 $activeFluidBudgetOption = if ($ActiveFluidBudget -gt 0) { " -Demergent.finiteFluid.activeTickBudget=$ActiveFluidBudget" } else { "" }
 $activeFluidChunkBudgetOption = if ($ActiveFluidChunkBudget -gt 0) { " -Demergent.finiteFluid.activeChunkTickBudget=$ActiveFluidChunkBudget" } else { "" }
-$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$effectiveSlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())$activeFluidBudgetOption$activeFluidChunkBudgetOption"
+$trackPositionsOption = if ($TrackPositions) { " -Demergent.profiler.positions=true" } else { "" }
+$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$effectiveSlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())$activeFluidBudgetOption$activeFluidChunkBudgetOption$trackPositionsOption"
 $oldErrorActionPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = "Continue"
@@ -220,9 +249,11 @@ $failureLines = @($logLines | Where-Object {
 
 $counterTotals = @{}
 $chunkTotals = @{}
+$positionTotals = @{}
 foreach ($line in $profilerLines) {
     Add-Counters $line $counterTotals
     Add-Chunks $line $chunkTotals
+    Add-Positions $line $positionTotals
 }
 
 $worstProfilerLines = @($profilerLines |
@@ -238,6 +269,7 @@ if ($effectiveSlowMs -ne $SlowMs) {
 }
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("Stress scenarios: $stressScenariosEnabled")
+$summary.Add("Position hotspots: $($TrackPositions.IsPresent)")
 if ($ActiveFluidBudget -gt 0) {
     $summary.Add("Forced finite fluid work budget: $ActiveFluidBudget")
 }
@@ -280,6 +312,7 @@ if ($counterTotals.Count -eq 0) {
 }
 
 Add-FiniteFluidDiagnosis $summary $counterTotals $chunkTotals $Top
+Add-TopPositionSummary $summary $positionTotals "finite_fluids" "hottestFiniteFluidPositions" $Top
 
 $summary.Add("")
 $summary.Add("Top chunk hotspots:")
@@ -287,6 +320,17 @@ if ($chunkTotals.Count -eq 0) {
     $summary.Add("  none")
 } else {
     $chunkTotals.GetEnumerator() |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First $Top |
+        ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
+}
+
+$summary.Add("")
+$summary.Add("Top position hotspots:")
+if ($positionTotals.Count -eq 0) {
+    $summary.Add("  none")
+} else {
+    $positionTotals.GetEnumerator() |
         Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
         Select-Object -First $Top |
         ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
