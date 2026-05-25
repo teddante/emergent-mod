@@ -678,6 +678,7 @@ public final class EnvironmentalExposure {
         if (!aged.equals(entry)) {
             if (aged.isEmpty()) {
                 levelExposure.remove(key);
+                FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
                 return null;
             }
             levelExposure.put(key, aged);

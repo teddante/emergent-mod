@@ -130,6 +130,35 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void environmentalMemoryDecayWakesNearbyQuietFluid(GameTestHelper context) {
+        BlockPos surfacePos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(surfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addHeat(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos), 0.02);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) != null,
+                "test fixture should start with cached quiet finite water");
+
+        context.runAfterDelay(3, () -> {
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) == 0.0,
+                    "small heat memory should decay away after elapsed ticks");
+            context.assertTrue(
+                    FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                    "decaying environmental memory to empty should wake nearby quiet finite water");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentEvaporationRemovesAnyFiniteWaterAmount(GameTestHelper context) {
         context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 8) == 0,
                 "a water-evaporating environment should remove source water like vanilla Nether bucket placement");
