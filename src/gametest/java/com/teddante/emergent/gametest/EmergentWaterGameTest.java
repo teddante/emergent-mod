@@ -862,6 +862,59 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void sourceWaterThermalSignatureIgnoresStandaloneStoredHeat(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        int heatedSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertTrue(quietSignature == heatedSignature,
+                "source-equivalent water should not churn its thermal cache signature for stored heat unless cold could freeze it");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sourceWaterThermalSignatureTracksHeatWhenColdCanFreeze(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.6);
+
+        int coldSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        int heatedColdSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertTrue(coldSignature != heatedColdSignature,
+                "stored heat should still change source-water signatures when it can block a stored-cold freeze");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void quietFluidCacheRejectsStaleThermalSignature(GameTestHelper context) {
         context.setBlock(WATER_POS.below(), Blocks.STONE);
         context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
