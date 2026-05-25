@@ -24,6 +24,10 @@ public class Emergent implements ModInitializer {
 		if (EmergentProfiler.enabled()) {
 			LOGGER.info("Emergent profiler enabled. Slow tick threshold: {} ms", EmergentProfiler.slowTickMillis());
 			LOGGER.info(
+					"Emergent profiler position hotspots: {} (override with -D{}=true)",
+					EmergentProfiler.trackPositions() ? "enabled" : "disabled",
+					"emergent.profiler.positions");
+			LOGGER.info(
 					"Emergent finite fluid work budget: {} cells/tick (override with -D{}=<cells>)",
 					FiniteFluidBudgetSettings.activeTickBudget(),
 					FiniteFluidBudgetSettings.ACTIVE_TICK_BUDGET_PROPERTY);

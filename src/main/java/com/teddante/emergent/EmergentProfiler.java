@@ -36,6 +36,10 @@ public final class EmergentProfiler {
         return SLOW_TICK_MILLIS;
     }
 
+    public static boolean trackPositions() {
+        return TRACK_POSITIONS;
+    }
+
     public static long start() {
         return ENABLED ? System.nanoTime() : 0L;
     }

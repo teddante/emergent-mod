@@ -153,11 +153,14 @@ function Get-StartupDiagnostics([array]$LogLines) {
     $chunkBudget = ""
     $inspectionBudget = ""
     $inspectionChunkBudget = ""
+    $positionHotspots = ""
 
     foreach ($line in $LogLines) {
         if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
             $profilerEnabled = $true
             $slowMs = $Matches[1]
+        } elseif ($line -match "Emergent profiler position hotspots: (enabled|disabled)") {
+            $positionHotspots = $Matches[1]
         } elseif ($line -match "Emergent finite fluid work budget: ([0-9]+) cells/tick") {
             $activeBudget = $Matches[1]
         } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
@@ -175,6 +178,7 @@ function Get-StartupDiagnostics([array]$LogLines) {
         ChunkBudget = $chunkBudget
         InspectionBudget = $inspectionBudget
         InspectionChunkBudget = $inspectionChunkBudget
+        PositionHotspots = $positionHotspots
     }
 }
 
@@ -266,6 +270,7 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         StartupChunkBudget = $startup.ChunkBudget
         StartupInspectionBudget = $startup.InspectionBudget
         StartupInspectionChunkBudget = $startup.InspectionChunkBudget
+        StartupPositionHotspots = $startup.PositionHotspots
         TopChunks = Get-TopChunkText $chunkTotals $TopChunks
         TopPositions = Get-TopPositionText $positionTotals $TopChunks
         TopInvalidation = Get-TopInvalidationText $counterTotals
@@ -292,6 +297,7 @@ if ($files.Count -eq 0) {
     foreach ($item in $measurements) {
         $startupText = "profiler=" + $(if ($item.StartupProfilerEnabled) { "on" } else { "off" }) +
                 " slowMs=" + $(if ($item.StartupSlowMs -ne "") { $item.StartupSlowMs } else { "-" }) +
+                " positions=" + $(if ($item.StartupPositionHotspots -ne "") { $item.StartupPositionHotspots } else { "-" }) +
                 " budget=" + $(if ($item.StartupActiveBudget -ne "") { $item.StartupActiveBudget } else { "-" }) +
                 "/" + $(if ($item.StartupChunkBudget -ne "") { $item.StartupChunkBudget } else { "-" }) +
                 " inspection=" + $(if ($item.StartupInspectionBudget -ne "") { $item.StartupInspectionBudget } else { "-" }) +

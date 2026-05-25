@@ -270,11 +270,14 @@ function Get-StartupDiagnostics([array]$LogLines) {
     $chunkBudget = ""
     $inspectionBudget = ""
     $inspectionChunkBudget = ""
+    $positionHotspots = ""
 
     foreach ($line in $LogLines) {
         if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
             $profilerEnabled = $true
             $slowMs = $Matches[1]
+        } elseif ($line -match "Emergent profiler position hotspots: (enabled|disabled)") {
+            $positionHotspots = $Matches[1]
         } elseif ($line -match "Emergent finite fluid work budget: ([0-9]+) cells/tick") {
             $activeBudget = $Matches[1]
         } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
@@ -292,6 +295,7 @@ function Get-StartupDiagnostics([array]$LogLines) {
         ChunkBudget = $chunkBudget
         InspectionBudget = $inspectionBudget
         InspectionChunkBudget = $inspectionChunkBudget
+        PositionHotspots = $positionHotspots
     }
 }
 
@@ -349,9 +353,10 @@ $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log summary")
 $summary.Add("Log: $resolvedPath")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
-$summary.Add(("Startup: profilerEnabled={0} slowMs={1} finiteFluidBudget={2} finiteFluidChunkBudget={3} finiteFluidInspectionBudget={4} finiteFluidInspectionChunkBudget={5}" -f `
+$summary.Add(("Startup: profilerEnabled={0} slowMs={1} positionHotspots={2} finiteFluidBudget={3} finiteFluidChunkBudget={4} finiteFluidInspectionBudget={5} finiteFluidInspectionChunkBudget={6}" -f `
             $startup.ProfilerEnabled,
             $(if ($startup.SlowMs -ne "") { $startup.SlowMs } else { "-" }),
+            $(if ($startup.PositionHotspots -ne "") { $startup.PositionHotspots } else { "-" }),
             $(if ($startup.ActiveBudget -ne "") { $startup.ActiveBudget } else { "-" }),
             $(if ($startup.ChunkBudget -ne "") { $startup.ChunkBudget } else { "-" }),
             $(if ($startup.InspectionBudget -ne "") { $startup.InspectionBudget } else { "-" }),
