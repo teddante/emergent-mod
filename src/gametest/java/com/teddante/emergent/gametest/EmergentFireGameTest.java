@@ -1273,6 +1273,33 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void partialTrafficContactOnlyWearsOverlappedSurface(GameTestHelper context) {
+        BlockPos contactPos = TEST_POS;
+        BlockPos neighborPos = contactPos.relative(Direction.EAST);
+        context.setBlock(contactPos, Blocks.GRASS_BLOCK);
+        context.setBlock(contactPos.above(), Blocks.AIR);
+        context.setBlock(neighborPos, Blocks.GRASS_BLOCK);
+        context.setBlock(neighborPos.above(), Blocks.AIR);
+
+        BlockPos absoluteBase = context.absolutePos(contactPos);
+        AABB footprint = new AABB(
+                absoluteBase.getX(),
+                absoluteBase.getY() + 1.0,
+                absoluteBase.getZ(),
+                absoluteBase.getX() + 0.5,
+                absoluteBase.getY() + 2.8,
+                absoluteBase.getZ() + 0.5);
+
+        for (int i = 0; i < 24; i++) {
+            TrafficWearPhysics.applyContactPatchTraffic(context.getLevel(), footprint, 1.0, 4.0);
+        }
+
+        context.assertBlockPresent(Blocks.DIRT_PATH, contactPos);
+        context.assertBlockPresent(Blocks.GRASS_BLOCK, neighborPos);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void trafficWearResetsWhenGroundChanges(GameTestHelper context) {
         context.setBlock(TEST_POS, Blocks.GRASS_BLOCK);
         context.setBlock(TEST_POS.above(), Blocks.AIR);
