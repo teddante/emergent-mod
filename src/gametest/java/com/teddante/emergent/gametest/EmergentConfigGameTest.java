@@ -74,6 +74,28 @@ public class EmergentConfigGameTest {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 40)
+    public void materialReactionsToggleEnablesFirePlacementHeating(GameTestHelper context) {
+        BlockPos firePos = TEST_POS;
+        BlockPos stonePos = firePos.relative(Direction.EAST);
+        boolean materialReactions = EmergentConfig.get().materialReactions;
+
+        try {
+            EmergentConfig.get().materialReactions = true;
+            context.setBlock(firePos.below(), Blocks.NETHERRACK);
+            context.setBlock(stonePos, Blocks.STONE);
+            context.setBlock(firePos, Blocks.FIRE.defaultBlockState());
+
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(stonePos), context.getBlockState(stonePos)) > 0.0,
+                    "enabled material reactions should let fire placement write stored heat");
+        } finally {
+            EmergentConfig.get().materialReactions = materialReactions;
+        }
+
+        context.succeed();
+    }
+
     private static void invokeFireTick(ServerLevel level, BlockPos pos, BlockState state) throws ReflectiveOperationException {
         Method tick = FireBlock.class.getDeclaredMethod("tick", BlockState.class, ServerLevel.class, BlockPos.class, RandomSource.class);
         tick.setAccessible(true);
