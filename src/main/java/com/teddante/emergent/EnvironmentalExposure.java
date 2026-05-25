@@ -220,7 +220,7 @@ public final class EnvironmentalExposure {
             return 0.0;
         }
 
-        return horizontalDistanceMeters * Math.max(0.05, contactAreaSquareMeters) * Math.max(0.35, bodyHeightMeters);
+        return horizontalDistanceMeters * contactAreaSquareMeters * Math.max(0.35, bodyHeightMeters);
     }
 
     public static double addHeat(ServerLevel world, BlockPos pos, BlockState state, double heat) {

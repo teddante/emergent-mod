@@ -1098,6 +1098,10 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 EnvironmentalExposure.trafficWearFromContact(2.0, 0.25, 1.0),
                 0.5,
                 "traffic wear should scale with partial block contact area");
+        assertClose(
+                EnvironmentalExposure.trafficWearFromContact(1.0, 0.01, 1.0),
+                0.01,
+                "tiny contact patches should not be inflated by a hidden minimum area");
         context.succeed();
     }
 
