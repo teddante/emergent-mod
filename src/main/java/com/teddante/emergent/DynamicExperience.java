@@ -13,6 +13,9 @@ public final class DynamicExperience {
     }
 
     public static int baseExperienceReward(LivingEntity entity, int vanillaBaseReward) {
+        if (!EmergentConfig.get().dynamicExperience) {
+            return vanillaBaseReward;
+        }
         if (entity instanceof Player || entity.isBaby()) {
             return vanillaBaseReward;
         }
@@ -25,6 +28,9 @@ public final class DynamicExperience {
     }
 
     public static int rewardAfterVanillaProcessing(LivingEntity entity, int vanillaReward) {
+        if (!EmergentConfig.get().dynamicExperience) {
+            return vanillaReward;
+        }
         if (entity instanceof Player || entity.isBaby()) {
             return vanillaReward;
         }
