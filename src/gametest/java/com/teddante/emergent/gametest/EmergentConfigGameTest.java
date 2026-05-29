@@ -16,7 +16,6 @@ import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -134,23 +133,24 @@ public class EmergentConfigGameTest {
         boolean finiteWaterFlow = EmergentConfig.get().finiteWaterFlow;
         boolean materialReactions = EmergentConfig.get().materialReactions;
 
-        EmergentConfig.get().finiteWaterFlow = true;
-        EmergentConfig.get().materialReactions = false;
-        context.setBlock(lavaPos, Blocks.LAVA.defaultBlockState());
-        context.setBlock(stonePos, Blocks.STONE.defaultBlockState());
-        context.getLevel().scheduleTick(context.absolutePos(lavaPos), Fluids.LAVA, 1);
+        try {
+            EmergentConfig.get().finiteWaterFlow = true;
+            EmergentConfig.get().materialReactions = false;
+            context.setBlock(lavaPos, Blocks.LAVA.defaultBlockState());
+            context.setBlock(stonePos, Blocks.STONE.defaultBlockState());
 
-        context.runAfterDelay(10, () -> {
-            try {
-                context.assertTrue(
-                        EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(stonePos), context.getBlockState(stonePos)) == 0.0,
-                        "disabled material reactions should stop finite lava ticks from writing contact heat");
-                context.succeed();
-            } finally {
-                EmergentConfig.get().finiteWaterFlow = finiteWaterFlow;
-                EmergentConfig.get().materialReactions = materialReactions;
-            }
-        });
+            BlockState lavaState = context.getBlockState(lavaPos);
+            lavaState.getFluidState().tick(context.getLevel(), context.absolutePos(lavaPos), lavaState);
+
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(stonePos), context.getBlockState(stonePos)) == 0.0,
+                    "disabled material reactions should stop finite lava ticks from writing contact heat");
+        } finally {
+            EmergentConfig.get().finiteWaterFlow = finiteWaterFlow;
+            EmergentConfig.get().materialReactions = materialReactions;
+        }
+
+        context.succeed();
     }
 
     private static void invokeFireTick(ServerLevel level, BlockPos pos, BlockState state) throws ReflectiveOperationException {
