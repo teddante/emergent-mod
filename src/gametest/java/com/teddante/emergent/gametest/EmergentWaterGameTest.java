@@ -156,6 +156,66 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void thermalComponentClearsWakeNearbyQuietFluids(GameTestHelper context) {
+        BlockPos heatedSurfacePos = BELOW_WATER_POS;
+        BlockPos heatedFluidPos = WATER_POS;
+        BlockPos chilledSurfacePos = BELOW_WATER_POS.relative(Direction.EAST, 2);
+        BlockPos chilledFluidPos = WATER_POS.relative(Direction.EAST, 2);
+
+        context.setBlock(heatedSurfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(heatedFluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        context.setBlock(chilledSurfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(chilledFluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(heatedSurfacePos),
+                context.getBlockState(heatedSurfacePos),
+                0.5);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(chilledSurfacePos),
+                context.getBlockState(chilledSurfacePos),
+                0.5);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(heatedFluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(chilledFluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(heatedFluidPos), Fluids.WATER, 1) != null,
+                "heated fixture should start with cached quiet finite water");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(chilledFluidPos), Fluids.WATER, 1) != null,
+                "chilled fixture should start with cached quiet finite water");
+
+        EnvironmentalExposure.clearHeat(context.getLevel(), context.absolutePos(heatedSurfacePos));
+        EnvironmentalExposure.clearCold(context.getLevel(), context.absolutePos(chilledSurfacePos));
+
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(heatedSurfacePos), context.getBlockState(heatedSurfacePos)) == 0.0,
+                "clearHeat should remove stored heat from the current block state");
+        context.assertTrue(
+                EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(chilledSurfacePos), context.getBlockState(chilledSurfacePos)) == 0.0,
+                "clearCold should remove stored cold from the current block state");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(heatedFluidPos), Fluids.WATER, 1) == null,
+                "clearing stored heat should wake nearby quiet finite water");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(chilledFluidPos), Fluids.WATER, 1) == null,
+                "clearing stored cold should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentalMemoryWritesDiscardStaleState(GameTestHelper context) {
         BlockPos surfacePos = BELOW_WATER_POS;
         BlockPos fluidPos = WATER_POS;
