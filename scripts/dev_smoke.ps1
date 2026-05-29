@@ -437,6 +437,26 @@ try {
 
         $targetJar = Join-Path $modsDir "$ArchivesBaseName-$ModVersion.jar"
         Write-Step "Copying jar to Prism mods folder"
+        $resolvedModsDir = (Resolve-Path -LiteralPath $modsDir).Path
+        $modsRoot = [System.IO.Path]::GetFullPath($resolvedModsDir)
+        if (-not $modsRoot.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+            $modsRoot += [System.IO.Path]::DirectorySeparatorChar
+        }
+
+        $targetJarFull = [System.IO.Path]::GetFullPath($targetJar)
+        $staleJars = Get-ChildItem -LiteralPath $modsDir -Filter "$ArchivesBaseName-*.jar" -File |
+            Where-Object { [System.IO.Path]::GetFullPath($_.FullName) -ne $targetJarFull }
+
+        foreach ($staleJar in $staleJars) {
+            $staleJarFull = [System.IO.Path]::GetFullPath($staleJar.FullName)
+            if (-not $staleJarFull.StartsWith($modsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove a jar outside the Prism mods folder: $staleJarFull"
+            }
+
+            Remove-Item -LiteralPath $staleJarFull -Force
+            Write-Host "Removed stale Prism jar: $($staleJar.Name)"
+        }
+
         Copy-Item -LiteralPath $JarPath -Destination $targetJar -Force
         Write-Host "Copied: $targetJar"
     }
