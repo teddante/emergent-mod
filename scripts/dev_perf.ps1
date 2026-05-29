@@ -234,11 +234,14 @@ $gradleArgs = @("--no-daemon", "runGameTest")
 
 $stressScenariosEnabled = !$SkipStressScenarios
 $effectiveSlowMs = $SlowMs
+$slowMsAdjustments = @()
 if ($MaxProfilerMs -gt 0 -and $MaxProfilerMs -lt $effectiveSlowMs) {
     $effectiveSlowMs = $MaxProfilerMs
+    $slowMsAdjustments += "bounded by -MaxProfilerMs"
 }
 if (($RequireInspectionDeferrals -or $RequireBudgetDeferrals -or $RequireChunkBudgetDeferrals) -and $effectiveSlowMs -gt 1) {
     $effectiveSlowMs = 1
+    $slowMsAdjustments += "forced to capture required deferral counters"
 }
 
 Write-Step "Running headless GameTests with Emergent profiler slowMs=$effectiveSlowMs stress=$stressScenariosEnabled"
@@ -287,6 +290,9 @@ $summary.Add("Log: $logPath")
 $summary.Add("Profiler slowMs: $effectiveSlowMs")
 if ($effectiveSlowMs -ne $SlowMs) {
     $summary.Add("Requested profiler slowMs: $SlowMs")
+    if ($slowMsAdjustments.Count -gt 0) {
+        $summary.Add("Profiler slowMs adjustment reason: $($slowMsAdjustments -join '; ')")
+    }
 }
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("Stress scenarios: $stressScenariosEnabled")
