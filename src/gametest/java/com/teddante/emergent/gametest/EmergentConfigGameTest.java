@@ -10,12 +10,16 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MoverType;
+import net.minecraft.world.entity.animal.cow.Cow;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -96,9 +100,47 @@ public class EmergentConfigGameTest {
         context.succeed();
     }
 
+    @GameTest(maxTicks = 40)
+    public void materialReactionsToggleGatesEntityTrafficWear(GameTestHelper context) {
+        BlockPos disabledPos = TEST_POS;
+        BlockPos enabledPos = TEST_POS.relative(Direction.EAST, 3);
+        boolean materialReactions = EmergentConfig.get().materialReactions;
+
+        try {
+            context.setBlock(disabledPos, Blocks.GRASS_BLOCK);
+            context.setBlock(disabledPos.above(), Blocks.AIR);
+            EmergentConfig.get().materialReactions = false;
+            walkCowOver(context, disabledPos, 160);
+
+            context.setBlock(enabledPos, Blocks.GRASS_BLOCK);
+            context.setBlock(enabledPos.above(), Blocks.AIR);
+            EmergentConfig.get().materialReactions = true;
+            walkCowOver(context, enabledPos, 160);
+
+            context.assertBlockPresent(Blocks.GRASS_BLOCK, disabledPos);
+            context.assertBlockPresent(Blocks.DIRT_PATH, enabledPos);
+        } finally {
+            EmergentConfig.get().materialReactions = materialReactions;
+        }
+
+        context.succeed();
+    }
+
     private static void invokeFireTick(ServerLevel level, BlockPos pos, BlockState state) throws ReflectiveOperationException {
         Method tick = FireBlock.class.getDeclaredMethod("tick", BlockState.class, ServerLevel.class, BlockPos.class, RandomSource.class);
         tick.setAccessible(true);
         tick.invoke(Blocks.FIRE, state, level, pos, RandomSource.create(7));
+    }
+
+    private static void walkCowOver(GameTestHelper context, BlockPos groundPos, int steps) {
+        Cow cow = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(groundPos.above()));
+        for (int i = 0; i < steps; i++) {
+            double direction = i % 2 == 0 ? 1.0 : -1.0;
+            Vec3 movement = new Vec3(direction * 0.2, -0.05, 0.0);
+            cow.setOnGround(true);
+            cow.setDeltaMovement(movement);
+            cow.move(MoverType.SELF, movement);
+        }
+        cow.discard();
     }
 }
