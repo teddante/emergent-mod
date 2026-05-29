@@ -771,6 +771,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 40)
+    public void thinWaterLayerFallsBeforeSettling(GameTestHelper context) {
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(fluidAmount(context, BELOW_WATER_POS, Fluids.WATER) == 2,
+                    "thin finite water should obey gravity before being treated as a settled puddle");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
     public void equalFiniteWaterLayerStaysQuietAndConservesMass(GameTestHelper context) {
         for (int x = -2; x <= 2; x++) {
             for (int z = -2; z <= 2; z++) {

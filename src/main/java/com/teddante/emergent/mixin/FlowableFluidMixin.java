@@ -848,13 +848,9 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private String emergent$cheapFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
-            if (WaterPhysics.isWater(fluid)
-                    && EmergentConfig.get().hydraulicErosion
-                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
-                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
-            }
-            return "thin";
+        String settledThinReason = emergent$settledThinLayerReason(world, pos, fluid, amount);
+        if (settledThinReason != null) {
+            return settledThinReason;
         }
 
         BlockState state = world.getBlockState(pos);
@@ -867,13 +863,9 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private String emergent$finiteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
-            if (WaterPhysics.isWater(fluid)
-                    && EmergentConfig.get().hydraulicErosion
-                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
-                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
-            }
-            return "thin";
+        String settledThinReason = emergent$settledThinLayerReason(world, pos, fluid, amount);
+        if (settledThinReason != null) {
+            return settledThinReason;
         }
 
         if (amount >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
@@ -922,6 +914,35 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         return blockedByWaterloggableNeighbor ? "waterloggable" : "no_work";
+    }
+
+    @Unique
+    private String emergent$settledThinLayerReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (amount > WaterPhysics.settledThinLayerAmount(fluid)) {
+            return null;
+        }
+
+        BlockPos below = pos.below();
+        BlockState belowState = world.getBlockState(below);
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
+            return null;
+        }
+        if (!WaterPhysics.isSameFluid(fluid, belowFluidState)
+                || belowFluidState.getAmount() < 8) {
+            boolean belowWaterloggable = isWaterloggableTarget(world, below, belowState);
+            if (emergent$canFlowInto(world, below, belowState, belowFluidState, fluid, Direction.DOWN)
+                    && (!belowWaterloggable || amount >= 8)) {
+                return null;
+            }
+        }
+
+        if (WaterPhysics.isWater(fluid)
+                && EmergentConfig.get().hydraulicErosion
+                && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
+            EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
+        }
+        return "thin";
     }
 
     @Unique
