@@ -27,7 +27,9 @@ import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
+import net.minecraft.world.level.block.entity.SculkCatalystBlockEntity;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -1233,6 +1235,35 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "the central vanilla experience query should use the dynamic physical formula");
         context.assertTrue(ravagerReward > zombieReward,
                 "sculk catalysts and XP orbs should see more charge from a larger, tougher entity");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sculkCatalystChargeUsesDynamicExperienceEnergy(GameTestHelper context) {
+        BlockPos catalystPos = TEST_POS;
+        BlockPos mobPos = TEST_POS.relative(Direction.EAST, 2);
+        context.setBlock(catalystPos, Blocks.SCULK_CATALYST);
+        LivingEntity ravager = context.spawn(EntityType.RAVAGER, Vec3.atBottomCenterOf(mobPos.above()));
+        SculkCatalystBlockEntity catalyst = (SculkCatalystBlockEntity) context.getLevel()
+                .getBlockEntity(context.absolutePos(catalystPos));
+
+        context.assertTrue(catalyst != null, "test fixture should create a sculk catalyst block entity");
+        int expectedCharge = ravager.getExperienceReward(context.getLevel(), null);
+        boolean handled = catalyst.getListener().handleGameEvent(
+                context.getLevel(),
+                GameEvent.ENTITY_DIE,
+                GameEvent.Context.of(ravager),
+                Vec3.atBottomCenterOf(context.absolutePos(mobPos.above())));
+        int actualCharge = catalyst.getListener()
+                .getSculkSpreader()
+                .getCursors()
+                .stream()
+                .mapToInt(cursor -> cursor.getCharge())
+                .sum();
+
+        context.assertTrue(handled, "sculk catalyst should handle nearby living-entity death events");
+        context.assertTrue(actualCharge == expectedCharge,
+                "sculk catalyst charge should use the same dynamic experience energy as dropped XP");
         context.succeed();
     }
 

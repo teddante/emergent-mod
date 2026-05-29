@@ -1714,26 +1714,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
         context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
         int movedAmount = 1;
-        double wearPerImpulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, 1.0, 1.25);
-        double wetThreshold = ErosionPhysics.erosionThreshold(
-                context.getLevel(),
-                context.absolutePos(targetPos),
-                context.getBlockState(targetPos))
-                * ErosionPhysics.moistureErosionFactor(context.getBlockState(targetPos), 1.0);
-        int wetErosionRepetitions = Math.max(1, (int) Math.ceil(wetThreshold / wearPerImpulse));
+        int dryRepetitions = erosionRepetitionsUntilAir(context, waterPos, Direction.EAST, targetPos, movedAmount, 128);
 
-        applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
-        context.assertBlockPresent(Blocks.SAND, targetPos);
-        EnvironmentalExposure.clearHydraulicWear(context.getLevel(), context.absolutePos(targetPos));
-
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
+        context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
+        EnvironmentalExposure.clear(context.getLevel(), context.absolutePos(targetPos));
         EnvironmentalExposure.addMoisture(
                 context.getLevel(),
                 context.absolutePos(targetPos),
                 context.getBlockState(targetPos),
                 1.0);
-        applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
+        int wetRepetitions = erosionRepetitionsUntilAir(context, waterPos, Direction.EAST, targetPos, movedAmount, 128);
 
-        context.assertBlockPresent(Blocks.AIR, targetPos);
+        context.assertTrue(dryRepetitions <= 128, "dry sand should eventually wash away under repeated flow");
+        context.assertTrue(wetRepetitions < dryRepetitions,
+                "stored moisture should make sand wash away in fewer identical water-flow impulses");
         context.succeed();
     }
 
@@ -1919,6 +1914,22 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                     direction,
                     movedAmount);
         }
+    }
+
+    private static int erosionRepetitionsUntilAir(
+            GameTestHelper context,
+            BlockPos waterPos,
+            Direction direction,
+            BlockPos targetPos,
+            int movedAmount,
+            int maxRepetitions) {
+        for (int repetitions = 1; repetitions <= maxRepetitions; repetitions++) {
+            applyFlowErosion(context, waterPos, direction, movedAmount, 1);
+            if (context.getBlockState(targetPos).isAir()) {
+                return repetitions;
+            }
+        }
+        return maxRepetitions + 1;
     }
 
     private static void containCell(GameTestHelper context, BlockPos pos) {
