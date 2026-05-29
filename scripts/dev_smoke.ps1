@@ -50,6 +50,17 @@ function Write-Step {
     Write-Host "==> $Message"
 }
 
+function Invoke-GitValue {
+    param([string[]]$Arguments)
+
+    $output = & git -C $ProjectRoot @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($output)) {
+        return "unknown"
+    }
+
+    return ($output | Select-Object -First 1).Trim()
+}
+
 function Write-GradleFailureSummary {
     param(
         [string[]]$BuildOutput,
@@ -459,6 +470,19 @@ try {
 
         Copy-Item -LiteralPath $JarPath -Destination $targetJar -Force
         Write-Host "Copied: $targetJar"
+
+        $copyInfoPath = Join-Path $modsDir "$ArchivesBaseName-copy-info.txt"
+        $jarHash = (Get-FileHash -LiteralPath $targetJar -Algorithm SHA256).Hash.ToLowerInvariant()
+        $copyInfo = @(
+            "jar=$([System.IO.Path]::GetFileName($targetJar))",
+            "sha256=$jarHash",
+            "source=$JarPath",
+            "branch=$(Invoke-GitValue @('rev-parse', '--abbrev-ref', 'HEAD'))",
+            "commit=$(Invoke-GitValue @('rev-parse', '--short=12', 'HEAD'))",
+            "copiedUtc=$((Get-Date).ToUniversalTime().ToString('o'))"
+        )
+        Set-Content -LiteralPath $copyInfoPath -Value $copyInfo -Encoding utf8
+        Write-Host "Copy info: $copyInfoPath"
     }
 
     Write-Host "Smoke checks passed."
