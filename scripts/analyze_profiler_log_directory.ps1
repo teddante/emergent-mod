@@ -39,6 +39,21 @@ function Get-LogLines([string]$ResolvedPath) {
     }
 }
 
+function Get-PrismCopyInfo([string]$Directory) {
+    $resolved = (Resolve-Path -LiteralPath $Directory).Path
+    if ((Split-Path -Leaf $resolved) -ne "logs") {
+        return @()
+    }
+
+    $minecraftDir = Split-Path -Parent $resolved
+    $copyInfoPath = Join-Path $minecraftDir "mods\emergent-copy-info.txt"
+    if (-not (Test-Path -LiteralPath $copyInfoPath)) {
+        return @()
+    }
+
+    return @(Get-Content -LiteralPath $copyInfoPath | Select-Object -First 8)
+}
+
 function Get-ProfilerValue($Line) {
     if ($Line -match "Emergent profiler: ([0-9.]+) ms") {
         return [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
@@ -300,6 +315,10 @@ $files = @(Get-ChildItem -LiteralPath $resolvedDirectory -File |
 $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log directory summary")
 $summary.Add("Directory: $resolvedDirectory")
+$copyInfo = @(Get-PrismCopyInfo $resolvedDirectory)
+if ($copyInfo.Count -gt 0) {
+    $summary.Add("Latest Prism copy: $($copyInfo -join ' ')")
+}
 $summary.Add("Files scanned: $($files.Count)")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("")
