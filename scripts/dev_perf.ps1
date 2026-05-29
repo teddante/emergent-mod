@@ -145,6 +145,10 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
     $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
     $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheNoCacheMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_no_cache_misses"
+    $quietCacheEntryMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_entry_misses"
+    $quietCacheFluidMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_fluid_misses"
+    $quietCacheAmountMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_amount_misses"
     $quietCacheSignatureMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_signature_misses"
     $quietCacheInvalidations = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidations"
     $quietCacheInvalidatedEntries = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidated_entries"
@@ -164,8 +168,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
     $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
                 $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
-    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} quietCacheSignatureMisses={5} quietCacheInvalidations={6} quietCacheInvalidatedEntries={7} quietCacheEvictions={8} thermalQuietSkips={9} thermalCacheSkips={10} horizontalMoves={11} downwardMoves={12} thermalReactions={13}" -f `
-                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheSignatureMisses, $quietCacheInvalidations, $quietCacheInvalidatedEntries, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} noCacheMisses={5} entryMisses={6} fluidMisses={7} amountMisses={8} signatureMisses={9} quietCacheInvalidations={10} quietCacheInvalidatedEntries={11} quietCacheEvictions={12} thermalQuietSkips={13} thermalCacheSkips={14} horizontalMoves={15} downwardMoves={16} thermalReactions={17}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheNoCacheMisses, $quietCacheEntryMisses, $quietCacheFluidMisses, $quietCacheAmountMisses, $quietCacheSignatureMisses, $quietCacheInvalidations, $quietCacheInvalidatedEntries, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
         $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
     }

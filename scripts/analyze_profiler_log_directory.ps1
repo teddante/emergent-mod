@@ -39,6 +39,21 @@ function Get-LogLines([string]$ResolvedPath) {
     }
 }
 
+function Get-PrismCopyInfo([string]$Directory) {
+    $resolved = (Resolve-Path -LiteralPath $Directory).Path
+    if ((Split-Path -Leaf $resolved) -ne "logs") {
+        return @()
+    }
+
+    $minecraftDir = Split-Path -Parent $resolved
+    $copyInfoPath = Join-Path $minecraftDir "mods\emergent-copy-info.txt"
+    if (-not (Test-Path -LiteralPath $copyInfoPath)) {
+        return @()
+    }
+
+    return @(Get-Content -LiteralPath $copyInfoPath | Select-Object -First 8)
+}
+
 function Get-ProfilerValue($Line) {
     if ($Line -match "Emergent profiler: ([0-9.]+) ms") {
         return [double]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture)
@@ -218,7 +233,13 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
             $counterTotals.ContainsKey("finite_fluid_inspection_deferrals") -or
             $counterTotals.ContainsKey("finite_fluid_inspection_chunk_claims") -or
             $counterTotals.ContainsKey("finite_fluid_inspection_chunk_deferrals")
-    $hasQuietCacheCounters = $counterTotals.ContainsKey("finite_fluid_quiet_cache_hits")
+    $hasQuietCacheCounters = $counterTotals.ContainsKey("finite_fluid_quiet_cache_hits") -or
+            $counterTotals.ContainsKey("finite_fluid_quiet_cache_entry_misses") -or
+            $counterTotals.ContainsKey("finite_fluid_quiet_cache_no_cache_misses") -or
+            $counterTotals.ContainsKey("finite_fluid_quiet_cache_fluid_misses") -or
+            $counterTotals.ContainsKey("finite_fluid_quiet_cache_amount_misses") -or
+            $counterTotals.ContainsKey("finite_fluid_quiet_cache_signature_misses") -or
+            $counterTotals.ContainsKey("finite_fluid_quiet_cache_invalidations")
     $finiteTicks = Get-CounterTotal $counterTotals "finite_fluid_ticks"
     $lavaTicks = Get-CounterTotal $counterTotals "finite_fluid_lava_ticks"
     $lavaHeat = Get-CounterTotal $counterTotals "finite_fluid_lava_heat"
@@ -227,6 +248,10 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     $inspectionClaims = Get-CounterTotal $counterTotals "finite_fluid_inspection_claims"
     $quietCacheHits = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_hits"
     $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheNoCacheMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_no_cache_misses"
+    $quietCacheEntryMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_entry_misses"
+    $quietCacheFluidMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_fluid_misses"
+    $quietCacheAmountMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_amount_misses"
     $quietCacheSignatureMisses = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_signature_misses"
     $quietCacheInvalidations = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_invalidations"
     $quietCacheInvalidatedEntries = Get-CounterTotal $counterTotals "finite_fluid_quiet_cache_invalidated_entries"
@@ -259,6 +284,10 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
         ChunkDeferrals = $chunkDeferrals
         QuietCacheHits = $quietCacheHits
         EstimatedQuietCacheMisses = $quietCacheMisses
+        QuietCacheNoCacheMisses = $quietCacheNoCacheMisses
+        QuietCacheEntryMisses = $quietCacheEntryMisses
+        QuietCacheFluidMisses = $quietCacheFluidMisses
+        QuietCacheAmountMisses = $quietCacheAmountMisses
         QuietCacheSignatureMisses = $quietCacheSignatureMisses
         QuietCacheInvalidations = $quietCacheInvalidations
         QuietCacheInvalidatedEntries = $quietCacheInvalidatedEntries
@@ -286,6 +315,10 @@ $files = @(Get-ChildItem -LiteralPath $resolvedDirectory -File |
 $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log directory summary")
 $summary.Add("Directory: $resolvedDirectory")
+$copyInfo = @(Get-PrismCopyInfo $resolvedDirectory)
+if ($copyInfo.Count -gt 0) {
+    $summary.Add("Latest Prism copy: $($copyInfo -join ' ')")
+}
 $summary.Add("Files scanned: $($files.Count)")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("")
@@ -308,7 +341,7 @@ if ($files.Count -eq 0) {
         } else {
             ""
         }
-        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} signatureMisses={13} invalidations={14}/{15} evictions={16}{17}" -f `
+        $summary.Add(("{0} [{1}] startup=({2}) profiler={3} maxMs={4:N3} lag={5} maxLagMs={6} behind={7} finiteTicks={8} budgetDeferrals={9} chunkDeferrals={10} quietCache={11}/{12} missBreakdown(noCache/entry/fluid/amount/signature)={13}/{14}/{15}/{16}/{17} invalidations={18}/{19} evictions={20}{21}" -f `
                     $item.Name,
                     $item.Format,
                     $startupText,
@@ -322,6 +355,10 @@ if ($files.Count -eq 0) {
                     $item.ChunkDeferrals,
                     $item.QuietCacheHits,
                     $item.EstimatedQuietCacheMisses,
+                    $item.QuietCacheNoCacheMisses,
+                    $item.QuietCacheEntryMisses,
+                    $item.QuietCacheFluidMisses,
+                    $item.QuietCacheAmountMisses,
                     $item.QuietCacheSignatureMisses,
                     $item.QuietCacheInvalidations,
                     $item.QuietCacheInvalidatedEntries,
