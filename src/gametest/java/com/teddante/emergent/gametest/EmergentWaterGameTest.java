@@ -826,6 +826,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 80)
+    public void thinLavaLayerFallsBeforeSettling(GameTestHelper context) {
+        context.setBlock(WATER_POS, Fluids.LAVA.getFlowing(3, false).createLegacyBlock());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.LAVA, Fluids.LAVA.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(40, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(fluidAmount(context, BELOW_WATER_POS, Fluids.LAVA) == 3,
+                    "thin finite lava should obey gravity before being treated as a settled layer");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 40)
     public void sourceWaterUsesVanillaWaterloggingHooks(GameTestHelper context) {
         BlockPos campfirePos = BELOW_WATER_POS;
