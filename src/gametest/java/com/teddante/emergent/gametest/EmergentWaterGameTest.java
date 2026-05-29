@@ -271,6 +271,56 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void ambientFluidSampleOnlyWakesQuietFluidWhenMemoryWasCleared(GameTestHelper context) {
+        BlockPos memorylessWaterPos = WATER_POS;
+        BlockPos rememberedWaterPos = WATER_POS.relative(Direction.EAST, 2);
+        context.setBlock(memorylessWaterPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        context.setBlock(rememberedWaterPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(memorylessWaterPos),
+                Fluids.WATER,
+                7,
+                "thin");
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(memorylessWaterPos),
+                context.getBlockState(memorylessWaterPos),
+                0.8f,
+                false,
+                0);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(memorylessWaterPos), Fluids.WATER, 7) != null,
+                "ambient samples on fluid with no stored memory should not wake a quiet fluid cache");
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                context.getBlockState(rememberedWaterPos),
+                0.2);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                Fluids.WATER,
+                7,
+                "thin");
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                context.getBlockState(rememberedWaterPos),
+                0.8f,
+                false,
+                0);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(rememberedWaterPos), Fluids.WATER, 7) == null,
+                "ambient samples that clear stored fluid memory should still wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentEvaporationRemovesAnyFiniteWaterAmount(GameTestHelper context) {
         context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 8) == 0,
                 "a water-evaporating environment should remove source water like vanilla Nether bucket placement");
