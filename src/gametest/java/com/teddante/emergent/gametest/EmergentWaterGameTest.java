@@ -271,6 +271,56 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void ambientFluidSampleOnlyWakesQuietFluidWhenMemoryWasCleared(GameTestHelper context) {
+        BlockPos memorylessWaterPos = WATER_POS;
+        BlockPos rememberedWaterPos = WATER_POS.relative(Direction.EAST, 2);
+        context.setBlock(memorylessWaterPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        context.setBlock(rememberedWaterPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(memorylessWaterPos),
+                Fluids.WATER,
+                7,
+                "thin");
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(memorylessWaterPos),
+                context.getBlockState(memorylessWaterPos),
+                0.8f,
+                false,
+                0);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(memorylessWaterPos), Fluids.WATER, 7) != null,
+                "ambient samples on fluid with no stored memory should not wake a quiet fluid cache");
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                context.getBlockState(rememberedWaterPos),
+                0.2);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                Fluids.WATER,
+                7,
+                "thin");
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                context.getBlockState(rememberedWaterPos),
+                0.8f,
+                false,
+                0);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(rememberedWaterPos), Fluids.WATER, 7) == null,
+                "ambient samples that clear stored fluid memory should still wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentEvaporationRemovesAnyFiniteWaterAmount(GameTestHelper context) {
         context.assertTrue(ThermalPhysics.evaporateWaterInEvaporatingEnvironment(true, 8) == 0,
                 "a water-evaporating environment should remove source water like vanilla Nether bucket placement");
@@ -721,6 +771,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 40)
+    public void thinWaterLayerFallsBeforeSettling(GameTestHelper context) {
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(fluidAmount(context, BELOW_WATER_POS, Fluids.WATER) == 2,
+                    "thin finite water should obey gravity before being treated as a settled puddle");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
     public void equalFiniteWaterLayerStaysQuietAndConservesMass(GameTestHelper context) {
         for (int x = -2; x <= 2; x++) {
             for (int z = -2; z <= 2; z++) {
@@ -757,6 +822,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
             context.assertTrue(totalMass == 8, "flat finite-lava spread should conserve one source volume: " + totalMass);
             context.assertTrue(countFluidCells(context, WATER_POS, 1, Fluids.LAVA) == 5,
                     "one lava source should settle into the center and four horizontal neighbors");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void thinLavaLayerFallsBeforeSettling(GameTestHelper context) {
+        context.setBlock(WATER_POS, Fluids.LAVA.getFlowing(3, false).createLegacyBlock());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.LAVA, Fluids.LAVA.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(40, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(fluidAmount(context, BELOW_WATER_POS, Fluids.LAVA) == 3,
+                    "thin finite lava should obey gravity before being treated as a settled layer");
             context.succeed();
         });
     }

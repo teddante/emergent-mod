@@ -61,6 +61,15 @@ function Invoke-GitValue {
     return ($output | Select-Object -First 1).Trim()
 }
 
+function Test-GitDirty {
+    $output = & git -C $ProjectRoot status --porcelain 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return "unknown"
+    }
+
+    return [string]([bool]$output)
+}
+
 function Write-GradleFailureSummary {
     param(
         [string[]]$BuildOutput,
@@ -477,8 +486,11 @@ try {
             "jar=$([System.IO.Path]::GetFileName($targetJar))",
             "sha256=$jarHash",
             "source=$JarPath",
+            "sourceLastWriteUtc=$((Get-Item -LiteralPath $JarPath).LastWriteTimeUtc.ToString('o'))",
             "branch=$(Invoke-GitValue @('rev-parse', '--abbrev-ref', 'HEAD'))",
             "commit=$(Invoke-GitValue @('rev-parse', '--short=12', 'HEAD'))",
+            "dirty=$(Test-GitDirty)",
+            "skipBuild=$([bool]$SkipBuild)",
             "copiedUtc=$((Get-Date).ToUniversalTime().ToString('o'))"
         )
         Set-Content -LiteralPath $copyInfoPath -Value $copyInfo -Encoding utf8
