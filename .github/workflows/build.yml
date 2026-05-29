@@ -11,6 +11,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
@@ -29,6 +30,7 @@ jobs:
 
       - name: Run smoke checks
         shell: pwsh
+        timeout-minutes: 15
         run: ./scripts/dev_smoke.ps1
 
       - name: Upload Artifact
