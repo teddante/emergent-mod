@@ -53,6 +53,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 - For stacked PRs, merge from the lowest base upward, then retarget or update dependent PRs onto the newly merged base. Keep dependent branches until their PRs are merged or intentionally closed.
 - Commit coherent working chunks after verification when practical. Use clear commit messages. Do not tag every commit.
 - Keep draft PRs updated with summary, gameplay/config impact, compatibility impact, and verification. Mark ready only after automated checks pass and required manual validation is done.
+- Keep PR bodies grouped and concise as they grow; summarize intent and current evidence rather than appending every historical micro-change when commits, checks, and logs already preserve the details.
 - When editing long PR bodies from shell scripts, prefer a markdown body file and verify the result does not contain literal escape sequences such as `` `n`` or `` `r``.
 - Do not block every inner-loop push on `gh pr checks --watch`. Prefer local smoke/perf gates first, then check CI synchronously when build tooling changed, a failure is suspected, the PR is being readied, or the user needs a definitive remote status now.
 - Use issues for reproducible bugs and concrete feature ideas with versions, logs, mod lists, and reproduction steps when relevant.

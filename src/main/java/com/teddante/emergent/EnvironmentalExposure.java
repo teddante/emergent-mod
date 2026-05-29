@@ -405,7 +405,7 @@ public final class EnvironmentalExposure {
             double airExposureFactor,
             int samples) {
         if (state.isAir() || !state.getFluidState().isEmpty()) {
-            clear(world, pos);
+            clearIfPresent(world, pos);
             return;
         }
 
@@ -685,6 +685,13 @@ public final class EnvironmentalExposure {
             levelExposure.remove(pos.asLong());
         }
         FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_clear");
+    }
+
+    private static void clearIfPresent(ServerLevel world, BlockPos pos) {
+        Map<Long, ExposureEntry> levelExposure = EXPOSURES.get(world);
+        if (levelExposure != null && levelExposure.remove(pos.asLong()) != null) {
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_clear");
+        }
     }
 
     private static double hydraulicWear(ServerLevel world, BlockPos pos, BlockState state) {
