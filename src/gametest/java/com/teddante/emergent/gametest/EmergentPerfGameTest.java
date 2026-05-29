@@ -522,6 +522,104 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 240, padding = 22)
+    public void stressTerracedFiniteWaterCascade(GameTestHelper context) {
+        if (!ENABLED) {
+            context.succeed();
+            return;
+        }
+
+        BlockPos origin = new BlockPos(2, 10, 2);
+        int length = 18;
+        int width = 5;
+        int minY = terracedCascadeFloorY(length - 1);
+        final int[] expectedWaterAmount = {0};
+
+        for (int x = -1; x <= length; x++) {
+            for (int z = -1; z <= width; z++) {
+                for (int y = minY - 2; y <= 2; y++) {
+                    context.setBlock(origin.offset(x, y, z), Blocks.AIR);
+                }
+            }
+        }
+
+        for (int x = -1; x <= length; x++) {
+            for (int z = -1; z <= width; z++) {
+                for (int y = minY - 2; y <= 1; y++) {
+                    if (x == -1 || x == length || z == -1 || z == width) {
+                        context.setBlock(origin.offset(x, y, z), Blocks.BEDROCK);
+                    }
+                }
+            }
+        }
+
+        for (int x = 0; x < length; x++) {
+            int floorY = terracedCascadeFloorY(x);
+            for (int z = 0; z < width; z++) {
+                context.setBlock(origin.offset(x, floorY - 1, z), Blocks.BEDROCK);
+                context.setBlock(origin.offset(x, floorY, z), Blocks.AIR);
+                context.setBlock(origin.offset(x, floorY + 1, z), Blocks.AIR);
+            }
+        }
+
+        for (int x = 0; x < 5; x++) {
+            int floorY = terracedCascadeFloorY(x);
+            for (int z = 0; z < width; z++) {
+                BlockPos waterPos = origin.offset(x, floorY, z);
+                int amount = 8;
+                context.setBlock(waterPos, Fluids.WATER.getFlowing(amount, false).createLegacyBlock());
+                expectedWaterAmount[0] += amount;
+                context.getLevel().scheduleTick(context.absolutePos(waterPos), Fluids.WATER, 1);
+            }
+        }
+
+        for (int tick = 8; tick <= 170; tick += 8) {
+            context.runAtTickTime(tick, () -> {
+                for (int x = 0; x < length; x++) {
+                    for (int y = minY - 1; y <= 1; y++) {
+                        for (int z = 0; z < width; z++) {
+                            BlockPos pos = origin.offset(x, y, z);
+                            if (context.getBlockState(pos).getFluidState().is(Fluids.WATER)) {
+                                context.getLevel().scheduleTick(context.absolutePos(pos), Fluids.WATER, 1);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        context.runAtTickTime(210, () -> {
+            int actualWaterAmount = 0;
+            int lowerTerraceWater = 0;
+            int furthestWetX = -1;
+            for (int x = 0; x < length; x++) {
+                for (int y = minY - 1; y <= 1; y++) {
+                    for (int z = 0; z < width; z++) {
+                        int amount = context.getBlockState(origin.offset(x, y, z)).getFluidState().getAmount();
+                        actualWaterAmount += amount;
+                        if (amount > 0) {
+                            furthestWetX = Math.max(furthestWetX, x);
+                            if (y <= minY + 1) {
+                                lowerTerraceWater += amount;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (actualWaterAmount != expectedWaterAmount[0]) {
+                context.fail("terraced finite water cascade did not conserve volume; expected="
+                        + expectedWaterAmount[0] + " actual=" + actualWaterAmount);
+                return;
+            }
+            context.assertTrue(
+                    lowerTerraceWater > 0 || furthestWetX >= length / 2,
+                    "finite water should traverse vertical terrace drops; furthestWetX=" + furthestWetX
+                            + " lowerTerraceWater=" + lowerTerraceWater);
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 80, padding = 8)
     public void stressSurfaceWeatherQueue(GameTestHelper context) {
         if (!ENABLED) {
@@ -711,6 +809,10 @@ public class EmergentPerfGameTest implements CustomTestMethodInvoker {
 
     private static int flowingChannelFloorY(int x) {
         return -(x / 4);
+    }
+
+    private static int terracedCascadeFloorY(int x) {
+        return -(x / 3);
     }
 
     private static BlockPos sameChunkAlignedOrigin(GameTestHelper context, BlockPos seed, int size) {
