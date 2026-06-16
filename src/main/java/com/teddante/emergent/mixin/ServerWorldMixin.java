@@ -1,15 +1,22 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.MaterialReactionTags;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.ThermalPhysics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.material.Fluids;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,6 +25,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerLevel.class)
 public abstract class ServerWorldMixin {
+    @Unique
+    private static final double EMERGENT_RAIN_DEEPEN_CHANCE = 0.04;
+    @Unique
+    private static final double EMERGENT_RAIN_PUDDLE_CHANCE = 0.0125;
+    @Unique
+    private static final int EMERGENT_RAIN_PUDDLE_AMOUNT = 1;
+    @Unique
+    private static final double EMERGENT_ABSORBENT_SURFACE_FACTOR = 0.25;
 
     /**
      * @author Antigravity
@@ -28,38 +43,158 @@ public abstract class ServerWorldMixin {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
 
-        if (EmergentConfig.get().rainAccumulation && serverWorld.isRaining()) {
-            BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
-            BlockPos surfacePos = topPos.below();
-            Biome biome = serverWorld.getBiome(topPos).value();
+        if (!EmergentConfig.get().rainAccumulation) {
+            return;
+        }
 
-            // Only accumulate in biomes where it actually rains (not freezes)
-            if (biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel()) == Biome.Precipitation.RAIN) {
-                BlockState surfaceState = serverWorld.getBlockState(surfacePos);
-                BlockState state = serverWorld.getBlockState(topPos);
+        BlockPos topPos = serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos);
+        BlockPos surfacePos = topPos.below();
+        Holder<Biome> biomeHolder = serverWorld.getBiome(topPos);
+        Biome biome = biomeHolder.value();
+        double climateMoistureFactor = emergent$climateMoistureFactor(biomeHolder);
+        BlockState surfaceState = serverWorld.getBlockState(surfacePos);
+        BlockState state = serverWorld.getBlockState(topPos);
+        boolean skyExposed = serverWorld.canSeeSky(topPos);
 
-                // If the exposed surface is already water, deepen that water instead of
-                // stacking a new water block above it.
-                if (surfaceState.is(Blocks.WATER)) {
-                    if (serverWorld.getRandom().nextDouble() < 0.5) {
-                        int currentLevel = surfaceState.getValue(LiquidBlock.LEVEL);
-                        if (currentLevel > 0) { // If not already a source block
-                            serverWorld.setBlock(surfacePos, surfaceState.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
-                        }
-                    }
-                } else if (state.isAir()) {
-                    if (serverWorld.getRandom().nextDouble() < 0.1) {
-                        // Start with level 1 water
-                        serverWorld.setBlock(topPos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
-                    }
-                }
+        if (!serverWorld.isRaining()) {
+            EnvironmentalExposure.applyAmbientSurfaceExchange(
+                    serverWorld,
+                    surfacePos,
+                    surfaceState,
+                    biome.getBaseTemperature(),
+                    skyExposed,
+                    ThermalPhysics.neighboringHeat(serverWorld, surfacePos),
+                    climateMoistureFactor,
+                    serverWorld.isBrightOutside() ? 1.0 : 0.0,
+                    emergent$surfaceAirExposureFactor(serverWorld, surfacePos, skyExposed));
+            ThermalPhysics.tryFreezeMoistSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
+            ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
+            if (EmergentConfig.get().materialReactions) {
+                emergent$tryClimateStressExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState, biome.getBaseTemperature(), skyExposed, climateMoistureFactor);
+            }
+            return;
+        }
 
-                if (EmergentConfig.get().materialReactions) {
-                    MaterialReactions.tryRainOxidize(serverWorld, surfacePos, surfaceState, serverWorld.getRandom());
-                    emergent$tryRainGrowExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState);
-                }
+        Biome.Precipitation precipitation = biome.getPrecipitationAt(surfacePos, serverWorld.getSeaLevel());
+        if (precipitation == Biome.Precipitation.SNOW) {
+            EnvironmentalExposure.addSnowfall(serverWorld, surfacePos, surfaceState);
+            ThermalPhysics.tryFreezeMoistSurface(serverWorld, surfacePos, serverWorld.getBlockState(surfacePos));
+            return;
+        }
+        if (precipitation != Biome.Precipitation.RAIN) {
+            return;
+        }
+
+        EnvironmentalExposure.addRainfall(serverWorld, surfacePos, surfaceState, climateMoistureFactor);
+        surfaceState = serverWorld.getBlockState(surfacePos);
+        ThermalPhysics.tryMeltFrozenSurface(serverWorld, surfacePos, surfaceState);
+        surfaceState = serverWorld.getBlockState(surfacePos);
+
+        if (surfaceState.is(Blocks.WATER)) {
+            emergent$tryDeepenRainWater(serverWorld, surfacePos, surfaceState);
+        } else if (state.isAir() && emergent$canRainCollectOn(serverWorld, surfacePos, surfaceState)) {
+            emergent$tryCreateRainPuddle(serverWorld, topPos, surfacePos, surfaceState);
+        }
+
+        if (EmergentConfig.get().materialReactions) {
+            MaterialReactions.tryRainOxidize(serverWorld, surfacePos, surfaceState, serverWorld.getRandom());
+            emergent$tryRainGrowExposedBlock(serverWorld, topPos, surfacePos, state, surfaceState);
+        }
+    }
+
+    @Unique
+    private void emergent$tryDeepenRainWater(ServerLevel world, BlockPos pos, BlockState state) {
+        if (world.getRandom().nextDouble() >= EMERGENT_RAIN_DEEPEN_CHANCE) {
+            return;
+        }
+
+        int currentLevel = state.getValue(LiquidBlock.LEVEL);
+        if (currentLevel <= 0) {
+            return;
+        }
+
+        world.setBlock(pos, state.setValue(LiquidBlock.LEVEL, currentLevel - 1), 3);
+        EnvironmentalExposure.applyStandingWaterContact(world, pos, world.getFluidState(pos).getAmount());
+        world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
+    }
+
+    @Unique
+    private void emergent$tryCreateRainPuddle(ServerLevel world, BlockPos pos, BlockPos surfacePos, BlockState surfaceState) {
+        double readiness = EnvironmentalExposure.rainPuddleReadiness(
+                surfaceState,
+                EnvironmentalExposure.moisture(world, surfacePos, surfaceState));
+        if (readiness <= 0.0) {
+            return;
+        }
+
+        double chance = EMERGENT_RAIN_PUDDLE_CHANCE * emergent$surfaceAbsorptionFactor(surfaceState) * Math.max(0.35, readiness);
+        if (world.getRandom().nextDouble() >= chance) {
+            return;
+        }
+        if (!EnvironmentalExposure.tryReleaseRainPuddleMoisture(world, surfacePos, surfaceState, EMERGENT_RAIN_PUDDLE_AMOUNT)) {
+            return;
+        }
+
+        world.setBlock(pos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 7), 3);
+        EnvironmentalExposure.applyStandingWaterContact(world, pos, world.getFluidState(pos).getAmount());
+        world.scheduleTick(pos, Fluids.WATER, Fluids.WATER.getTickDelay(world));
+    }
+
+    @Unique
+    private boolean emergent$canRainCollectOn(ServerLevel world, BlockPos surfacePos, BlockState surfaceState) {
+        if (surfaceState.isAir() || !surfaceState.getFluidState().isEmpty()) {
+            return false;
+        }
+        if (surfaceState.is(BlockTags.LEAVES) || surfaceState.is(BlockTags.LOGS)) {
+            return false;
+        }
+
+        return surfaceState.isFaceSturdy(world, surfacePos, Direction.UP);
+    }
+
+    @Unique
+    private double emergent$surfaceAbsorptionFactor(BlockState surfaceState) {
+        if (surfaceState.is(BlockTags.DIRT)
+                || surfaceState.is(BlockTags.GRASS_BLOCKS)
+                || surfaceState.is(BlockTags.MUD)
+                || surfaceState.is(BlockTags.SAND)) {
+            return EMERGENT_ABSORBENT_SURFACE_FACTOR;
+        }
+
+        return 1.0;
+    }
+
+    @Unique
+    private double emergent$surfaceAirExposureFactor(ServerLevel world, BlockPos surfacePos, boolean skyExposed) {
+        int openHorizontalFaces = 0;
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockState adjacentState = world.getBlockState(surfacePos.relative(direction));
+            if (adjacentState.isAir() || !adjacentState.getFluidState().isEmpty()) {
+                openHorizontalFaces++;
             }
         }
+
+        return EnvironmentalExposure.airExposureFactor(skyExposed, openHorizontalFaces);
+    }
+
+    @Unique
+    private double emergent$climateMoistureFactor(Holder<Biome> biome) {
+        double factor = 1.0;
+        if (biome.is(BiomeTags.IS_JUNGLE) || biome.is(BiomeTags.IS_RIVER) || biome.is(BiomeTags.IS_OCEAN)) {
+            factor *= 1.35;
+        } else if (biome.is(BiomeTags.IS_FOREST) || biome.is(BiomeTags.IS_TAIGA)) {
+            factor *= 1.15;
+        }
+
+        if (biome.is(BiomeTags.IS_BADLANDS)
+                || biome.is(BiomeTags.IS_SAVANNA)
+                || biome.is(BiomeTags.HAS_DESERT_PYRAMID)
+                || biome.is(BiomeTags.HAS_VILLAGE_DESERT)
+                || biome.is(BiomeTags.IS_NETHER)) {
+            factor *= 0.55;
+        }
+
+        return EnvironmentalExposure.climateMoistureFactor(factor);
     }
 
     @Unique
@@ -84,5 +219,33 @@ public abstract class ServerWorldMixin {
 
         MaterialReactions.tryRainGrow(world, pos, state, world.getRandom());
         return true;
+    }
+
+    @Unique
+    private void emergent$tryClimateStressExposedBlock(
+            ServerLevel world,
+            BlockPos topPos,
+            BlockPos surfacePos,
+            BlockState topState,
+            BlockState surfaceState,
+            float biomeTemperature,
+            boolean skyExposed,
+            double climateMoistureFactor) {
+        if (emergent$tryClimateStressAt(world, topPos, topState, biomeTemperature, skyExposed, climateMoistureFactor)) {
+            return;
+        }
+
+        emergent$tryClimateStressAt(world, surfacePos, surfaceState, biomeTemperature, skyExposed, climateMoistureFactor);
+    }
+
+    @Unique
+    private boolean emergent$tryClimateStressAt(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeTemperature,
+            boolean skyExposed,
+            double climateMoistureFactor) {
+        return MaterialReactions.tryClimateStress(world, pos, state, biomeTemperature, skyExposed, climateMoistureFactor);
     }
 }

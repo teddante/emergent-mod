@@ -1,26 +1,56 @@
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$GradleDir = Join-Path $ProjectRoot ".gradle"
-$LoomCache = Join-Path (Join-Path $GradleDir "loom-cache") "minecraftMaven"
+$LoomCache = Join-Path $ProjectRoot ".gradle\loom-cache\minecraftMaven"
 $DestDir = Join-Path $ProjectRoot "mc-src"
+$GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
+
+function Read-GradleProperty {
+    param([string]$Name)
+
+    $line = Get-Content -LiteralPath $GradlePropertiesPath |
+        Where-Object { $_ -match "^\s*$([regex]::Escape($Name))\s*=" } |
+        Select-Object -First 1
+
+    if ($null -eq $line) {
+        throw "gradle.properties must define $Name."
+    }
+
+    return ($line -split "=", 2)[1].Trim()
+}
+
+$MinecraftVersion = Read-GradleProperty "minecraft_version"
 
 Write-Host "Searching for source JAR in: $LoomCache"
 
-# Find the sources JAR
-$SourceJar = Get-ChildItem -Path $LoomCache -Recurse -Filter "*sources.jar" | Select-Object -First 1
+# Find the current unobfuscated Mojang-name source JAR. Minecraft 26.1+ no
+# longer uses Yarn as the normal source namespace for Fabric development.
+$SourceJar = Get-ChildItem -Path $LoomCache -Recurse -Filter "*sources.jar" |
+    Where-Object {
+        $_.FullName -like "*\$MinecraftVersion\*" -and
+        $_.FullName -notmatch "yarn"
+    } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
 
 if ($null -eq $SourceJar) {
-    Write-Error "Could not find Minecraft sources JAR. Make sure to run './gradlew genSources' first."
+    Write-Error "Could not find official Minecraft $MinecraftVersion sources JAR. Run './gradlew genSources' first."
 }
 
 Write-Host "Found sources JAR: $($SourceJar.FullName)"
 
-# Create destination directory
-if (-not (Test-Path $DestDir)) {
-    New-Item -ItemType Directory -Path $DestDir | Out-Null
-    Write-Host "Created directory: $DestDir"
+if (Test-Path -LiteralPath $DestDir) {
+    $resolvedDest = Resolve-Path -LiteralPath $DestDir
+    if (-not $resolvedDest.Path.StartsWith($ProjectRoot.Path, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to clear source cache outside project root: $resolvedDest"
+    }
+
+    Remove-Item -LiteralPath $DestDir -Recurse -Force
 }
+
+New-Item -ItemType Directory -Path $DestDir | Out-Null
+Write-Host "Created clean directory: $DestDir"
 
 # Extract
 Write-Host "Extracting sources to: $DestDir"
@@ -41,6 +71,11 @@ if (Get-Command "jar" -ErrorAction SilentlyContinue) {
 } else {
     Write-Warning "'jar' command not found on PATH. Falling back to Expand-Archive (this is slower)."
     Expand-Archive -Path $SourceJar.FullName -DestinationPath $DestDir -Force
+}
+
+$ExpectedSource = Join-Path $DestDir "net\minecraft\world\level\material\FlowingFluid.java"
+if (-not (Test-Path -LiteralPath $ExpectedSource)) {
+    throw "Extracted sources do not look like Minecraft 26.1+ official names. Missing: $ExpectedSource"
 }
 
 Write-Host "Extraction complete."

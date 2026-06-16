@@ -5,6 +5,15 @@ on:
     branches:
       - main
       - "release/**"
+      - "fix/**"
+      - "feature/**"
+      - "docs/**"
+      - "perf/**"
+      - "perf-*"
+      - "test/**"
+      - "tooling/**"
+      - "config/**"
+      - "bughunt-*"
   pull_request:
     branches:
       - main

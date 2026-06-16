@@ -1,6 +1,7 @@
 package com.teddante.emergent;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -9,6 +10,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
@@ -16,137 +18,299 @@ import java.util.Map;
 
 public class ErosionPhysics {
 
-    // The "Degradation Chain" - Defining how materials weather down
     private static final Map<Block, Block> DEGRADATION_MAP = new HashMap<>();
+    // Matches the old stochastic roll's expected wear while making erosion cumulative and repeatable.
+    private static final double EXPECTED_RANDOM_ROLL_SCALE = 400.0;
 
     static {
-        // Natural Stone Weathering
         DEGRADATION_MAP.put(Blocks.STONE, Blocks.COBBLESTONE);
         DEGRADATION_MAP.put(Blocks.DEEPSLATE, Blocks.COBBLED_DEEPSLATE);
         DEGRADATION_MAP.put(Blocks.ANDESITE, Blocks.COBBLESTONE);
         DEGRADATION_MAP.put(Blocks.DIORITE, Blocks.COBBLESTONE);
         DEGRADATION_MAP.put(Blocks.GRANITE, Blocks.COBBLESTONE);
 
-        // Cracking/Loosening
         DEGRADATION_MAP.put(Blocks.COBBLESTONE, Blocks.MOSSY_COBBLESTONE);
         DEGRADATION_MAP.put(Blocks.COBBLED_DEEPSLATE, Blocks.GRAVEL);
 
-        // Crumbling to Gravity Blocks
         DEGRADATION_MAP.put(Blocks.MOSSY_COBBLESTONE, Blocks.GRAVEL);
         DEGRADATION_MAP.put(Blocks.SANDSTONE, Blocks.SAND);
         DEGRADATION_MAP.put(Blocks.RED_SANDSTONE, Blocks.RED_SAND);
     }
 
+    /**
+     * Fallback for vanilla water when finite flow is off. Vanilla normalizes the
+     * flow vector, so this uses the vector as direction and the local water column
+     * plus neighboring height drop as the impulse estimate.
+     */
     public static void attemptErosion(ServerLevel world, BlockPos fluidPos, FluidState fluidState) {
-        // 1. Get 3D Velocity Vector (The "Push" of the water)
-        Vec3 velocity = fluidState.getFlow(world, fluidPos);
-        double speedSq = velocity.lengthSqr();
+        Vec3 flow = fluidState.getFlow(world, fluidPos);
+        Direction direction = dominantHorizontalDirection(flow);
+        if (direction == null) {
+            return;
+        }
 
-        if (speedSq < 0.001)
-            return; // Too still to erode
+        double heightDrop = Math.max(0.0, fluidState.getOwnHeight() - world.getFluidState(fluidPos.relative(direction)).getOwnHeight());
+        BlockState sourceState = world.getBlockState(fluidPos);
+        double impulse = fluidState.getAmount()
+                * Math.max(0.25, heightDrop)
+                * EnvironmentalExposure.hydraulicAbrasionMultiplier(world, fluidPos, sourceState, fluidState.getAmount());
+        attemptDirectionalErosion(world, fluidPos, direction, impulse);
+    }
 
-        // 2. Define Total Energy
-        float level = fluidState.getAmount();
-        // Mass (level) * velocity^2 = Kinetic Energy
-        float energyMultiplier = 25.0f; // Tuning constant for "Oomph"
-        float totalEnergy = (float) (level * speedSq * energyMultiplier);
+    /**
+     * Finite-flow hook. This is intentionally based on water actually moved by the
+     * cellular flow step, not on vanilla's normalized visual flow vector.
+     */
+    public static void attemptFlowErosion(
+            ServerLevel world,
+            BlockPos fluidPos,
+            FluidState fluidState,
+            Direction direction,
+            int movedAmount) {
+        if (movedAmount <= 0) {
+            return;
+        }
 
-        // 3. 3D Momentum Raycast
-        // We cast a ray from the center of the water block along the velocity vector.
-        Vec3 start = Vec3.atCenterOf(fluidPos);
-        Vec3 direction = velocity.normalize();
+        double gravityFactor = direction == Direction.DOWN ? 1.75 : 1.0;
+        double sourcePressure = fluidState.isSource() ? 1.25 : 1.0;
+        BlockState sourceState = world.getBlockState(fluidPos);
+        double impulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, gravityFactor, sourcePressure)
+                * EnvironmentalExposure.hydraulicAbrasionMultiplier(world, fluidPos, sourceState, fluidState.getAmount());
+        attemptDirectionalErosion(world, fluidPos, direction, impulse);
+    }
 
-        // Raycast steps (0.5 blocks per step)
-        int maxSteps = 10; // Up to 5 blocks distance
-        BlockPos targetPos = null;
-        BlockState targetState = null;
+    private static void attemptDirectionalErosion(ServerLevel world, BlockPos fluidPos, Direction direction, double impulse) {
+        if (impulse < 0.2) {
+            return;
+        }
 
-        for (int i = 1; i <= maxSteps; i++) {
-            Vec3 current = start.add(direction.scale(i * 0.5));
-            BlockPos checkPos = BlockPos.containing(current.x, current.y, current.z);
+        BlockPos impactPos = findImpactTarget(world, fluidPos, direction, direction == Direction.DOWN ? 6 : 3);
+        if (impactPos != null) {
+            attemptBlockBreak(world, fluidPos, impactPos, world.getBlockState(impactPos), impulse);
+        }
 
-            // Skip the source block itself
-            if (checkPos.equals(fluidPos))
+        if (direction.getAxis().isHorizontal()) {
+            BlockPos bedPos = fluidPos.below();
+            attemptBlockBreak(world, fluidPos, bedPos, world.getBlockState(bedPos), impulse * 0.35);
+
+            BlockPos destinationBed = fluidPos.relative(direction).below();
+            if (!destinationBed.equals(bedPos)) {
+                attemptBlockBreak(world, fluidPos.relative(direction), destinationBed, world.getBlockState(destinationBed), impulse * 0.25);
+            }
+        }
+    }
+
+    private static BlockPos findImpactTarget(ServerLevel world, BlockPos fluidPos, Direction direction, int maxSteps) {
+        BlockPos.MutableBlockPos cursor = fluidPos.mutable();
+        for (int i = 0; i < maxSteps; i++) {
+            cursor.move(direction);
+            BlockState state = world.getBlockState(cursor);
+            if (state.isAir() || WaterPhysics.isWater(state.getFluidState().getType())) {
                 continue;
-
-            BlockState state = world.getBlockState(checkPos);
-
-            // If we hit a solid block (not air, not water), that's our impact target!
-            if (!state.isAir() && state.getFluidState().isEmpty()) {
-                targetPos = checkPos;
-                targetState = state;
-                break;
             }
 
-            // If we hit air/water, momentum is conserved, keep going.
+            if (state.getFluidState().isEmpty()) {
+                return cursor.immutable();
+            }
         }
 
-        if (targetPos != null && targetState != null) {
-            attemptBlockBreak(world, targetPos, targetState, totalEnergy);
-        }
+        return null;
     }
 
-    private static void attemptBlockBreak(ServerLevel world, BlockPos pos, BlockState state, float energy) {
-        // Common Checks
-        if (state.is(Blocks.BEDROCK) || state.is(Blocks.OBSIDIAN))
-            return;
-        if (state.is(BlockTags.FEATURES_CANNOT_REPLACE))
-            return;
+    private static Direction dominantHorizontalDirection(Vec3 flow) {
+        double x = flow.x;
+        double z = flow.z;
+        if ((x * x) + (z * z) < 0.001) {
+            return null;
+        }
 
-        if (!state.is(MaterialReactionTags.ERODES_IN_WATER)
-                && !state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)
-                && !state.is(MaterialReactionTags.BRITTLE)
-                && !DEGRADATION_MAP.containsKey(state.getBlock())) {
+        if (Math.abs(x) > Math.abs(z)) {
+            return x > 0.0 ? Direction.EAST : Direction.WEST;
+        }
+
+        return z > 0.0 ? Direction.SOUTH : Direction.NORTH;
+    }
+
+    private static void attemptBlockBreak(ServerLevel world, BlockPos fluidPos, BlockPos pos, BlockState state, double energy) {
+        if (energy <= 0.0 || !canErode(state)) {
+            clearWear(world, pos);
             return;
         }
 
-        // Resistance R = Hardness^2
         float hardness = state.getDestroySpeed(world, pos);
-        if (hardness < 0)
-            return; // Unbreakable
-
-        float resistance = hardness * hardness;
-        if (state.is(MaterialReactionTags.BRITTLE)) {
-            resistance *= 0.5f;
+        if (hardness < 0.0f) {
+            clearWear(world, pos);
+            return;
         }
-        if (resistance < 0.1f)
-            resistance = 0.1f;
 
-        // Probability P = (E / R) * k
-        double probability = (energy / resistance) * 0.005; // 0.5% Base Chance
-
-        if (world.getRandom().nextDouble() < probability) {
-            erodeBlock(world, pos, state);
+        EnvironmentalExposure.addMoisture(world, pos, state, EnvironmentalExposure.surfaceMoistureFromHydraulicWear(energy));
+        double threshold = erosionThreshold(world, pos, state, hardness);
+        double accumulatedWear = addWear(world, pos, state, energy);
+        if (accumulatedWear >= threshold) {
+            clearWear(world, pos);
+            if (erodeBlock(world, pos, state)) {
+                EnvironmentalExposure.addSuspendedSediment(
+                        world,
+                        fluidPos,
+                        world.getBlockState(fluidPos),
+                        MaterialPhysicsProfiles.sedimentKilogramsFromErodedBlock(state, energy));
+            }
         }
     }
 
-    private static void erodeBlock(ServerLevel world, BlockPos pos, BlockState state) {
+    private static double erosionThreshold(ServerLevel world, BlockPos pos, BlockState state, float hardness) {
+        double resistance = Math.max(0.1, hardness * hardness);
+        if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
+            resistance *= 0.35;
+        }
+        if (state.is(MaterialReactionTags.BRITTLE)) {
+            resistance *= 0.45;
+        }
+        if (state.is(MaterialReactionTags.ERODES_IN_WATER)) {
+            resistance *= 0.8;
+        }
+
+        double intactThreshold = resistance * EXPECTED_RANDOM_ROLL_SCALE * thresholdVariance(world, pos, state);
+        return intactThreshold * structuralStressErosionFactor(
+                EnvironmentalExposure.structuralStress(world, pos, state),
+                MaterialPhysicsProfiles.structuralStressThreshold(state))
+                * moistureErosionFactor(state, EnvironmentalExposure.moisture(world, pos, state));
+    }
+
+    public static double erosionThreshold(ServerLevel world, BlockPos pos, BlockState state) {
+        float hardness = state.getDestroySpeed(world, pos);
+        if (hardness < 0.0F || !canErode(state)) {
+            return Double.POSITIVE_INFINITY;
+        }
+
+        return erosionThreshold(world, pos, state, hardness);
+    }
+
+    public static double structuralStressErosionFactor(double structuralStress, double structuralStressThreshold) {
+        if (structuralStress <= 0.0 || structuralStressThreshold <= 0.0) {
+            return 1.0;
+        }
+
+        double damageRatio = Math.min(1.0, Math.max(0.0, structuralStress / structuralStressThreshold));
+        return Math.max(0.35, 1.0 - damageRatio * 0.65);
+    }
+
+    public static double moistureErosionFactor(BlockState state, double moisture) {
+        if (moisture <= 0.0) {
+            return 1.0;
+        }
+
+        double poreSaturation = Math.min(1.0, Math.max(0.0, moisture) * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
+        double cohesionLoss = state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER) ? 0.55 : 0.18;
+        return Math.max(0.45, 1.0 - poreSaturation * cohesionLoss);
+    }
+
+    private static double addWear(ServerLevel world, BlockPos pos, BlockState state, double energy) {
+        return EnvironmentalExposure.addHydraulicWear(world, pos, state, energy);
+    }
+
+    private static void clearWear(ServerLevel world, BlockPos pos) {
+        EnvironmentalExposure.clearHydraulicWear(world, pos);
+    }
+
+    private static double thresholdVariance(ServerLevel world, BlockPos pos, BlockState state) {
+        long hash = world.getSeed();
+        hash ^= pos.asLong() * 0x9E3779B97F4A7C15L;
+        hash ^= (long) Block.getId(state) * 0xBF58476D1CE4E5B9L;
+        hash ^= hash >>> 30;
+        hash *= 0xBF58476D1CE4E5B9L;
+        hash ^= hash >>> 27;
+        hash *= 0x94D049BB133111EBL;
+        hash ^= hash >>> 31;
+
+        double unit = (hash >>> 11) * 0x1.0p-53;
+        return 0.85 + (unit * 0.3);
+    }
+
+    private static boolean canErode(BlockState state) {
+        if (state.isAir() || !state.getFluidState().isEmpty()) {
+            return false;
+        }
+        if (state.is(Blocks.BEDROCK) || state.is(Blocks.OBSIDIAN) || state.is(BlockTags.FEATURES_CANNOT_REPLACE)) {
+            return false;
+        }
+
+        return state.is(MaterialReactionTags.ERODES_IN_WATER)
+                || state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)
+                || state.is(MaterialReactionTags.BRITTLE)
+                || DEGRADATION_MAP.containsKey(state.getBlock());
+    }
+
+    public static boolean tryDepositSediment(ServerLevel world, BlockPos fluidPos, Fluid fluid, int fluidAmount) {
+        if (!WaterPhysics.isWater(fluid) || fluidAmount > WaterPhysics.settledThinLayerAmount(fluid)) {
+            return false;
+        }
+
+        BlockState fluidState = world.getBlockState(fluidPos);
+        if (!WaterPhysics.isWater(fluidState.getFluidState().getType())
+                || !EnvironmentalExposure.canDepositSediment(world, fluidPos, fluidState)) {
+            return false;
+        }
+
+        BlockPos bedPos = fluidPos.below();
+        BlockState bedState = world.getBlockState(bedPos);
+        if (bedState.isAir() || !bedState.getFluidState().isEmpty()) {
+            return false;
+        }
+
+        double sediment = EnvironmentalExposure.consumeSuspendedSediment(world, fluidPos, fluidState);
+        world.setBlockAndUpdate(fluidPos, MaterialPhysicsProfiles.sedimentDepositState(sediment, fluidAmount));
+        world.playSound(null, fluidPos, SoundEvents.GRAVEL_PLACE, SoundSource.BLOCKS, 0.35f, 0.9f);
+        return true;
+    }
+
+    private static boolean erodeBlock(ServerLevel world, BlockPos pos, BlockState state) {
         Block convertedBlock = DEGRADATION_MAP.get(state.getBlock());
+        if (convertedBlock == null && state.is(MaterialReactionTags.ERODES_IN_WATER)) {
+            convertedBlock = fallbackDegradation(state);
+        }
 
         if (convertedBlock != null) {
-            Emergent.LOGGER.debug("Erosion (Weathering) at {} [{}]: {} -> {}",
+            Emergent.LOGGER.debug("Erosion at {} [{}]: {} -> {}",
                     pos.toShortString(),
                     String.format("%.2f", state.getDestroySpeed(world, pos)),
                     state.getBlock().getName().getString(),
                     convertedBlock.getName().getString());
             world.setBlockAndUpdate(pos, convertedBlock.defaultBlockState());
             world.playSound(null, pos, SoundEvents.GRAVEL_BREAK, SoundSource.BLOCKS, 0.5f, 0.8f);
-        } else {
-            float hardness = state.getDestroySpeed(world, pos);
-            if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
-                Emergent.LOGGER.debug("Erosion (Washing) at {} [{}]: {} -> AIR",
-                        pos.toShortString(),
-                        String.format("%.2f", hardness),
-                        state.getBlock().getName().getString());
-                world.destroyBlock(pos, false);
-            } else if (state.is(MaterialReactionTags.BRITTLE)) {
-                Emergent.LOGGER.debug("Erosion (Shattering) at {} [{}]: {} -> AIR",
-                        pos.toShortString(),
-                        String.format("%.2f", hardness),
-                        state.getBlock().getName().getString());
-                world.destroyBlock(pos, false);
-                world.playSound(null, pos, state.getSoundType().getBreakSound(), SoundSource.BLOCKS, 0.5f, 0.9f);
-            }
+            return true;
+        } else if (state.is(MaterialReactionTags.WASHES_AWAY_IN_WATER)) {
+            Emergent.LOGGER.debug("Erosion washing at {} [{}]: {} -> AIR",
+                    pos.toShortString(),
+                    String.format("%.2f", state.getDestroySpeed(world, pos)),
+                    state.getBlock().getName().getString());
+            world.destroyBlock(pos, false);
+            return true;
+        } else if (state.is(MaterialReactionTags.BRITTLE)) {
+            Emergent.LOGGER.debug("Erosion shattering at {} [{}]: {} -> AIR",
+                    pos.toShortString(),
+                    String.format("%.2f", state.getDestroySpeed(world, pos)),
+                    state.getBlock().getName().getString());
+            world.destroyBlock(pos, false);
+            world.playSound(null, pos, state.getSoundType().getBreakSound(), SoundSource.BLOCKS, 0.5f, 0.9f);
+            return true;
         }
+
+        return false;
     }
+
+    private static Block fallbackDegradation(BlockState state) {
+        if (state.is(BlockTags.GRASS_BLOCKS)) {
+            return Blocks.DIRT;
+        }
+        if (state.is(BlockTags.DIRT)) {
+            return Blocks.COARSE_DIRT;
+        }
+        if (state.is(BlockTags.MUD)) {
+            return Blocks.CLAY;
+        }
+
+        return Blocks.GRAVEL;
+    }
+
 }

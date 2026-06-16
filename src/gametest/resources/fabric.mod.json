@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "emergent-gametest",
+  "version": "1.0.0",
+  "name": "Emergent Game Tests",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "com.teddante.emergent.gametest.EmergentWaterGameTest",
+      "com.teddante.emergent.gametest.EmergentFireGameTest"
+    ]
+  },
+  "depends": {
+    "fabric-gametest-api-v1": "*",
+    "emergent": "*"
+  }
+}

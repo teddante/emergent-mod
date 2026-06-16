@@ -1,6 +1,7 @@
 package com.teddante.emergent;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.Container;
 import net.minecraft.world.damagesource.DamageSource;
@@ -14,7 +15,6 @@ import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -44,7 +44,7 @@ public final class ImpactPhysics {
         double moverMass = estimateMass(mover);
         double kineticEnergy = 0.5 * moverMass * speedSqr;
         applyEntityImpacts(mover, velocity, moverMass, kineticEnergy);
-        breakImpactedBrittleBlock(mover, velocity, kineticEnergy);
+        stressImpactedBlock(mover, velocity, kineticEnergy);
     }
 
     public static double estimateMass(Entity entity) {
@@ -78,11 +78,7 @@ public final class ImpactPhysics {
     }
 
     private static double estimateBlockMass(BlockState state) {
-        if (state.is(BlockTags.ANVIL)) {
-            return 20.0;
-        }
-
-        return 4.0 + Math.sqrt(Math.max(0.0F, state.getBlock().getExplosionResistance()));
+        return MaterialPhysicsProfiles.blockGameMass(state);
     }
 
     private static void applyEntityImpacts(Entity mover, Vec3 velocity, double moverMass, double kineticEnergy) {
@@ -127,13 +123,31 @@ public final class ImpactPhysics {
         target.push(impulse.x, impulse.y, impulse.z);
     }
 
-    private static void breakImpactedBrittleBlock(Entity mover, Vec3 velocity, double kineticEnergy) {
+    public static boolean applyBlockImpactStress(ServerLevel world, BlockPos pos, double kineticEnergy) {
+        if (kineticEnergy <= 0.0) {
+            return false;
+        }
+
+        BlockState state = world.getBlockState(pos);
+        if (!canReceiveImpactStress(world, pos, state)) {
+            return false;
+        }
+
+        EnvironmentalExposure.addStructuralStress(world, pos, state, kineticEnergy);
+        return StructuralStressPhysics.tryResolve(world, pos, state);
+    }
+
+    private static void stressImpactedBlock(Entity mover, Vec3 velocity, double kineticEnergy) {
         Level world = mover.level();
+        if (!(world instanceof ServerLevel serverWorld)) {
+            return;
+        }
+
         Vec3[] starts = impactProbeStarts(mover);
         for (Vec3 start : starts) {
             BlockHitResult hit = world.clip(new ClipContext(start, start.add(velocity), ClipContext.Block.COLLIDER,
                     ClipContext.Fluid.NONE, mover));
-            if (hit.getType() == HitResult.Type.BLOCK && tryBreakBrittleBlock(mover, hit.getBlockPos(), kineticEnergy)) {
+            if (hit.getType() == HitResult.Type.BLOCK && applyBlockImpactStress(serverWorld, hit.getBlockPos(), kineticEnergy)) {
                 return;
             }
         }
@@ -160,19 +174,10 @@ public final class ImpactPhysics {
         };
     }
 
-    private static boolean tryBreakBrittleBlock(Entity mover, BlockPos pos, double kineticEnergy) {
-        Level world = mover.level();
-        BlockState state = world.getBlockState(pos);
-        if (!state.is(MaterialReactionTags.BRITTLE) || state.getDestroySpeed(world, pos) < 0.0F) {
-            return false;
-        }
-
-        double breakEnergy = state.getBlock().getExplosionResistance();
-        if (kineticEnergy <= breakEnergy) {
-            return false;
-        }
-
-        return world.destroyBlock(pos, true, mover, Block.UPDATE_LIMIT);
+    private static boolean canReceiveImpactStress(Level world, BlockPos pos, BlockState state) {
+        return !state.isAir()
+                && state.getFluidState().isEmpty()
+                && state.getDestroySpeed(world, pos) >= 0.0F;
     }
 
     private static DamageSource damageSourceFor(Entity mover) {

@@ -47,6 +47,17 @@ public abstract class FireBlockMixin {
         }
     }
 
+    @Inject(method = "onPlace", at = @At("TAIL"))
+    private void emergent$reactWhenFireIsPlaced(BlockState state, Level world, BlockPos pos, BlockState oldState,
+            boolean movedByPiston, CallbackInfo ci) {
+        if (!EmergentConfig.get().materialReactions || !(world instanceof ServerLevel serverWorld)) {
+            return;
+        }
+
+        int age = state.hasProperty(FireBlock.AGE) ? state.getValue(FireBlock.AGE) : 0;
+        emergent$reactAroundFire(serverWorld, pos, serverWorld.getRandom(), Math.max(age, 5));
+    }
+
     @Inject(method = "checkBurnOut", at = @At("HEAD"), cancellable = true)
     private void checkVolatileDestruction(Level world, BlockPos pos, int spreadChance, RandomSource random, int age,
             CallbackInfo ci) {
@@ -89,16 +100,16 @@ public abstract class FireBlockMixin {
 
     @Unique
     private void emergent$reactAroundFire(ServerLevel world, BlockPos pos, RandomSource random, int age) {
-        float reactionChance = 0.18f + age * 0.015f;
+        float heat = 0.75f + age * 0.06f;
 
-        emergent$tryReactNearFire(world, pos.below(), random, reactionChance + 0.12f);
+        emergent$tryReactNearFire(world, pos.below(), random, heat * 1.35f);
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             BlockPos side = pos.relative(direction);
-            emergent$tryReactNearFire(world, side, random, reactionChance);
-            emergent$tryIgniteReactiveSurface(world, side, random, reactionChance + 0.08f);
+            emergent$tryReactNearFire(world, side, random, heat * 0.8f);
+            emergent$tryIgniteReactiveSurface(world, side, random, Math.min(0.45f, heat * 0.24f));
         }
 
-        emergent$tryReactNearFire(world, pos.above(), random, reactionChance * 0.5f);
+        emergent$tryReactNearFire(world, pos.above(), random, heat * 0.45f);
     }
 
     @Unique
@@ -118,12 +129,12 @@ public abstract class FireBlockMixin {
     }
 
     @Unique
-    private void emergent$tryReactNearFire(ServerLevel world, BlockPos targetPos, RandomSource random, float chance) {
-        if (random.nextFloat() > chance) {
+    private void emergent$tryReactNearFire(ServerLevel world, BlockPos targetPos, RandomSource random, float heat) {
+        if (heat <= 0.0f) {
             return;
         }
 
-        MaterialReactions.tryReactToFire(world, targetPos, world.getBlockState(targetPos), random);
+        MaterialReactions.exposeToFire(world, targetPos, world.getBlockState(targetPos), heat, random);
     }
 
     @Unique

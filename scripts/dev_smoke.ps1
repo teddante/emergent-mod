@@ -2,6 +2,7 @@ param(
     [switch]$SkipBuild,
     [switch]$CopyToPrism,
     [switch]$RequireMinecraftSources,
+    [switch]$VerboseBuildOutput,
     [string]$PrismMinecraftDir = ""
 )
 
@@ -11,6 +12,8 @@ Set-StrictMode -Version Latest
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $MixinConfigPath = Join-Path $ProjectRoot "src\main\resources\emergent.mixins.json"
 $MixinSourceDir = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\mixin"
+$GameTestModJsonPath = Join-Path $ProjectRoot "src\gametest\resources\fabric.mod.json"
+$GameTestSourceDir = Join-Path $ProjectRoot "src\gametest\java"
 $ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
 $McSourceDir = Join-Path $ProjectRoot "mc-src"
 $GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
@@ -21,43 +24,33 @@ $GradleWrapper = if ([System.Environment]::OSVersion.Platform -eq [System.Platfo
 } else {
     Join-Path $ProjectRoot "gradlew"
 }
+$ConfigSourcePath = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\EmergentConfig.java"
+$ConfigScreenPath = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\client\EmergentClothConfigScreen.java"
+$LangPath = Join-Path $ResourcesDir "assets\emergent\lang\en_us.json"
+$ReadmePath = Join-Path $ProjectRoot "README.md"
 
 function Read-GradleProperties {
-    if (-not (Test-Path -LiteralPath $GradlePropertiesPath)) {
-        throw "Missing Gradle properties file: $GradlePropertiesPath"
-    }
-
     $properties = @{}
     Get-Content -LiteralPath $GradlePropertiesPath | ForEach-Object {
-        $line = $_.Trim()
-        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
-            return
+        if ($_ -match "^\s*([^#][^=]+?)\s*=\s*(.*?)\s*$") {
+            $properties[$Matches[1].Trim()] = $Matches[2].Trim()
         }
-
-        $separator = $line.IndexOf("=")
-        if ($separator -lt 1) {
-            return
-        }
-
-        $key = $line.Substring(0, $separator).Trim()
-        $value = $line.Substring($separator + 1).Trim()
-        $properties[$key] = $value
     }
 
     return $properties
 }
 
 $GradleProperties = Read-GradleProperties
-$ArchiveBaseName = $GradleProperties["archives_base_name"]
+$ArchivesBaseName = $GradleProperties["archives_base_name"]
 $ModVersion = $GradleProperties["mod_version"]
-if ([string]::IsNullOrWhiteSpace($ArchiveBaseName) -or [string]::IsNullOrWhiteSpace($ModVersion)) {
+if ([string]::IsNullOrWhiteSpace($ArchivesBaseName) -or [string]::IsNullOrWhiteSpace($ModVersion)) {
     throw "gradle.properties must define archives_base_name and mod_version."
 }
-if ($ModVersion -notmatch "^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$") {
+if ($ModVersion -notmatch "^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$") {
     throw "mod_version must follow SemVer-style MAJOR.MINOR.PATCH, with optional pre-release/build metadata."
 }
-$JarFileName = "$ArchiveBaseName-$ModVersion.jar"
-$JarPath = Join-Path $ProjectRoot "build\libs\$JarFileName"
+
+$JarPath = Join-Path $ProjectRoot "build\libs\$ArchivesBaseName-$ModVersion.jar"
 
 function Write-Step {
     param([string]$Message)
@@ -66,10 +59,11 @@ function Write-Step {
 
 function Test-MinecraftSourceCache {
     $requiredSources = @(
-        "net\minecraft\block\Blocks.java",
-        "net\minecraft\block\BlockKeys.java",
-        "net\minecraft\item\Items.java",
-        "net\minecraft\item\ItemKeys.java"
+        "net\minecraft\world\level\block\Blocks.java",
+        "net\minecraft\world\item\Items.java",
+        "net\minecraft\references\BlockIds.java",
+        "net\minecraft\references\ItemIds.java",
+        "net\minecraft\world\level\material\FlowingFluid.java"
     )
 
     foreach ($relativePath in $requiredSources) {
@@ -102,8 +96,68 @@ function Ensure-MinecraftSourceCache {
     }
 
     if (-not (Test-MinecraftSourceCache)) {
-        throw "Minecraft source cache is still missing required registry sources after extraction."
+        throw "Minecraft source cache is still missing required official sources after extraction."
     }
+}
+
+function Invoke-GitValue {
+    param([string[]]$Arguments)
+
+    $output = & git -C $ProjectRoot @Arguments 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($output)) {
+        return "unknown"
+    }
+
+    return ($output | Select-Object -First 1).Trim()
+}
+
+function Test-GitDirty {
+    $output = & git -C $ProjectRoot status --porcelain 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return "unknown"
+    }
+
+    return [string]([bool]$output)
+}
+
+function Write-GradleFailureSummary {
+    param(
+        [string[]]$BuildOutput,
+        [string]$LogPath
+    )
+
+    $patterns = @(
+        "All \d+ required tests passed",
+        "\d+ required tests failed",
+        "Game test failed",
+        "failed at",
+        "> Task .* FAILED",
+        "BUILD FAILED",
+        "Execution failed",
+        "Caused by:",
+        "FAILURE:"
+    )
+
+    $hints = @($BuildOutput | Where-Object {
+        $line = $_
+        [bool]($patterns | Where-Object { $line -match $_ } | Select-Object -First 1)
+    } | Select-Object -Last 60)
+
+    Write-Host "Gradle build failed. Full log: $LogPath"
+    if ($hints.Count -gt 0) {
+        Write-Host "Relevant failure lines:"
+        $hints | ForEach-Object { Write-Host $_ }
+        return
+    }
+
+    Write-Host "Last build log lines:"
+    $BuildOutput | Select-Object -Last 80 | ForEach-Object { Write-Host $_ }
+}
+
+function ConvertTo-ConfigTranslationName {
+    param([string]$Name)
+
+    return ([regex]::Replace($Name, "([a-z0-9])([A-Z])", '$1_$2')).ToLowerInvariant()
 }
 
 function Assert-MixinConfig {
@@ -159,6 +213,134 @@ function Assert-MixinConfig {
     }
 }
 
+function Assert-ConfigHygiene {
+    Write-Step "Checking config surface hygiene"
+
+    $configSource = Get-Content -LiteralPath $ConfigSourcePath -Raw
+    $configScreen = Get-Content -LiteralPath $ConfigScreenPath -Raw
+    $lang = Get-Content -LiteralPath $LangPath -Raw
+    $readme = Get-Content -LiteralPath $ReadmePath -Raw
+
+    $fields = @([regex]::Matches($configSource, 'public boolean ([A-Za-z0-9_]+)\s*=') |
+        ForEach-Object { $_.Groups[1].Value })
+    if ($fields.Count -eq 0) {
+        throw "No public boolean config fields found in $ConfigSourcePath"
+    }
+
+    foreach ($field in $fields) {
+        $translationName = ConvertTo-ConfigTranslationName $field
+        if (-not $readme.Contains("`"$field`"")) {
+            throw "README config example is missing EmergentConfig field: $field"
+        }
+        if (-not $configScreen.Contains("config.$field")) {
+            throw "Cloth Config screen is missing EmergentConfig field: $field"
+        }
+        if (-not $lang.Contains("`"emergent.config.$translationName`"")) {
+            throw "Language file is missing config label: emergent.config.$translationName"
+        }
+        if (-not $lang.Contains("`"emergent.config.$translationName.tooltip`"")) {
+            throw "Language file is missing config tooltip: emergent.config.$translationName.tooltip"
+        }
+    }
+
+    if (-not $lang.Contains("`"emergent.config.category.presets`"")) {
+        throw "Language file is missing config preset category label: emergent.config.category.presets"
+    }
+    if (-not $lang.Contains("`"emergent.config.preset`"")) {
+        throw "Language file is missing config preset selector label: emergent.config.preset"
+    }
+    if (-not $lang.Contains("`"emergent.config.preset.tooltip`"")) {
+        throw "Language file is missing config preset selector tooltip: emergent.config.preset.tooltip"
+    }
+
+    $presetMatch = [regex]::Match($configSource, 'public enum Preset\s*\{(?<body>[\s\S]*?)\s*;')
+    if (-not $presetMatch.Success) {
+        throw "EmergentConfig.Preset enum was not found."
+    }
+
+    $presets = @([regex]::Matches($presetMatch.Groups["body"].Value, '\b([A-Z][A-Z0-9_]*)\b') |
+        ForEach-Object { $_.Groups[1].Value })
+    if ($presets.Count -eq 0) {
+        throw "EmergentConfig.Preset has no enum values."
+    }
+
+    foreach ($preset in $presets) {
+        $translationName = $preset.ToLowerInvariant()
+        if (-not $lang.Contains("`"emergent.config.preset.$translationName`"")) {
+            throw "Language file is missing preset label: emergent.config.preset.$translationName"
+        }
+    }
+
+    foreach ($preset in $presets | Where-Object { $_ -ne "CUSTOM" }) {
+        $caseMatch = [regex]::Match(
+                $configSource,
+                "case\s+$preset\s*->\s*\{(?<body>[\s\S]*?)\n\s*\}")
+        if (-not $caseMatch.Success) {
+            throw "EmergentConfig.Preset.$preset has no switch case in applyPreset."
+        }
+
+        foreach ($field in $fields) {
+            if ($caseMatch.Groups["body"].Value -notmatch "\b$field\s*=") {
+                throw "EmergentConfig.Preset.$preset does not assign config field: $field"
+            }
+        }
+    }
+}
+
+function Assert-GameTestEntrypoints {
+    Write-Step "Checking GameTest entrypoint hygiene"
+
+    if (-not (Test-Path -LiteralPath $GameTestModJsonPath)) {
+        throw "Missing GameTest mod metadata: $GameTestModJsonPath"
+    }
+
+    $modJson = Get-Content -LiteralPath $GameTestModJsonPath -Raw | ConvertFrom-Json
+    $entrypoints = @($modJson.entrypoints.'fabric-gametest')
+    if ($entrypoints.Count -eq 0) {
+        throw "GameTest mod metadata must define at least one fabric-gametest entrypoint."
+    }
+
+    $entrypointSet = @{}
+    foreach ($entrypoint in $entrypoints) {
+        if ([string]::IsNullOrWhiteSpace($entrypoint)) {
+            throw "GameTest mod metadata contains a blank fabric-gametest entrypoint."
+        }
+
+        $entrypointSet[$entrypoint] = $true
+        $sourcePath = Join-Path $GameTestSourceDir (($entrypoint -replace '\.', '\') + ".java")
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "GameTest entrypoint has no source file: $entrypoint"
+        }
+
+        $sourceText = Get-Content -LiteralPath $sourcePath -Raw
+        if (-not $sourceText.Contains("@GameTest")) {
+            throw "GameTest entrypoint has no @GameTest methods: $entrypoint"
+        }
+    }
+
+    Get-ChildItem -LiteralPath $GameTestSourceDir -Recurse -Filter "*.java" | ForEach-Object {
+        $sourceText = Get-Content -LiteralPath $_.FullName -Raw
+        if (-not $sourceText.Contains("@GameTest")) {
+            return
+        }
+
+        if ($sourceText -notmatch "package\s+([A-Za-z0-9_.]+)\s*;") {
+            throw "GameTest source has @GameTest methods but no package declaration: $($_.FullName)"
+        }
+        $packageName = $Matches[1]
+
+        if ($sourceText -notmatch "public\s+class\s+([A-Za-z0-9_]+)") {
+            throw "GameTest source has @GameTest methods but no public class declaration: $($_.FullName)"
+        }
+        $className = $Matches[1]
+        $qualifiedName = "$packageName.$className"
+
+        if (-not $entrypointSet.ContainsKey($qualifiedName)) {
+            throw "GameTest class has @GameTest methods but is not registered as a fabric-gametest entrypoint: $qualifiedName"
+        }
+    }
+}
+
 function Assert-ResourceHygiene {
     Write-Step "Checking resource JSON hygiene"
 
@@ -175,22 +357,23 @@ function Assert-ResourceHygiene {
         }
     }
 
+    $blocksPath = Join-Path $McSourceDir "net\minecraft\world\level\block\Blocks.java"
+    $itemsPath = Join-Path $McSourceDir "net\minecraft\world\item\Items.java"
+    $blockIdsPath = Join-Path $McSourceDir "net\minecraft\references\BlockIds.java"
+    $itemIdsPath = Join-Path $McSourceDir "net\minecraft\references\ItemIds.java"
+    $fluidPath = Join-Path $McSourceDir "net\minecraft\world\level\material\FlowingFluid.java"
     if (-not (Test-MinecraftSourceCache)) {
         if ($RequireMinecraftSources) {
             Ensure-MinecraftSourceCache
         } else {
-            Write-Warning "Minecraft source cache is missing; skipping required vanilla registry ID validation. Run scripts/extract_sources.ps1 or pass -RequireMinecraftSources for the full local gate."
+            Write-Warning "Minecraft source cache is missing; skipping vanilla registry ID validation. Run scripts/extract_sources.ps1 or pass -RequireMinecraftSources for the full local gate."
             return
         }
     }
 
-    $blocksPath = Join-Path $McSourceDir "net\minecraft\block\Blocks.java"
-    $blockKeysPath = Join-Path $McSourceDir "net\minecraft\block\BlockKeys.java"
-    $itemsPath = Join-Path $McSourceDir "net\minecraft\item\Items.java"
-    $itemKeysPath = Join-Path $McSourceDir "net\minecraft\item\ItemKeys.java"
-    foreach ($path in @($blocksPath, $blockKeysPath, $itemsPath, $itemKeysPath)) {
+    foreach ($path in @($blocksPath, $itemsPath, $blockIdsPath, $itemIdsPath, $fluidPath)) {
         if (-not (Test-Path -LiteralPath $path)) {
-            throw "Minecraft source cache is missing required registry source: $path"
+            throw "Minecraft source cache is missing required official 26.1+ source: $path. Run scripts/extract_sources.ps1 after ./gradlew genSources."
         }
     }
 
@@ -198,15 +381,15 @@ function Assert-ResourceHygiene {
     foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blocksPath -Raw), 'register\(\s*"([^"]+)"')) {
         $blockIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
-    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blockKeysPath -Raw), 'of\("([^"]+)"\)')) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $blockIdsPath -Raw), 'createKey\("([^"]+)"\)')) {
         $blockIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
 
     $itemIds = @{}
-    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemsPath -Raw), 'register\(\s*"([^"]+)"')) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemsPath -Raw), 'register(?:Item|Block)?\(\s*"([^"]+)"')) {
         $itemIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
-    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemKeysPath -Raw), 'of\("([^"]+)"\)')) {
+    foreach ($match in [regex]::Matches((Get-Content -LiteralPath $itemIdsPath -Raw), 'createKey\("([^"]+)"\)')) {
         $itemIds["minecraft:$($match.Groups[1].Value)"] = $true
     }
     foreach ($id in $blockIds.Keys) {
@@ -352,11 +535,42 @@ try {
     Assert-MixinConfig
     Assert-RepositoryWorkflowHygiene
     Assert-ResourceHygiene
+    Assert-ConfigHygiene
+    Assert-GameTestEntrypoints
 
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"
-        & $GradleWrapper build
-        if ($LASTEXITCODE -ne 0) {
+        $gradleWrapper = if ($env:OS -eq "Windows_NT") { ".\gradlew.bat" } else { "./gradlew" }
+        if ($VerboseBuildOutput) {
+            & $gradleWrapper build
+            $gradleExitCode = $LASTEXITCODE
+        } else {
+            $reportDir = Join-Path $ProjectRoot "build\reports\emergent-smoke"
+            New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
+            $logPath = Join-Path $reportDir ("smoke-build-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+
+            $oldErrorActionPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = "Continue"
+                $buildOutput = @(& $gradleWrapper build *>&1 | ForEach-Object { $_.ToString() })
+                $gradleExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $oldErrorActionPreference
+            }
+
+            $buildOutput | Set-Content -Path $logPath -Encoding UTF8
+            if ($gradleExitCode -eq 0) {
+                $buildOutput | Where-Object {
+                    $_ -match "All \d+ required tests passed" -or $_ -match "BUILD SUCCESSFUL"
+                } | ForEach-Object {
+                    Write-Host $_
+                }
+            } else {
+                Write-GradleFailureSummary -BuildOutput $buildOutput -LogPath $logPath
+            }
+        }
+
+        if ($gradleExitCode -ne 0) {
             throw "Gradle build failed."
         }
     }
@@ -365,14 +579,7 @@ try {
 
     if ($CopyToPrism) {
         if ([string]::IsNullOrWhiteSpace($PrismMinecraftDir)) {
-            $PrismMinecraftDir = if ([string]::IsNullOrWhiteSpace($env:APPDATA)) {
-                ""
-            } else {
-                Join-Path $env:APPDATA "PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
-            }
-        }
-        if ([string]::IsNullOrWhiteSpace($PrismMinecraftDir)) {
-            throw "No Prism Minecraft directory was provided. Pass -PrismMinecraftDir when using -CopyToPrism."
+            $PrismMinecraftDir = Join-Path $env:APPDATA "PrismLauncher\instances\Prism Launcher Thing for Emergent mod testing\minecraft"
         }
 
         $modsDir = Join-Path $PrismMinecraftDir "mods"
@@ -380,10 +587,46 @@ try {
             throw "Prism mods folder not found: $modsDir"
         }
 
-        $targetJar = Join-Path $modsDir $JarFileName
+        $targetJar = Join-Path $modsDir "$ArchivesBaseName-$ModVersion.jar"
         Write-Step "Copying jar to Prism mods folder"
+        $resolvedModsDir = (Resolve-Path -LiteralPath $modsDir).Path
+        $modsRoot = [System.IO.Path]::GetFullPath($resolvedModsDir)
+        if (-not $modsRoot.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+            $modsRoot += [System.IO.Path]::DirectorySeparatorChar
+        }
+
+        $targetJarFull = [System.IO.Path]::GetFullPath($targetJar)
+        $staleJars = Get-ChildItem -LiteralPath $modsDir -Filter "$ArchivesBaseName-*.jar" -File |
+            Where-Object { [System.IO.Path]::GetFullPath($_.FullName) -ne $targetJarFull }
+
+        foreach ($staleJar in $staleJars) {
+            $staleJarFull = [System.IO.Path]::GetFullPath($staleJar.FullName)
+            if (-not $staleJarFull.StartsWith($modsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Refusing to remove a jar outside the Prism mods folder: $staleJarFull"
+            }
+
+            Remove-Item -LiteralPath $staleJarFull -Force
+            Write-Host "Removed stale Prism jar: $($staleJar.Name)"
+        }
+
         Copy-Item -LiteralPath $JarPath -Destination $targetJar -Force
         Write-Host "Copied: $targetJar"
+
+        $copyInfoPath = Join-Path $modsDir "$ArchivesBaseName-copy-info.txt"
+        $jarHash = (Get-FileHash -LiteralPath $targetJar -Algorithm SHA256).Hash.ToLowerInvariant()
+        $copyInfo = @(
+            "jar=$([System.IO.Path]::GetFileName($targetJar))",
+            "sha256=$jarHash",
+            "source=$JarPath",
+            "sourceLastWriteUtc=$((Get-Item -LiteralPath $JarPath).LastWriteTimeUtc.ToString('o'))",
+            "branch=$(Invoke-GitValue @('rev-parse', '--abbrev-ref', 'HEAD'))",
+            "commit=$(Invoke-GitValue @('rev-parse', '--short=12', 'HEAD'))",
+            "dirty=$(Test-GitDirty)",
+            "skipBuild=$([bool]$SkipBuild)",
+            "copiedUtc=$((Get-Date).ToUniversalTime().ToString('o'))"
+        )
+        Set-Content -LiteralPath $copyInfoPath -Value $copyInfo -Encoding utf8
+        Write-Host "Copy info: $copyInfoPath"
     }
 
     Write-Host "Smoke checks passed."
