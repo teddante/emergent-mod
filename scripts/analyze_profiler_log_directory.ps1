@@ -51,7 +51,7 @@ function Get-PrismCopyInfo([string]$Directory) {
         return @()
     }
 
-    return @(Get-Content -LiteralPath $copyInfoPath | Select-Object -First 8)
+    return @(Get-Content -LiteralPath $copyInfoPath | Select-Object -First 16)
 }
 
 function Get-ProfilerValue($Line) {

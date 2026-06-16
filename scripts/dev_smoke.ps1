@@ -623,6 +623,8 @@ try {
             "commit=$(Invoke-GitValue @('rev-parse', '--short=12', 'HEAD'))",
             "dirty=$(Test-GitDirty)",
             "skipBuild=$([bool]$SkipBuild)",
+            "recommendedProfilerJvmArgs=-Demergent.profiler=true -Demergent.profiler.slowMs=25",
+            "optionalPositionHotspotJvmArg=-Demergent.profiler.positions=true",
             "copiedUtc=$((Get-Date).ToUniversalTime().ToString('o'))"
         )
         Set-Content -LiteralPath $copyInfoPath -Value $copyInfo -Encoding utf8

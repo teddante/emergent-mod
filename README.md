@@ -229,7 +229,7 @@ By default, `-CopyToPrism` targets:
 C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Prism Launcher Thing for Emergent mod testing\minecraft\mods
 ```
 
-When copying to Prism, the script removes older `emergent-*.jar` files from that mods folder before copying the current build. It also writes `mods\emergent-copy-info.txt` with the copied jar hash, jar timestamp, branch, commit, dirty-worktree state, and whether `-SkipBuild` was used, so manual launcher tests can be tied back to the exact build instead of only the reused mod version. This keeps manual tests from accidentally loading stale duplicate Emergent jars or ambiguous same-version builds.
+When copying to Prism, the script removes older `emergent-*.jar` files from that mods folder before copying the current build. It also writes `mods\emergent-copy-info.txt` with the copied jar hash, jar timestamp, branch, commit, dirty-worktree state, whether `-SkipBuild` was used, copy time, and the recommended profiler JVM arguments, so manual launcher tests can be tied back to the exact build instead of only the reused mod version. This keeps manual tests from accidentally loading stale duplicate Emergent jars, ambiguous same-version builds, or lag reports without the profiler flags needed for diagnosis.
 
 Headless profiler run:
 

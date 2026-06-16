@@ -26,8 +26,7 @@ jobs:
   build:
     name: Build and smoke check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -46,6 +45,7 @@ jobs:
 
       - name: Smoke check
         shell: pwsh
+        timeout-minutes: 15
         run: ./scripts/dev_smoke.ps1
 
       - name: Upload mod jar
