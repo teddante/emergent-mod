@@ -7,6 +7,7 @@ import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FiniteFluidQuietCache;
 import com.teddante.emergent.FiniteFluidBudgetSettings;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.SteamPhysics;
 import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.WaterPhysics;
 import net.minecraft.core.BlockPos;
@@ -79,6 +80,10 @@ public abstract class FlowableFluidMixin extends Fluid {
                 && WaterPhysics.canHydraulicallyErode(fluid)
                 && !EmergentConfig.get().finiteWaterFlow) {
             ErosionPhysics.attemptErosion(world, pos, fluidState);
+        }
+
+        if (EmergentConfig.get().waterLavaSteam && WaterPhysics.isWater(fluid)) {
+            SteamPhysics.tickForWater(world, pos, fluidState);
         }
 
         if (!EmergentConfig.get().finiteWaterFlow) {

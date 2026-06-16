@@ -196,6 +196,62 @@ public final class EmergentClothConfigScreen {
                 .setSaveConsumer(value -> config.boundlessBrewing = value)
                 .build());
 
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.smoke_and_fumes"),
+                        config.smokeAndFumes)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.smoke_and_fumes.tooltip"))
+                .setSaveConsumer(value -> config.smokeAndFumes = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.pressure_explosions"),
+                        config.pressureExplosions)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.pressure_explosions.tooltip"))
+                .setSaveConsumer(value -> config.pressureExplosions = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.structural_stress"),
+                        config.structuralStress)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.structural_stress.tooltip"))
+                .setSaveConsumer(value -> config.structuralStress = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.fire_ecology"),
+                        config.fireEcology)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.fire_ecology.tooltip"))
+                .setSaveConsumer(value -> config.fireEcology = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.water_lava_steam"),
+                        config.waterLavaSteam)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.water_lava_steam.tooltip"))
+                .setSaveConsumer(value -> config.waterLavaSteam = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.chemistry_reactions"),
+                        config.chemistryReactions)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.chemistry_reactions.tooltip"))
+                .setSaveConsumer(value -> config.chemistryReactions = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.creature_panic"),
+                        config.creaturePanic)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.creature_panic.tooltip"))
+                .setSaveConsumer(value -> config.creaturePanic = value)
+                .build());
+
         return builder.build();
     }
 }

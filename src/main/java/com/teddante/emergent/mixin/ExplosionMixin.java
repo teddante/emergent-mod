@@ -2,6 +2,8 @@ package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.ExplosionEnvironmentPhysics;
+import com.teddante.emergent.SmokeSystem;
+import com.teddante.emergent.StructuralStress;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -57,6 +59,20 @@ public abstract class ExplosionMixin {
             if (be instanceof Container container) {
                 VolatileExplosionUtils.tryExplodeVolatileContainer(world, container, pos);
             }
+        }
+    }
+
+    @Inject(method = "interactWithBlocks", at = @At("TAIL"))
+    private void emergent$postBlastEffects(List<BlockPos> affectedBlocks, CallbackInfo ci) {
+        ServerLevel world = this.level();
+        Vec3 center = this.center();
+
+        if (EmergentConfig.get().smokeAndFumes) {
+            SmokeSystem.emitExplosionSmoke(world, center.x, center.y, center.z, this.radius());
+        }
+
+        if (EmergentConfig.get().structuralStress && !affectedBlocks.isEmpty()) {
+            StructuralStress.applyAfterExplosion(world, new ArrayList<>(affectedBlocks));
         }
     }
 }

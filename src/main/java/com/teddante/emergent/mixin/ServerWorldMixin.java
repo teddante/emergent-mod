@@ -3,9 +3,12 @@ package com.teddante.emergent.mixin;
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalScheduler;
 import com.teddante.emergent.EnvironmentalExposure;
+import com.teddante.emergent.FireEcology;
 import com.teddante.emergent.FiniteFluidQuietCache;
+import com.teddante.emergent.SmokeSystem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.redstone.Orientation;
 import net.minecraft.world.level.block.state.BlockState;
@@ -21,6 +24,11 @@ public abstract class ServerWorldMixin {
     private void emergent$queueSurfaceWeather(BlockPos pos, CallbackInfo ci) {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
+
+        SmokeSystem.pruneExpired(serverWorld.getGameTime());
+        if (EmergentConfig.get().fireEcology && serverWorld.isRaining()) {
+            FireEcology.tickRainOnAshes(serverWorld, serverWorld.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING, pos));
+        }
 
         if (EmergentConfig.get().rainAccumulation) {
             EnvironmentalScheduler.enqueueSurfaceWeatherSample(serverWorld, pos);

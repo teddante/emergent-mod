@@ -154,7 +154,14 @@ Example:
   "materialReactions": true,
   "boundlessEnchanting": true,
   "unrestrictedEnchantments": true,
-  "boundlessBrewing": true
+  "boundlessBrewing": true,
+  "smokeAndFumes": true,
+  "pressureExplosions": true,
+  "structuralStress": true,
+  "fireEcology": true,
+  "waterLavaSteam": true,
+  "chemistryReactions": true,
+  "creaturePanic": true
 }
 ```
 

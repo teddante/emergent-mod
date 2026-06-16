@@ -17,6 +17,7 @@ public class EmergentConfig {
 
     private static EmergentConfig INSTANCE = new EmergentConfig();
 
+    // Existing features
     public boolean volatileContainers = true;
     public boolean volatileDroppedItems = true;
     public boolean volatileInventories = true;
@@ -50,6 +51,15 @@ public class EmergentConfig {
         }
     }
 
+    // New features
+    public boolean smokeAndFumes = true;
+    public boolean pressureExplosions = true;
+    public boolean structuralStress = true;
+    public boolean fireEcology = true;
+    public boolean waterLavaSteam = true;
+    public boolean chemistryReactions = true;
+    public boolean creaturePanic = true;
+
     public static EmergentConfig get() {
         return INSTANCE;
     }
@@ -81,6 +91,13 @@ public class EmergentConfig {
                 boundlessEnchanting = true;
                 unrestrictedEnchantments = true;
                 boundlessBrewing = true;
+                smokeAndFumes = false;
+                pressureExplosions = false;
+                structuralStress = false;
+                fireEcology = true;
+                waterLavaSteam = true;
+                chemistryReactions = false;
+                creaturePanic = true;
             }
             case REALISTIC -> {
                 volatileContainers = true;
@@ -103,6 +120,13 @@ public class EmergentConfig {
                 boundlessEnchanting = true;
                 unrestrictedEnchantments = true;
                 boundlessBrewing = true;
+                smokeAndFumes = true;
+                pressureExplosions = true;
+                structuralStress = true;
+                fireEcology = true;
+                waterLavaSteam = true;
+                chemistryReactions = true;
+                creaturePanic = true;
             }
             case CHAOTIC -> {
                 volatileContainers = true;
@@ -125,6 +149,13 @@ public class EmergentConfig {
                 boundlessEnchanting = true;
                 unrestrictedEnchantments = true;
                 boundlessBrewing = true;
+                smokeAndFumes = true;
+                pressureExplosions = true;
+                structuralStress = true;
+                fireEcology = true;
+                waterLavaSteam = true;
+                chemistryReactions = true;
+                creaturePanic = true;
             }
             case HARDCORE_PHYSICS -> {
                 volatileContainers = true;
@@ -147,6 +178,13 @@ public class EmergentConfig {
                 boundlessEnchanting = true;
                 unrestrictedEnchantments = true;
                 boundlessBrewing = true;
+                smokeAndFumes = true;
+                pressureExplosions = true;
+                structuralStress = true;
+                fireEcology = true;
+                waterLavaSteam = true;
+                chemistryReactions = true;
+                creaturePanic = true;
             }
             case CUSTOM -> {
             }

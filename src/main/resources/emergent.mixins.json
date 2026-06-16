@@ -20,6 +20,7 @@
 		"FallingBlockImpactMixin",
 		"LivingEntityImpactMixin",
 		"LivingEntityDynamicExperienceMixin",
+		"LivingEntityAmbientHazardMixin",
 		"ExplosionMixin",
 		"VolatileInventoryMixin",
 		"CreeperInvoker",

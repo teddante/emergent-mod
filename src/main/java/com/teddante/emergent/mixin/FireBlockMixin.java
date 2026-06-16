@@ -2,8 +2,10 @@ package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EmergentProfiler;
+import com.teddante.emergent.FireEcology;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialReactions;
+import com.teddante.emergent.SmokeSystem;
 import com.teddante.emergent.VolatileExplosionUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,6 +15,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -97,6 +100,22 @@ public abstract class FireBlockMixin {
         }
 
         emergent$reactAroundFire(world, pos, random, age);
+    }
+
+    @Inject(method = "tick", at = @At("TAIL"))
+    private void emergent$fireEcologyAndSmoke(BlockState state, ServerLevel world, BlockPos pos,
+            RandomSource random, CallbackInfo ci) {
+        if (EmergentConfig.get().fireEcology && random.nextInt(6) == 0) {
+            BlockPos below = pos.below();
+            BlockState belowState = world.getBlockState(below);
+            if (belowState.is(Blocks.GRASS_BLOCK) || belowState.is(Blocks.PODZOL) || belowState.is(Blocks.MYCELIUM)) {
+                FireEcology.onFireConsumes(world, below, belowState);
+            }
+        }
+
+        if (EmergentConfig.get().smokeAndFumes) {
+            SmokeSystem.ambientSmokeParticles(world, pos, false);
+        }
     }
 
     @Unique

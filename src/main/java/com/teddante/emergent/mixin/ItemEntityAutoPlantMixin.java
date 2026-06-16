@@ -1,5 +1,6 @@
 package com.teddante.emergent.mixin;
 
+import com.teddante.emergent.ChemistryPhysics;
 import com.teddante.emergent.Emergent;
 import com.teddante.emergent.EmergentConfig;
 import net.minecraft.core.BlockPos;
@@ -49,6 +50,10 @@ public abstract class ItemEntityAutoPlantMixin {
     private void tryAutoPlant(CallbackInfo ci) {
         ItemEntity self = (ItemEntity) (Object) this;
         Level world = self.level();
+
+        if (!world.isClientSide() && ChemistryPhysics.tickChemistry(self)) {
+            return;
+        }
 
         // Only run server-side, when on ground, after 30 seconds
         int age = getAge();
