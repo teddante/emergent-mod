@@ -57,7 +57,6 @@ import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.entity.SculkCatalystBlockEntity;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.gameevent.BlockPositionSource;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -2066,37 +2065,39 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     @GameTest(maxTicks = 20)
     public void sculkCatalystChargeUsesDynamicExperienceEnergy(GameTestHelper context) {
         BlockPos catalystPos = TEST_POS;
+        BlockPos zombiePos = TEST_POS.above();
+        BlockPos ravagerPos = TEST_POS.relative(Direction.EAST, 2).above();
         context.setBlock(catalystPos, Blocks.SCULK_CATALYST);
 
-        LivingEntity zombie = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.above()));
-        LivingEntity ravager = context.spawn(EntityType.RAVAGER, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST, 2).above()));
+        LivingEntity zombie = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(zombiePos));
+        LivingEntity ravager = context.spawn(EntityType.RAVAGER, Vec3.atBottomCenterOf(ravagerPos));
+        SculkCatalystBlockEntity catalyst = (SculkCatalystBlockEntity) context.getLevel()
+                .getBlockEntity(context.absolutePos(catalystPos));
+
+        context.assertTrue(catalyst != null, "test fixture should create a sculk catalyst block entity");
+        SculkCatalystBlockEntity.CatalystListener listener = catalyst.getListener();
         int zombieReward = zombie.getExperienceReward(context.getLevel(), null);
         int ravagerReward = ravager.getExperienceReward(context.getLevel(), null);
 
-        SculkCatalystBlockEntity.CatalystListener zombieListener = new SculkCatalystBlockEntity.CatalystListener(
-                Blocks.SCULK_CATALYST.defaultBlockState(),
-                new BlockPositionSource(context.absolutePos(catalystPos)));
-        SculkCatalystBlockEntity.CatalystListener ravagerListener = new SculkCatalystBlockEntity.CatalystListener(
-                Blocks.SCULK_CATALYST.defaultBlockState(),
-                new BlockPositionSource(context.absolutePos(catalystPos)));
-
-        boolean zombieHandled = zombieListener.handleGameEvent(
+        boolean zombieHandled = listener.handleGameEvent(
                 context.getLevel(),
                 GameEvent.ENTITY_DIE,
                 GameEvent.Context.of(zombie),
                 zombie.position());
-        boolean ravagerHandled = ravagerListener.handleGameEvent(
+        int zombieCharge = totalSculkCharge(listener);
+        boolean ravagerHandled = listener.handleGameEvent(
                 context.getLevel(),
                 GameEvent.ENTITY_DIE,
                 GameEvent.Context.of(ravager),
                 ravager.position());
+        int totalCharge = totalSculkCharge(listener);
 
         context.assertTrue(zombieHandled && ravagerHandled,
-                "sculk catalyst listeners should consume living death events");
-        context.assertTrue(totalSculkCharge(zombieListener) == zombieReward,
+                "sculk catalyst should handle nearby living-entity death events");
+        context.assertTrue(zombieCharge == zombieReward,
                 "sculk catalyst charge should use the same dynamic XP-energy reward as dropped orbs");
-        context.assertTrue(totalSculkCharge(ravagerListener) == ravagerReward,
-                "larger dynamic XP rewards should become matching sculk spread charge");
+        context.assertTrue(totalCharge == zombieReward + ravagerReward,
+                "larger dynamic XP rewards should add matching sculk spread charge");
         context.assertTrue(ravagerReward > zombieReward,
                 "a larger, tougher entity should feed more sculk charge than a zombie");
         context.assertTrue(zombie.wasExperienceConsumed() && ravager.wasExperienceConsumed(),

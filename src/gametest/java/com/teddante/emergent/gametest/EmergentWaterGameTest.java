@@ -1889,20 +1889,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
 
         context.assertTrue(wetErosionRepetitions < dryErosionRepetitions,
                 "saturated sand should need fewer identical flow impulses than initially dry sand");
+        int dryRepetitions = erosionRepetitionsUntilAir(context, waterPos, Direction.EAST, targetPos, movedAmount, 128);
 
-        applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
-        context.assertBlockPresent(Blocks.SAND, targetPos);
-        EnvironmentalExposure.clear(context.getLevel(), context.absolutePos(targetPos));
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
         context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
-
+        EnvironmentalExposure.clear(context.getLevel(), context.absolutePos(targetPos));
         EnvironmentalExposure.addMoisture(
                 context.getLevel(),
                 context.absolutePos(targetPos),
                 context.getBlockState(targetPos),
                 1.0);
-        applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
+        int wetRepetitions = erosionRepetitionsUntilAir(context, waterPos, Direction.EAST, targetPos, movedAmount, 128);
 
-        context.assertBlockPresent(Blocks.AIR, targetPos);
+        context.assertTrue(dryRepetitions <= 128, "dry sand should eventually wash away under repeated flow");
+        context.assertTrue(wetRepetitions < dryRepetitions,
+                "stored moisture should make sand wash away in fewer identical water-flow impulses");
         context.succeed();
     }
 
@@ -2107,6 +2108,22 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         }
 
         throw new IllegalStateException("Erosion threshold was not reachable with the configured test impulse");
+    }
+
+    private static int erosionRepetitionsUntilAir(
+            GameTestHelper context,
+            BlockPos waterPos,
+            Direction direction,
+            BlockPos targetPos,
+            int movedAmount,
+            int maxRepetitions) {
+        for (int repetitions = 1; repetitions <= maxRepetitions; repetitions++) {
+            applyFlowErosion(context, waterPos, direction, movedAmount, 1);
+            if (context.getBlockState(targetPos).isAir()) {
+                return repetitions;
+            }
+        }
+        return maxRepetitions + 1;
     }
 
     private static void containCell(GameTestHelper context, BlockPos pos) {
