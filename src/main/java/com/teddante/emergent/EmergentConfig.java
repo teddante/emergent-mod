@@ -28,6 +28,7 @@ public class EmergentConfig {
     public boolean kineticImpacts = true;
     public boolean ballisticInertia = true;
     public boolean universalWardenSummoning = true;
+    public boolean dynamicExperience = true;
     public boolean finiteWaterFlow = true;
     public boolean rainAccumulation = true;
     public boolean hydraulicErosion = true;
@@ -71,6 +72,7 @@ public class EmergentConfig {
                 kineticImpacts = false;
                 ballisticInertia = false;
                 universalWardenSummoning = false;
+                dynamicExperience = false;
                 finiteWaterFlow = false;
                 rainAccumulation = false;
                 hydraulicErosion = false;
@@ -92,6 +94,7 @@ public class EmergentConfig {
                 kineticImpacts = true;
                 ballisticInertia = true;
                 universalWardenSummoning = false;
+                dynamicExperience = true;
                 finiteWaterFlow = true;
                 rainAccumulation = true;
                 hydraulicErosion = true;
@@ -113,6 +116,7 @@ public class EmergentConfig {
                 kineticImpacts = true;
                 ballisticInertia = true;
                 universalWardenSummoning = true;
+                dynamicExperience = true;
                 finiteWaterFlow = false;
                 rainAccumulation = true;
                 hydraulicErosion = true;
@@ -134,6 +138,7 @@ public class EmergentConfig {
                 kineticImpacts = true;
                 ballisticInertia = true;
                 universalWardenSummoning = true;
+                dynamicExperience = true;
                 finiteWaterFlow = true;
                 rainAccumulation = true;
                 hydraulicErosion = true;

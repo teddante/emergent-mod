@@ -125,6 +125,14 @@ public final class EmergentClothConfigScreen {
                 .build());
 
         features.addEntry(entries.startBooleanToggle(
+                        Component.translatable("emergent.config.dynamic_experience"),
+                        config.dynamicExperience)
+                .setDefaultValue(true)
+                .setTooltip(Component.translatable("emergent.config.dynamic_experience.tooltip"))
+                .setSaveConsumer(value -> config.dynamicExperience = value)
+                .build());
+
+        features.addEntry(entries.startBooleanToggle(
                         Component.translatable("emergent.config.finite_water_flow"),
                         config.finiteWaterFlow)
                 .setDefaultValue(true)

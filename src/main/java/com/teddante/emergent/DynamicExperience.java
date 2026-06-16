@@ -8,6 +8,9 @@ public final class DynamicExperience {
     }
 
     public static int baseExperienceReward(LivingEntity entity, int vanillaBaseReward) {
+        if (!EmergentConfig.get().dynamicExperience) {
+            return vanillaBaseReward;
+        }
         if (entity instanceof Player || entity.isBaby()) {
             return vanillaBaseReward;
         }
@@ -20,11 +23,18 @@ public final class DynamicExperience {
     }
 
     public static int baseRewardForVanillaProcessing(LivingEntity entity, int vanillaBaseReward) {
+        if (!EmergentConfig.get().dynamicExperience) {
+            return vanillaBaseReward;
+        }
         if (entity instanceof Player || entity.isBaby()) {
             return vanillaBaseReward;
         }
 
         return Math.max(vanillaBaseReward, baseExperienceReward(entity, vanillaBaseReward));
+    }
+
+    public static int rewardAfterVanillaProcessing(LivingEntity entity, int vanillaReward) {
+        return baseRewardForVanillaProcessing(entity, vanillaReward);
     }
 
     public static int baseExperienceFromMeasurements(

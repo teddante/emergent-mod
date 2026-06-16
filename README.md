@@ -146,6 +146,7 @@ Example:
   "kineticImpacts": true,
   "ballisticInertia": true,
   "universalWardenSummoning": true,
+  "dynamicExperience": true,
   "finiteWaterFlow": true,
   "rainAccumulation": true,
   "hydraulicErosion": true,
