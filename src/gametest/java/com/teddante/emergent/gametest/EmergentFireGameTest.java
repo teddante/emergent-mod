@@ -1053,6 +1053,23 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void wetnessFireDampeningToggleDisablesIgnitionDampening(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.WATER.defaultBlockState());
+        boolean wetnessFireDampening = EmergentConfig.get().wetnessFireDampening;
+
+        EmergentConfig.get().wetnessFireDampening = false;
+        try {
+            context.assertFalse(
+                    FireWetness.shouldDampenIgnition(context.getLevel(), context.absolutePos(TEST_POS), RandomSource.create(1)),
+                    "disabled wetness dampening should never block ignition even on wet blocks");
+        } finally {
+            EmergentConfig.get().wetnessFireDampening = wetnessFireDampening;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void fireReactionCategoriesCoverExpectedVanillaBlocks(GameTestHelper context) {
         context.assertTrue(MaterialReactions.canReactToFire(Blocks.GRASS_BLOCK.defaultBlockState()),
                 "grass block should be a reactive scorch surface");

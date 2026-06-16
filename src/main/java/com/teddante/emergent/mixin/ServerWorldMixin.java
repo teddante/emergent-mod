@@ -2,6 +2,7 @@ package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalScheduler;
+import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.FiniteFluidQuietCache;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
@@ -35,7 +36,12 @@ public abstract class ServerWorldMixin {
             CallbackInfo ci) {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
-        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos);
+        if (!oldState.equals(currentState)) {
+            EnvironmentalExposure.clear(serverWorld, pos);
+            return;
+        }
+
+        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos, "block_update");
     }
 
     @Inject(method = "updateNeighborsAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;Lnet/minecraft/world/level/redstone/Orientation;)V", at = @At("HEAD"))
@@ -46,6 +52,6 @@ public abstract class ServerWorldMixin {
             CallbackInfo ci) {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
-        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(serverWorld, pos, "neighbor_update");
     }
 }

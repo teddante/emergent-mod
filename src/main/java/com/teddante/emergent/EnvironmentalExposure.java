@@ -228,7 +228,10 @@ public final class EnvironmentalExposure {
             return heat(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         EmergentProfiler.recordHeat(world, state, heat);
         entry = entry.withHeat(entry.heat() + heat)
                 .withCold(Math.max(0.0, entry.cold() - heat))
@@ -243,7 +246,10 @@ public final class EnvironmentalExposure {
             return cold(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         double removedHeat = Math.min(entry.heat(), cold * COLD_COOLING_RATE);
         entry = entry.withCold(entry.cold() + cold)
                 .withHeat(entry.heat() - removedHeat)
@@ -262,7 +268,10 @@ public final class EnvironmentalExposure {
             return moisture(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         double removedHeat = Math.min(entry.heat(), moisture * WATER_COOLING_RATE);
         entry = entry.withMoisture(Math.min(MAX_MOISTURE, entry.moisture() + moisture))
                 .withHeat(entry.heat() - removedHeat)
@@ -282,7 +291,10 @@ public final class EnvironmentalExposure {
             return moisture(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withMoisture(Math.max(0.0, entry.moisture() - moisture)).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.moisture();
@@ -293,7 +305,10 @@ public final class EnvironmentalExposure {
             return heat(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withHeat(Math.max(0.0, entry.heat() - heat)).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.heat();
@@ -304,7 +319,10 @@ public final class EnvironmentalExposure {
             return cold(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withCold(Math.max(0.0, entry.cold() - cold)).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.cold();
@@ -387,7 +405,7 @@ public final class EnvironmentalExposure {
             double airExposureFactor,
             int samples) {
         if (state.isAir() || !state.getFluidState().isEmpty()) {
-            clear(world, pos);
+            clearIfPresent(world, pos);
             return;
         }
 
@@ -432,7 +450,10 @@ public final class EnvironmentalExposure {
             return hydraulicWear(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withHydraulicWear(entry.hydraulicWear() + wear).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.hydraulicWear();
@@ -443,7 +464,10 @@ public final class EnvironmentalExposure {
             return trafficWear(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withTrafficWear(entry.trafficWear() + wear).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.trafficWear();
@@ -454,7 +478,10 @@ public final class EnvironmentalExposure {
             return vegetationStress(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withVegetationStress(entry.vegetationStress() + stress).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.vegetationStress();
@@ -465,7 +492,10 @@ public final class EnvironmentalExposure {
             return structuralStress(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withStructuralStress(entry.structuralStress() + stress).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.structuralStress();
@@ -476,7 +506,10 @@ public final class EnvironmentalExposure {
             return suspendedSediment(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withSuspendedSedimentKilograms(entry.suspendedSedimentKilograms() + sedimentKilograms)
                 .withLastTick(world.getGameTime());
         put(world, pos, entry);
@@ -488,7 +521,10 @@ public final class EnvironmentalExposure {
             return ashResidue(world, pos, state);
         }
 
-        ExposureEntry entry = entryFor(world, pos, state);
+        ExposureEntry entry = writableEntryFor(world, pos, state);
+        if (entry == null) {
+            return 0.0;
+        }
         entry = entry.withAshResidueKilograms(entry.ashResidueKilograms() + ashKilograms).withLastTick(world.getGameTime());
         put(world, pos, entry);
         return entry.ashResidueKilograms();
@@ -577,7 +613,17 @@ public final class EnvironmentalExposure {
     }
 
     public static void consumeAshResidue(ServerLevel world, BlockPos pos, BlockState state, double ashKilograms) {
-        update(world, pos, entry -> entry.withAshResidueKilograms(Math.max(0.0, entry.ashResidueKilograms() - ashKilograms)));
+        if (ashKilograms <= 0.0) {
+            return;
+        }
+
+        ExposureEntry entry = currentEntry(world, pos, state);
+        if (entry == null) {
+            return;
+        }
+
+        put(world, pos, entry.withAshResidueKilograms(Math.max(0.0, entry.ashResidueKilograms() - ashKilograms))
+                .withLastTick(world.getGameTime()));
     }
 
     public static void washAshResidue(ServerLevel world, BlockPos pos, BlockState state, double washAmount) {
@@ -638,7 +684,14 @@ public final class EnvironmentalExposure {
         if (levelExposure != null) {
             levelExposure.remove(pos.asLong());
         }
-        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_clear");
+    }
+
+    private static void clearIfPresent(ServerLevel world, BlockPos pos) {
+        Map<Long, ExposureEntry> levelExposure = EXPOSURES.get(world);
+        if (levelExposure != null && levelExposure.remove(pos.asLong()) != null) {
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_clear");
+        }
     }
 
     private static double hydraulicWear(ServerLevel world, BlockPos pos, BlockState state) {
@@ -651,7 +704,12 @@ public final class EnvironmentalExposure {
         return entry == null ? 0.0 : entry.trafficWear();
     }
 
-    private static ExposureEntry entryFor(ServerLevel world, BlockPos pos, BlockState state) {
+    private static ExposureEntry writableEntryFor(ServerLevel world, BlockPos pos, BlockState state) {
+        if (!world.getBlockState(pos).equals(state)) {
+            clear(world, pos);
+            return null;
+        }
+
         ExposureEntry entry = currentEntry(world, pos, state);
         return entry == null ? new ExposureEntry(state, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, world.getGameTime()) : entry;
     }
@@ -668,8 +726,9 @@ public final class EnvironmentalExposure {
             return null;
         }
 
-        if (!entry.state().equals(state)) {
+        if (!entry.state().equals(state) || !entry.state().equals(world.getBlockState(pos))) {
             levelExposure.remove(key);
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_stale");
             return null;
         }
 
@@ -677,6 +736,7 @@ public final class EnvironmentalExposure {
         if (!aged.equals(entry)) {
             if (aged.isEmpty()) {
                 levelExposure.remove(key);
+                FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_decay");
                 return null;
             }
             levelExposure.put(key, aged);
@@ -704,7 +764,7 @@ public final class EnvironmentalExposure {
         }
 
         EXPOSURES.computeIfAbsent(world, ignored -> new HashMap<>()).put(pos.asLong(), entry);
-        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_update");
     }
 
     private static void update(ServerLevel world, BlockPos pos, EntryUpdater updater) {
@@ -718,6 +778,11 @@ public final class EnvironmentalExposure {
         if (entry == null) {
             return;
         }
+        if (!entry.state().equals(world.getBlockState(pos))) {
+            levelExposure.remove(key);
+            FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_stale");
+            return;
+        }
 
         ExposureEntry updated = updater.update(age(world, entry)).withLastTick(world.getGameTime());
         if (updated.isEmpty()) {
@@ -725,7 +790,7 @@ public final class EnvironmentalExposure {
         } else {
             levelExposure.put(key, updated);
         }
-        FiniteFluidQuietCache.invalidateNeighborhood(world, pos);
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_update");
     }
 
     private interface EntryUpdater {

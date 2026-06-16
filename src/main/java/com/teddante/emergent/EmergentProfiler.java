@@ -17,10 +17,12 @@ public final class EmergentProfiler {
     public static final String TRAFFIC = "traffic_wear";
 
     private static final boolean ENABLED = Boolean.getBoolean("emergent.profiler");
+    private static final boolean TRACK_POSITIONS = Boolean.getBoolean("emergent.profiler.positions");
     private static final long SLOW_TICK_MILLIS = Long.getLong("emergent.profiler.slowMs", 25L);
     private static final long SLOW_TICK_NANOS = SLOW_TICK_MILLIS * 1_000_000L;
     private static final int TOP_HEATED_BLOCKS = 4;
     private static final int TOP_HOT_CHUNKS = 8;
+    private static final int TOP_HOT_POSITIONS = 8;
     private static final Map<ServerLevel, TickStats> STATS = new WeakHashMap<>();
 
     private EmergentProfiler() {
@@ -32,6 +34,10 @@ public final class EmergentProfiler {
 
     public static long slowTickMillis() {
         return SLOW_TICK_MILLIS;
+    }
+
+    public static boolean trackPositions() {
+        return TRACK_POSITIONS;
     }
 
     public static long start() {
@@ -75,6 +81,15 @@ public final class EmergentProfiler {
         int chunkZ = pos.getZ() >> 4;
         String key = category + "@" + chunkX + "," + chunkZ;
         statsFor(world).chunks.merge(key, 1L, Long::sum);
+    }
+
+    public static void recordPosition(ServerLevel world, String category, BlockPos pos) {
+        if (!ENABLED || !TRACK_POSITIONS) {
+            return;
+        }
+
+        String key = category + "@" + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+        statsFor(world).positions.merge(key, 1L, Long::sum);
     }
 
     public static void recordHeat(ServerLevel world, BlockState state, double heat) {
@@ -125,6 +140,7 @@ public final class EmergentProfiler {
         private final Map<String, CategoryStats> categories = new HashMap<>();
         private final Map<String, Long> counters = new HashMap<>();
         private final Map<String, Long> chunks = new HashMap<>();
+        private final Map<String, Long> positions = new HashMap<>();
         private final Map<String, Double> heatByBlock = new HashMap<>();
 
         private TickStats(long gameTime) {
@@ -156,6 +172,14 @@ public final class EmergentProfiler {
                 chunks.entrySet().stream()
                         .sorted((left, right) -> Long.compare(right.getValue(), left.getValue()))
                         .limit(TOP_HOT_CHUNKS)
+                        .forEach(entry -> builder.append(entry.getKey()).append(":").append(entry.getValue()).append(" "));
+            }
+
+            if (!positions.isEmpty()) {
+                builder.append("positions=");
+                positions.entrySet().stream()
+                        .sorted((left, right) -> Long.compare(right.getValue(), left.getValue()))
+                        .limit(TOP_HOT_POSITIONS)
                         .forEach(entry -> builder.append(entry.getKey()).append(":").append(entry.getValue()).append(" "));
             }
 

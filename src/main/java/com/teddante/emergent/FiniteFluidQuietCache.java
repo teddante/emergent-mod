@@ -17,13 +17,31 @@ public final class FiniteFluidQuietCache {
     }
 
     public static String reason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        return reason(world, pos, fluid, amount, 0);
+    }
+
+    public static String reason(ServerLevel world, BlockPos pos, Fluid fluid, int amount, int environmentSignature) {
         Map<Long, CacheEntry> cache = CACHES.get(world);
         if (cache == null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_no_cache_misses", 1);
             return null;
         }
 
         CacheEntry entry = cache.get(pos.asLong());
-        if (entry == null || entry.fluid() != fluid || entry.amount() != amount) {
+        if (entry == null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_entry_misses", 1);
+            return null;
+        }
+        if (entry.fluid() != fluid) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_fluid_misses", 1);
+            return null;
+        }
+        if (entry.amount() != amount) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_amount_misses", 1);
+            return null;
+        }
+        if (entry.environmentSignature() != environmentSignature) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_signature_misses", 1);
             return null;
         }
 
@@ -31,6 +49,10 @@ public final class FiniteFluidQuietCache {
     }
 
     public static void remember(ServerLevel world, BlockPos pos, Fluid fluid, int amount, String reason) {
+        remember(world, pos, fluid, amount, reason, 0);
+    }
+
+    public static void remember(ServerLevel world, BlockPos pos, Fluid fluid, int amount, String reason, int environmentSignature) {
         Map<Long, CacheEntry> cache = CACHES.computeIfAbsent(
                 world,
                 ignored -> new LinkedHashMap<>(MAX_ENTRIES, 0.75F, true) {
@@ -43,21 +65,36 @@ public final class FiniteFluidQuietCache {
                         return shouldRemove;
                     }
                 });
-        cache.put(pos.asLong(), new CacheEntry(fluid, amount, reason));
+        cache.put(pos.asLong(), new CacheEntry(fluid, amount, reason, environmentSignature));
     }
 
     public static void invalidateNeighborhood(ServerLevel world, BlockPos pos) {
+        invalidateNeighborhood(world, pos, "unknown");
+    }
+
+    public static void invalidateNeighborhood(ServerLevel world, BlockPos pos, String reason) {
         Map<Long, CacheEntry> cache = CACHES.get(world);
         if (cache == null || cache.isEmpty()) {
             return;
         }
 
-        cache.remove(pos.asLong());
+        int removed = 0;
+        if (cache.remove(pos.asLong()) != null) {
+            removed++;
+        }
         for (Direction direction : Direction.values()) {
-            cache.remove(pos.relative(direction).asLong());
+            if (cache.remove(pos.relative(direction).asLong()) != null) {
+                removed++;
+            }
+        }
+
+        if (removed > 0) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_invalidations", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_invalidated_entries", removed);
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_invalidation_" + reason, 1);
         }
     }
 
-    private record CacheEntry(Fluid fluid, int amount, String reason) {
+    private record CacheEntry(Fluid fluid, int amount, String reason, int environmentSignature) {
     }
 }

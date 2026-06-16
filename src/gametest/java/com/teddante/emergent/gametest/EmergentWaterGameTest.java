@@ -4,14 +4,18 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EnvironmentalScheduler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.FiniteFluidQuietCache;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialPhysicsProfiles;
+import com.teddante.emergent.SurfaceWeatherPhysics;
 import com.teddante.emergent.ThermalPhysics;
 import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -21,6 +25,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
+import net.minecraft.world.level.material.LavaFluid;
+import net.minecraft.world.level.material.WaterFluid;
 
 import java.lang.reflect.Method;
 
@@ -34,6 +40,283 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         assertClose(EnvironmentalExposure.fluidAmountLiters(8), 1_000.0, "full source should be one thousand litres");
         assertClose(EnvironmentalExposure.fluidAmountCubicMeters(1), 0.125, "one fluid amount should be one eighth cubic metre");
         assertClose(EnvironmentalExposure.fluidAmountLiters(1), 125.0, "one fluid amount should be one hundred and twenty five litres");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void blockReplacementClearsEnvironmentalMemory(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.STONE);
+        BlockState originalState = context.getBlockState(WATER_POS);
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                originalState,
+                0.5);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                originalState,
+                1.0);
+        EnvironmentalExposure.addCold(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addHydraulicWear(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addTrafficWear(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addVegetationStress(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addStructuralStress(context.getLevel(), context.absolutePos(WATER_POS), originalState, 0.2);
+        EnvironmentalExposure.addSuspendedSediment(context.getLevel(), context.absolutePos(WATER_POS), originalState, 2.0);
+        EnvironmentalExposure.addAshResidue(context.getLevel(), context.absolutePos(WATER_POS), originalState, 2.0);
+
+        context.setBlock(WATER_POS, Blocks.GLASS);
+        context.setBlock(WATER_POS, Blocks.STONE);
+        BlockState restoredState = context.getBlockState(WATER_POS);
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "environmental moisture should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "environmental heat should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "environmental cold should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.addHydraulicWear(context.getLevel(), context.absolutePos(WATER_POS), restoredState, 0.0) == 0.0,
+                "hydraulic wear should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.addTrafficWear(context.getLevel(), context.absolutePos(WATER_POS), restoredState, 0.0) == 0.0,
+                "traffic wear should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.vegetationStress(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "vegetation stress should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.structuralStress(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "structural stress should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "suspended sediment should not survive block replacement and restoration");
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(WATER_POS), restoredState) == 0.0,
+                "ash residue should not survive block replacement and restoration");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void lazyEnvironmentalMemoryMismatchInvalidatesNearbyQuietFluid(GameTestHelper context) {
+        BlockPos surfacePos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(surfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos), 0.5);
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) != null,
+                "test fixture should start with cached quiet finite water");
+
+        EnvironmentalExposure.moisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                Blocks.DIRT.defaultBlockState());
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "discarding stale environmental memory should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void quietCacheInvalidationStaysLocal(GameTestHelper context) {
+        BlockPos changedPos = WATER_POS;
+        BlockPos neighborPos = WATER_POS.relative(Direction.NORTH);
+        BlockPos diagonalPos = WATER_POS.relative(Direction.NORTH).relative(Direction.EAST);
+        BlockPos absoluteChangedPos = context.absolutePos(changedPos);
+        BlockPos absoluteNeighborPos = context.absolutePos(neighborPos);
+        BlockPos absoluteDiagonalPos = context.absolutePos(diagonalPos);
+
+        FiniteFluidQuietCache.remember(context.getLevel(), absoluteChangedPos, Fluids.WATER, 1, "thin");
+        FiniteFluidQuietCache.remember(context.getLevel(), absoluteNeighborPos, Fluids.WATER, 1, "thin");
+        FiniteFluidQuietCache.remember(context.getLevel(), absoluteDiagonalPos, Fluids.WATER, 1, "thin");
+
+        FiniteFluidQuietCache.invalidateNeighborhood(context.getLevel(), absoluteChangedPos, "unknown");
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteChangedPos, Fluids.WATER, 1) == null,
+                "invalidating a changed block should wake a quiet fluid cached at that block");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteNeighborPos, Fluids.WATER, 1) == null,
+                "invalidating a changed block should wake directly adjacent quiet fluids");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteDiagonalPos, Fluids.WATER, 1) != null,
+                "quiet-cache invalidation should not spill into diagonal cells that cannot touch the changed block");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void environmentalMemoryWritesDiscardStaleState(GameTestHelper context) {
+        BlockPos surfacePos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                Blocks.STONE.defaultBlockState(),
+                0.5);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                Blocks.STONE.defaultBlockState(),
+                1.0);
+
+        context.assertTrue(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) == 0.0,
+                "write helpers should discard memory for a stale block state");
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) == 0.0,
+                "write helpers should not attach stale heat to the current block");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "discarding stale environmental writes should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void environmentalMemoryConsumesDiscardStaleState(GameTestHelper context) {
+        BlockPos sedimentPos = BELOW_WATER_POS;
+        BlockPos ashPos = sedimentPos.relative(Direction.EAST);
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(sedimentPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(ashPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(sedimentPos),
+                context.getBlockState(sedimentPos),
+                2.0);
+        EnvironmentalExposure.addAshResidue(
+                context.getLevel(),
+                context.absolutePos(ashPos),
+                context.getBlockState(ashPos),
+                2.0);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+
+        double consumedSediment = EnvironmentalExposure.consumeSuspendedSediment(
+                context.getLevel(),
+                context.absolutePos(sedimentPos),
+                Blocks.STONE.defaultBlockState());
+        EnvironmentalExposure.consumeAshResidue(
+                context.getLevel(),
+                context.absolutePos(ashPos),
+                Blocks.STONE.defaultBlockState(),
+                1.0);
+
+        context.assertTrue(consumedSediment == 0.0,
+                "consume helpers should not return sediment from stale block state memory");
+        context.assertTrue(
+                EnvironmentalExposure.suspendedSediment(context.getLevel(), context.absolutePos(sedimentPos), context.getBlockState(sedimentPos)) == 0.0,
+                "consume helpers should discard stale sediment memory");
+        context.assertTrue(
+                EnvironmentalExposure.ashResidue(context.getLevel(), context.absolutePos(ashPos), context.getBlockState(ashPos)) == 0.0,
+                "consume helpers should discard stale ash memory");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "discarding stale consumed memory should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void environmentalMemoryDecayWakesNearbyQuietFluid(GameTestHelper context) {
+        BlockPos surfacePos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(surfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addHeat(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos), 0.02);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) != null,
+                "test fixture should start with cached quiet finite water");
+
+        context.runAfterDelay(3, () -> {
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)) == 0.0,
+                    "small heat memory should decay away after elapsed ticks");
+            context.assertTrue(
+                    FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                    "decaying environmental memory to empty should wake nearby quiet finite water");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 20)
+    public void ambientFluidSampleOnlyWakesQuietFluidWhenMemoryWasCleared(GameTestHelper context) {
+        BlockPos memorylessWaterPos = WATER_POS;
+        BlockPos rememberedWaterPos = WATER_POS.relative(Direction.EAST, 2);
+        context.setBlock(memorylessWaterPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        context.setBlock(rememberedWaterPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(memorylessWaterPos),
+                Fluids.WATER,
+                7,
+                "thin");
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(memorylessWaterPos),
+                context.getBlockState(memorylessWaterPos),
+                0.8f,
+                false,
+                0);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(memorylessWaterPos), Fluids.WATER, 7) != null,
+                "ambient samples on fluid with no stored memory should not wake a quiet fluid cache");
+
+        EnvironmentalExposure.addMoisture(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                context.getBlockState(rememberedWaterPos),
+                0.2);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                Fluids.WATER,
+                7,
+                "thin");
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(rememberedWaterPos),
+                context.getBlockState(rememberedWaterPos),
+                0.8f,
+                false,
+                0);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(rememberedWaterPos), Fluids.WATER, 7) == null,
+                "ambient samples that clear stored fluid memory should still wake nearby quiet finite water");
         context.succeed();
     }
 
@@ -168,6 +451,71 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos)),
                 EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos)),
                 "batched ambient drying should remove the same moisture as repeated single samples");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void rainAccumulationToggleDisablesWeatherSampling(GameTestHelper context) {
+        BlockPos surfacePos = new BlockPos(5, 3, 4);
+        BlockPos samplePos = surfacePos.above();
+        context.setBlock(surfacePos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(samplePos, Blocks.AIR);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos), 0.6);
+        double beforeMoisture = EnvironmentalExposure.moisture(
+                context.getLevel(),
+                context.absolutePos(surfacePos),
+                context.getBlockState(surfacePos));
+        boolean rainAccumulation = EmergentConfig.get().rainAccumulation;
+
+        EmergentConfig.get().rainAccumulation = false;
+        try {
+            SurfaceWeatherPhysics.processWeatherSample(context.getLevel(), context.absolutePos(samplePos), 12);
+        } finally {
+            EmergentConfig.get().rainAccumulation = rainAccumulation;
+        }
+
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(surfacePos), context.getBlockState(surfacePos)),
+                beforeMoisture,
+                "disabled rain accumulation should leave existing surface weather memory untouched");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 40)
+    public void finiteFluidToggleGatesVanillaSourceConversion(GameTestHelper context) {
+        boolean finiteWaterFlow = EmergentConfig.get().finiteWaterFlow;
+        boolean waterSourceConversion = context.getLevel().getGameRules().get(GameRules.WATER_SOURCE_CONVERSION);
+        boolean lavaSourceConversion = context.getLevel().getGameRules().get(GameRules.LAVA_SOURCE_CONVERSION);
+
+        try {
+            EmergentConfig.get().finiteWaterFlow = true;
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.assertFalse(canConvertToSource(WaterFluid.class, Fluids.WATER, context.getLevel()),
+                    "enabled finite flow should block vanilla water source conversion");
+            context.assertFalse(canConvertToSource(LavaFluid.class, Fluids.LAVA, context.getLevel()),
+                    "enabled finite flow should block vanilla lava source conversion");
+
+            EmergentConfig.get().finiteWaterFlow = false;
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, true, context.getLevel().getServer());
+            context.assertTrue(canConvertToSource(WaterFluid.class, Fluids.WATER, context.getLevel()),
+                    "disabled finite flow should restore vanilla water source conversion when the gamerule allows it");
+            context.assertTrue(canConvertToSource(LavaFluid.class, Fluids.LAVA, context.getLevel()),
+                    "disabled finite flow should restore vanilla lava source conversion when the gamerule allows it");
+
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, false, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, false, context.getLevel().getServer());
+            context.assertFalse(canConvertToSource(WaterFluid.class, Fluids.WATER, context.getLevel()),
+                    "disabled finite flow should still respect the vanilla water source conversion gamerule");
+            context.assertFalse(canConvertToSource(LavaFluid.class, Fluids.LAVA, context.getLevel()),
+                    "disabled finite flow should still respect the vanilla lava source conversion gamerule");
+        } finally {
+            EmergentConfig.get().finiteWaterFlow = finiteWaterFlow;
+            context.getLevel().getGameRules().set(GameRules.WATER_SOURCE_CONVERSION, waterSourceConversion, context.getLevel().getServer());
+            context.getLevel().getGameRules().set(GameRules.LAVA_SOURCE_CONVERSION, lavaSourceConversion, context.getLevel().getServer());
+        }
+
         context.succeed();
     }
 
@@ -423,6 +771,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 40)
+    public void thinWaterLayerFallsBeforeSettling(GameTestHelper context) {
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(fluidAmount(context, BELOW_WATER_POS, Fluids.WATER) == 2,
+                    "thin finite water should obey gravity before being treated as a settled puddle");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
     public void equalFiniteWaterLayerStaysQuietAndConservesMass(GameTestHelper context) {
         for (int x = -2; x <= 2; x++) {
             for (int z = -2; z <= 2; z++) {
@@ -459,6 +822,21 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
             context.assertTrue(totalMass == 8, "flat finite-lava spread should conserve one source volume: " + totalMass);
             context.assertTrue(countFluidCells(context, WATER_POS, 1, Fluids.LAVA) == 5,
                     "one lava source should settle into the center and four horizontal neighbors");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void thinLavaLayerFallsBeforeSettling(GameTestHelper context) {
+        context.setBlock(WATER_POS, Fluids.LAVA.getFlowing(3, false).createLegacyBlock());
+        context.setBlock(BELOW_WATER_POS, Blocks.AIR);
+        containCell(context, BELOW_WATER_POS);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.LAVA, Fluids.LAVA.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(40, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.assertTrue(fluidAmount(context, BELOW_WATER_POS, Fluids.LAVA) == 3,
+                    "thin finite lava should obey gravity before being treated as a settled layer");
             context.succeed();
         });
     }
@@ -669,6 +1047,165 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void finiteWaterThermalSignatureTracksNeighborHeatSources(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK.defaultBlockState());
+        int heatedNeighborSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertTrue(quietSignature != heatedNeighborSignature,
+                "neighboring heat sources should change the finite-water thermal cache signature");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sourceWaterThermalSignatureIgnoresIrrelevantNeighborHeat(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK.defaultBlockState());
+        int neighborHeatSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertTrue(quietSignature == neighborHeatSignature,
+                "source-equivalent water should not churn its thermal cache signature for adjacent heat that cannot evaporate it");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sourceWaterThermalSignatureIgnoresStandaloneStoredHeat(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        int heatedSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertTrue(quietSignature == heatedSignature,
+                "source-equivalent water should not churn its thermal cache signature for stored heat unless cold could freeze it");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sourceWaterThermalSignatureTracksHeatWhenColdCanFreeze(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState());
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.6);
+
+        int coldSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        int heatedColdSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertTrue(coldSignature != heatedColdSignature,
+                "stored heat should still change source-water signatures when it can block a stored-cold freeze");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void quietFluidCacheRejectsStaleThermalSignature(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        BlockPos absoluteWaterPos = context.absolutePos(WATER_POS);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                absoluteWaterPos,
+                Fluids.WATER,
+                2,
+                "thin",
+                10);
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteWaterPos, Fluids.WATER, 2, 10) != null,
+                "matching thermal signatures should allow a finite-water quiet cache hit");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), absoluteWaterPos, Fluids.WATER, 2, 11) == null,
+                "changed thermal signatures should force finite water to re-check heat and cold state");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void quietFluidCacheRejectsAgedThermalSignature(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        BlockPos absoluteWaterPos = context.absolutePos(WATER_POS);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                absoluteWaterPos,
+                context.getBlockState(WATER_POS),
+                0.36);
+
+        int heatedSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                absoluteWaterPos,
+                2);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                absoluteWaterPos,
+                Fluids.WATER,
+                2,
+                "thin",
+                heatedSignature);
+
+        context.runAfterDelay(3, () -> {
+            int cooledSignature = ThermalPhysics.finiteWaterThermalSignature(
+                    context.getLevel(),
+                    absoluteWaterPos,
+                    2);
+            context.assertTrue(heatedSignature != cooledSignature,
+                    "aging stored heat below the evaporation threshold should change the finite-water thermal signature");
+            context.assertTrue(EnvironmentalExposure.heat(context.getLevel(), absoluteWaterPos, context.getBlockState(WATER_POS)) > 0.0,
+                    "aged heat should still exist so the cache rejection is not relying on empty-memory cleanup");
+            context.assertTrue(
+                    FiniteFluidQuietCache.reason(context.getLevel(), absoluteWaterPos, Fluids.WATER, 2, cooledSignature) == null,
+                    "changed aged thermal signatures should force finite water to re-check heat and cold state");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 20)
     public void lavaContactAddsStoredHeatToAdjacentStone(GameTestHelper context) {
         BlockPos stonePos = WATER_POS.relative(Direction.EAST);
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
@@ -684,6 +1221,30 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                 "lava contact should add shared stored heat to adjacent solid blocks");
         context.assertBlockPresent(Blocks.STONE, stonePos);
         context.succeed();
+    }
+
+    @GameTest(maxTicks = 80)
+    public void cachedQuietLavaStillAppliesContactHeat(GameTestHelper context) {
+        BlockPos lavaPos = WATER_POS;
+        BlockPos stonePos = lavaPos.relative(Direction.EAST);
+        containCell(context, lavaPos);
+        context.setBlock(lavaPos, Blocks.LAVA.defaultBlockState());
+        context.setBlock(stonePos, Blocks.STONE.defaultBlockState());
+
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(lavaPos),
+                Fluids.LAVA,
+                8,
+                "stable_source");
+        context.getLevel().scheduleTick(context.absolutePos(lavaPos), Fluids.LAVA, 1);
+
+        context.runAfterDelay(45, () -> {
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(stonePos), context.getBlockState(stonePos)) > 0.0,
+                    "cached quiet finite lava should still apply budgeted contact heat before skipping movement scans");
+            context.succeed();
+        });
     }
 
     @GameTest(maxTicks = 20)
@@ -1435,6 +1996,16 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         FluidState fluidState = context.getBlockState(pos).getFluidState();
         if (!fluidState.isEmpty()) {
             context.getLevel().scheduleTick(context.absolutePos(pos), fluidState.getType(), 1);
+        }
+    }
+
+    private static boolean canConvertToSource(Class<?> fluidClass, Fluid fluid, ServerLevel level) {
+        try {
+            Method method = fluidClass.getDeclaredMethod("canConvertToSource", ServerLevel.class);
+            method.setAccessible(true);
+            return (Boolean) method.invoke(fluid, level);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not inspect source conversion hook for " + fluidClass.getSimpleName(), exception);
         }
     }
 

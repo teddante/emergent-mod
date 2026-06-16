@@ -91,6 +91,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         try {
         EmergentProfiler.count(world, "finite_fluid_ticks", 1);
         EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_FLUIDS, pos);
+        EmergentProfiler.recordPosition(world, EmergentProfiler.FINITE_FLUIDS, pos);
 
         int currentLevel = fluidState.getAmount();
         if (currentLevel <= 0)
@@ -114,14 +115,10 @@ public abstract class FlowableFluidMixin extends Fluid {
             return;
         }
 
+        boolean reactiveLava = isLava && EmergentConfig.get().materialReactions;
         String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
-        if (cachedQuietTickReason != null) {
-            EmergentProfiler.count(world, "finite_fluid_quiet_cache_hits", 1);
-            if (isWater) {
-                EmergentProfiler.count(world, "finite_fluid_water_thermal_cache_skips", 1);
-            }
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + cachedQuietTickReason + "_skips", 1);
+        if (cachedQuietTickReason != null && !reactiveLava) {
+            emergent$countFiniteFluidQuietCacheHit(world, isWater, cachedQuietTickReason);
             return;
         }
 
@@ -156,6 +153,20 @@ public abstract class FlowableFluidMixin extends Fluid {
             }
         }
 
+        boolean hasFiniteFluidWorkSlot = false;
+        if (reactiveLava) {
+            if (!emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
+                return;
+            }
+            hasFiniteFluidWorkSlot = true;
+            EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
+            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
+            if (cachedQuietTickReason != null) {
+                emergent$countFiniteFluidQuietCacheHit(world, false, cachedQuietTickReason);
+                return;
+            }
+        }
+
         if (currentLevel >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
             EmergentProfiler.count(world, "finite_fluid_stable_sources", 1);
             emergent$rememberFiniteFluidQuietReason(world, pos, fluid, currentLevel, "stable_source");
@@ -170,13 +181,8 @@ public abstract class FlowableFluidMixin extends Fluid {
             return;
         }
 
-        if (!emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
+        if (!hasFiniteFluidWorkSlot && !emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
             return;
-        }
-
-        if (isLava && EmergentConfig.get().materialReactions) {
-            EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
-            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
         }
 
         String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
@@ -842,13 +848,9 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private String emergent$cheapFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
-            if (WaterPhysics.isWater(fluid)
-                    && EmergentConfig.get().hydraulicErosion
-                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
-                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
-            }
-            return "thin";
+        String settledThinReason = emergent$settledThinLayerReason(world, pos, fluid, amount);
+        if (settledThinReason != null) {
+            return settledThinReason;
         }
 
         BlockState state = world.getBlockState(pos);
@@ -861,13 +863,9 @@ public abstract class FlowableFluidMixin extends Fluid {
 
     @Unique
     private String emergent$finiteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
-            if (WaterPhysics.isWater(fluid)
-                    && EmergentConfig.get().hydraulicErosion
-                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
-                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
-            }
-            return "thin";
+        String settledThinReason = emergent$settledThinLayerReason(world, pos, fluid, amount);
+        if (settledThinReason != null) {
+            return settledThinReason;
         }
 
         if (amount >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
@@ -919,13 +917,60 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
+    private String emergent$settledThinLayerReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (amount > WaterPhysics.settledThinLayerAmount(fluid)) {
+            return null;
+        }
+
+        BlockPos below = pos.below();
+        BlockState belowState = world.getBlockState(below);
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
+            return null;
+        }
+        if (!WaterPhysics.isSameFluid(fluid, belowFluidState)
+                || belowFluidState.getAmount() < 8) {
+            boolean belowWaterloggable = isWaterloggableTarget(world, below, belowState);
+            if (emergent$canFlowInto(world, below, belowState, belowFluidState, fluid, Direction.DOWN)
+                    && (!belowWaterloggable || amount >= 8)) {
+                return null;
+            }
+        }
+
+        if (WaterPhysics.isWater(fluid)
+                && EmergentConfig.get().hydraulicErosion
+                && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
+            EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
+        }
+        return "thin";
+    }
+
+    @Unique
     private String emergent$cachedFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
-        return FiniteFluidQuietCache.reason(world, pos, fluid, amount);
+        return FiniteFluidQuietCache.reason(world, pos, fluid, amount, emergent$finiteFluidEnvironmentSignature(world, pos, fluid, amount));
+    }
+
+    @Unique
+    private void emergent$countFiniteFluidQuietCacheHit(ServerLevel world, boolean water, String reason) {
+        EmergentProfiler.count(world, "finite_fluid_quiet_cache_hits", 1);
+        if (water) {
+            EmergentProfiler.count(world, "finite_fluid_water_thermal_cache_skips", 1);
+        }
+        EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+        EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + reason + "_skips", 1);
     }
 
     @Unique
     private void emergent$rememberFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount, String reason) {
-        FiniteFluidQuietCache.remember(world, pos, fluid, amount, reason);
+        FiniteFluidQuietCache.remember(world, pos, fluid, amount, reason, emergent$finiteFluidEnvironmentSignature(world, pos, fluid, amount));
+    }
+
+    @Unique
+    private int emergent$finiteFluidEnvironmentSignature(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (!WaterPhysics.isWater(fluid)) {
+            return 0;
+        }
+        return ThermalPhysics.finiteWaterThermalSignature(world, pos, amount);
     }
 
     @Unique

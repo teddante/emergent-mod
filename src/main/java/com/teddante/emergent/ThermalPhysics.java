@@ -154,13 +154,17 @@ public final class ThermalPhysics {
 
         int signature = world.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos) ? 1 : 0;
         BlockState state = world.getBlockState(pos);
-        signature = 31 * signature + thermalHeatBucket(EnvironmentalExposure.heat(world, pos, state));
-        signature = 31 * signature + thermalColdBucket(EnvironmentalExposure.cold(world, pos, state));
+        double waterHeat = EnvironmentalExposure.heat(world, pos, state);
+        int waterColdBucket = thermalColdBucket(EnvironmentalExposure.cold(world, pos, state));
+        signature = 31 * signature + waterColdBucket;
+        signature = 31 * signature + (amount <= 4 || waterColdBucket > 0 ? thermalHeatBucket(waterHeat) : 0);
 
-        BlockPos supportPos = pos.below();
-        BlockState supportState = world.getBlockState(supportPos);
-        signature = 31 * signature + thermalHeatBucket(EnvironmentalExposure.heat(world, supportPos, supportState));
-        signature = 31 * signature + thermalColdBucket(EnvironmentalExposure.cold(world, supportPos, supportState));
+        if (amount <= 4) {
+            BlockPos supportPos = pos.below();
+            BlockState supportState = world.getBlockState(supportPos);
+            signature = 31 * signature + thermalHeatBucket(EnvironmentalExposure.heat(world, supportPos, supportState));
+            signature = 31 * signature + neighboringHeat(world, pos);
+        }
         return signature;
     }
 

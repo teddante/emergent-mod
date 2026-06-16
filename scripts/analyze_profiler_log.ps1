@@ -23,7 +23,7 @@ function Get-ProfilerTick($Line) {
 }
 
 function Add-Counters($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "counters=(.*?)(?= chunks=| heat=|\))") {
+    if ($Line -notmatch "counters=(.*?)(?= chunks=| positions=| heat=|\))") {
         return
     }
 
@@ -39,12 +39,28 @@ function Add-Counters($Line, [hashtable]$Totals) {
 }
 
 function Add-Chunks($Line, [hashtable]$Totals) {
-    if ($Line -notmatch "chunks=(.*?)(?= heat=|\))") {
+    if ($Line -notmatch "chunks=(.*?)(?= positions=| heat=|\))") {
         return
     }
 
     $chunkText = $Matches[1]
     foreach ($match in [regex]::Matches($chunkText, "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+):([0-9]+)")) {
+        $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
+        $value = [long]$match.Groups[3].Value
+        if (!$Totals.ContainsKey($name)) {
+            $Totals[$name] = 0L
+        }
+        $Totals[$name] += $value
+    }
+}
+
+function Add-Positions($Line, [hashtable]$Totals) {
+    if ($Line -notmatch "positions=(.*?)(?= heat=|\))") {
+        return
+    }
+
+    $positionText = $Matches[1]
+    foreach ($match in [regex]::Matches($positionText, "([A-Za-z0-9_]+)@(-?[0-9]+,-?[0-9]+,-?[0-9]+):([0-9]+)")) {
         $name = "$($match.Groups[1].Value)@$($match.Groups[2].Value)"
         $value = [long]$match.Groups[3].Value
         if (!$Totals.ContainsKey($name)) {
@@ -69,6 +85,17 @@ function Add-TopChunkSummary([System.Collections.Generic.List[string]]$Summary, 
     if ($topChunks.Count -gt 0) {
         $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
         $Summary.Add("  ${Label}=$chunkText")
+    }
+}
+
+function Add-TopPositionSummary([System.Collections.Generic.List[string]]$Summary, [hashtable]$PositionTotals, [string]$Prefix, [string]$Label, [int]$Top) {
+    $topPositions = @($PositionTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "$Prefix@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First ([Math]::Min(3, $Top)))
+    if ($topPositions.Count -gt 0) {
+        $positionText = ($topPositions | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+        $Summary.Add("  ${Label}=$positionText")
     }
 }
 
@@ -102,6 +129,15 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $stableSources = Get-CounterTotal $CounterTotals "finite_fluid_stable_sources"
     $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
     $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
+    $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheNoCacheMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_no_cache_misses"
+    $quietCacheEntryMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_entry_misses"
+    $quietCacheFluidMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_fluid_misses"
+    $quietCacheAmountMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_amount_misses"
+    $quietCacheSignatureMisses = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_signature_misses"
+    $quietCacheInvalidations = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidations"
+    $quietCacheInvalidatedEntries = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidated_entries"
+    $quietCacheEvictions = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_evictions"
 
     $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions + $lavaHeat
     $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
@@ -115,7 +151,13 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
             $CounterTotals.ContainsKey("finite_fluid_inspection_deferrals") -or
             $CounterTotals.ContainsKey("finite_fluid_inspection_chunk_claims") -or
             $CounterTotals.ContainsKey("finite_fluid_inspection_chunk_deferrals")
-    $hasQuietCacheCounters = $CounterTotals.ContainsKey("finite_fluid_quiet_cache_hits")
+    $hasQuietCacheCounters = $CounterTotals.ContainsKey("finite_fluid_quiet_cache_hits") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_cache_entry_misses") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_cache_no_cache_misses") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_cache_fluid_misses") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_cache_amount_misses") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_cache_signature_misses") -or
+            $CounterTotals.ContainsKey("finite_fluid_quiet_cache_invalidations")
     $quietDenominator = [Math]::Max(1L, $activeSchedules + $quietSkips)
     $quietPercent = ($quietSkips * 100.0) / $quietDenominator
     $workPercent = ($workEvents * 100.0) / [Math]::Max(1L, $finiteTicks)
@@ -129,8 +171,8 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
                 $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
     $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
                 $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
-    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} thermalQuietSkips={4} thermalCacheSkips={5} horizontalMoves={6} downwardMoves={7} thermalReactions={8}" -f `
-                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} noCacheMisses={5} entryMisses={6} fluidMisses={7} amountMisses={8} signatureMisses={9} quietCacheInvalidations={10} quietCacheInvalidatedEntries={11} quietCacheEvictions={12} thermalQuietSkips={13} thermalCacheSkips={14} horizontalMoves={15} downwardMoves={16} thermalReactions={17}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheNoCacheMisses, $quietCacheEntryMisses, $quietCacheFluidMisses, $quietCacheAmountMisses, $quietCacheSignatureMisses, $quietCacheInvalidations, $quietCacheInvalidatedEntries, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
     if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
         $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
     }
@@ -156,6 +198,20 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
     $topQuiet = $quietReasons | Where-Object { $_.Value -gt 0 } | Select-Object -First 1
     if ($topQuiet) {
         $Summary.Add("  topQuietReason=$($topQuiet.Name):$($topQuiet.Value)")
+    }
+
+    $invalidationReasons = @(
+        @{ Name = "environmental_memory_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_update" },
+        @{ Name = "environmental_memory_stale"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_stale" },
+        @{ Name = "environmental_memory_decay"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_decay" },
+        @{ Name = "environmental_memory_clear"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_environmental_memory_clear" },
+        @{ Name = "block_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_block_update" },
+        @{ Name = "neighbor_update"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_neighbor_update" },
+        @{ Name = "unknown"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_invalidation_unknown" }
+    ) | Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }
+    $topInvalidation = $invalidationReasons | Where-Object { $_.Value -gt 0 } | Select-Object -First 1
+    if ($topInvalidation) {
+        $Summary.Add("  topInvalidationReason=$($topInvalidation.Name):$($topInvalidation.Value)")
     }
 
     Add-TopChunkSummary $Summary $ChunkTotals "finite_fluids" "hottestFiniteFluidChunks" $Top
@@ -224,11 +280,14 @@ function Get-StartupDiagnostics([array]$LogLines) {
     $chunkBudget = ""
     $inspectionBudget = ""
     $inspectionChunkBudget = ""
+    $positionHotspots = ""
 
     foreach ($line in $LogLines) {
         if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
             $profilerEnabled = $true
             $slowMs = $Matches[1]
+        } elseif ($line -match "Emergent profiler position hotspots: (enabled|disabled)") {
+            $positionHotspots = $Matches[1]
         } elseif ($line -match "Emergent finite fluid work budget: ([0-9]+) cells/tick") {
             $activeBudget = $Matches[1]
         } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
@@ -246,6 +305,7 @@ function Get-StartupDiagnostics([array]$LogLines) {
         ChunkBudget = $chunkBudget
         InspectionBudget = $inspectionBudget
         InspectionChunkBudget = $inspectionChunkBudget
+        PositionHotspots = $positionHotspots
     }
 }
 
@@ -288,9 +348,11 @@ $profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt 
 $lagLines = @($logLines | Where-Object { $_ -like "*Can't keep up!*" })
 $counterTotals = @{}
 $chunkTotals = @{}
+$positionTotals = @{}
 foreach ($line in $profilerLines) {
     Add-Counters $line $counterTotals
     Add-Chunks $line $chunkTotals
+    Add-Positions $line $positionTotals
 }
 
 $worstProfilerLines = @($profilerLines |
@@ -301,9 +363,10 @@ $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log summary")
 $summary.Add("Log: $resolvedPath")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
-$summary.Add(("Startup: profilerEnabled={0} slowMs={1} finiteFluidBudget={2} finiteFluidChunkBudget={3} finiteFluidInspectionBudget={4} finiteFluidInspectionChunkBudget={5}" -f `
+$summary.Add(("Startup: profilerEnabled={0} slowMs={1} positionHotspots={2} finiteFluidBudget={3} finiteFluidChunkBudget={4} finiteFluidInspectionBudget={5} finiteFluidInspectionChunkBudget={6}" -f `
             $startup.ProfilerEnabled,
             $(if ($startup.SlowMs -ne "") { $startup.SlowMs } else { "-" }),
+            $(if ($startup.PositionHotspots -ne "") { $startup.PositionHotspots } else { "-" }),
             $(if ($startup.ActiveBudget -ne "") { $startup.ActiveBudget } else { "-" }),
             $(if ($startup.ChunkBudget -ne "") { $startup.ChunkBudget } else { "-" }),
             $(if ($startup.InspectionBudget -ne "") { $startup.InspectionBudget } else { "-" }),
@@ -330,6 +393,7 @@ if ($counterTotals.Count -eq 0) {
 }
 
 Add-FiniteFluidDiagnosis $summary $counterTotals $chunkTotals $Top
+Add-TopPositionSummary $summary $positionTotals "finite_fluids" "hottestFiniteFluidPositions" $Top
 Add-LagCorrelation $summary $lagLines $profilerLines
 
 $summary.Add("")
@@ -338,6 +402,17 @@ if ($chunkTotals.Count -eq 0) {
     $summary.Add("  none")
 } else {
     $chunkTotals.GetEnumerator() |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First $Top |
+        ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
+}
+
+$summary.Add("")
+$summary.Add("Top position hotspots:")
+if ($positionTotals.Count -eq 0) {
+    $summary.Add("  none")
+} else {
+    $positionTotals.GetEnumerator() |
         Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
         Select-Object -First $Top |
         ForEach-Object { $summary.Add("  $($_.Name): $($_.Value)") }
