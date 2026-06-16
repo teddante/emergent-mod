@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest an emergent gameplay system or compatibility improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: concept
+    attributes:
+      label: Concept
+      description: What should happen, and why does it fit Emergent's system-driven philosophy?
+    validations:
+      required: true
+  - type: textarea
+    id: expected-interactions
+    attributes:
+      label: Expected interactions
+      description: Which existing systems, vanilla mechanics, tags, or mods should this interact with?
+      placeholder: Fire, water, explosions, inventories, mobs, blocks, tags, gamerules...
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration and compatibility
+      description: Should it be configurable? Are there likely compatibility risks?
+  - type: textarea
+    id: references
+    attributes:
+      label: References
+      description: Add examples, videos, mod links, or vanilla behavior notes if useful.

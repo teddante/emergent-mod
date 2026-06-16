@@ -1,7 +1,8 @@
 param(
     [switch]$SkipBuild,
     [switch]$CopyToPrism,
-    [string]$PrismMinecraftDir = "C:\Users\edwar\AppData\Roaming\PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
+    [switch]$RequireMinecraftSources,
+    [string]$PrismMinecraftDir = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,11 +13,97 @@ $MixinConfigPath = Join-Path $ProjectRoot "src\main\resources\emergent.mixins.js
 $MixinSourceDir = Join-Path $ProjectRoot "src\main\java\com\teddante\emergent\mixin"
 $ResourcesDir = Join-Path $ProjectRoot "src\main\resources"
 $McSourceDir = Join-Path $ProjectRoot "mc-src"
-$JarPath = Join-Path $ProjectRoot "build\libs\emergent-1.0.0.jar"
+$GradlePropertiesPath = Join-Path $ProjectRoot "gradle.properties"
+$GitHubDir = Join-Path $ProjectRoot ".github"
+$ExtractSourcesScript = Join-Path $ProjectRoot "scripts\extract_sources.ps1"
+$GradleWrapper = if ([System.Environment]::OSVersion.Platform -eq [System.PlatformID]::Win32NT) {
+    Join-Path $ProjectRoot "gradlew.bat"
+} else {
+    Join-Path $ProjectRoot "gradlew"
+}
+
+function Read-GradleProperties {
+    if (-not (Test-Path -LiteralPath $GradlePropertiesPath)) {
+        throw "Missing Gradle properties file: $GradlePropertiesPath"
+    }
+
+    $properties = @{}
+    Get-Content -LiteralPath $GradlePropertiesPath | ForEach-Object {
+        $line = $_.Trim()
+        if ([string]::IsNullOrWhiteSpace($line) -or $line.StartsWith("#")) {
+            return
+        }
+
+        $separator = $line.IndexOf("=")
+        if ($separator -lt 1) {
+            return
+        }
+
+        $key = $line.Substring(0, $separator).Trim()
+        $value = $line.Substring($separator + 1).Trim()
+        $properties[$key] = $value
+    }
+
+    return $properties
+}
+
+$GradleProperties = Read-GradleProperties
+$ArchiveBaseName = $GradleProperties["archives_base_name"]
+$ModVersion = $GradleProperties["mod_version"]
+if ([string]::IsNullOrWhiteSpace($ArchiveBaseName) -or [string]::IsNullOrWhiteSpace($ModVersion)) {
+    throw "gradle.properties must define archives_base_name and mod_version."
+}
+if ($ModVersion -notmatch "^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$") {
+    throw "mod_version must follow SemVer-style MAJOR.MINOR.PATCH, with optional pre-release/build metadata."
+}
+$JarFileName = "$ArchiveBaseName-$ModVersion.jar"
+$JarPath = Join-Path $ProjectRoot "build\libs\$JarFileName"
 
 function Write-Step {
     param([string]$Message)
     Write-Host "==> $Message"
+}
+
+function Test-MinecraftSourceCache {
+    $requiredSources = @(
+        "net\minecraft\block\Blocks.java",
+        "net\minecraft\block\BlockKeys.java",
+        "net\minecraft\item\Items.java",
+        "net\minecraft\item\ItemKeys.java"
+    )
+
+    foreach ($relativePath in $requiredSources) {
+        if (-not (Test-Path -LiteralPath (Join-Path $McSourceDir $relativePath))) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Ensure-MinecraftSourceCache {
+    if (Test-MinecraftSourceCache) {
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $ExtractSourcesScript)) {
+        throw "Minecraft source cache is missing and extract_sources.ps1 was not found: $ExtractSourcesScript"
+    }
+
+    Write-Step "Generating Minecraft source cache"
+    & $GradleWrapper genSources
+    if ($LASTEXITCODE -ne 0) {
+        throw "Gradle genSources failed."
+    }
+
+    & $ExtractSourcesScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Minecraft source extraction failed."
+    }
+
+    if (-not (Test-MinecraftSourceCache)) {
+        throw "Minecraft source cache is still missing required registry sources after extraction."
+    }
 }
 
 function Assert-MixinConfig {
@@ -88,6 +175,15 @@ function Assert-ResourceHygiene {
         }
     }
 
+    if (-not (Test-MinecraftSourceCache)) {
+        if ($RequireMinecraftSources) {
+            Ensure-MinecraftSourceCache
+        } else {
+            Write-Warning "Minecraft source cache is missing; skipping required vanilla registry ID validation. Run scripts/extract_sources.ps1 or pass -RequireMinecraftSources for the full local gate."
+            return
+        }
+    }
+
     $blocksPath = Join-Path $McSourceDir "net\minecraft\block\Blocks.java"
     $blockKeysPath = Join-Path $McSourceDir "net\minecraft\block\BlockKeys.java"
     $itemsPath = Join-Path $McSourceDir "net\minecraft\item\Items.java"
@@ -146,6 +242,83 @@ function Assert-ResourceHygiene {
     }
 }
 
+function Assert-RepositoryWorkflowHygiene {
+    Write-Step "Checking GitHub workflow hygiene"
+
+    $requiredFiles = @(
+        ".github\workflows\build.yml",
+        ".github\workflows\release.yml",
+        ".github\workflows\dependency-graph.yml",
+        ".github\ISSUE_TEMPLATE\bug_report.yml",
+        ".github\ISSUE_TEMPLATE\feature_request.yml",
+        ".github\ISSUE_TEMPLATE\config.yml",
+        ".github\pull_request_template.md",
+        ".github\release.yml",
+        "CHANGELOG.md",
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "docs\REPOSITORY_MAINTENANCE.md",
+        "docs\VERSIONING.md",
+        "AGENTS.md"
+    )
+
+    foreach ($relativePath in $requiredFiles) {
+        $path = Join-Path $ProjectRoot $relativePath
+        if (-not (Test-Path -LiteralPath $path)) {
+            throw "Required repository workflow file is missing: $relativePath"
+        }
+    }
+
+    $trackedFiles = & git -C $ProjectRoot ls-files
+    if ($LASTEXITCODE -ne 0) {
+        throw "git ls-files failed while checking repository workflow hygiene."
+    }
+    if ($trackedFiles | Where-Object { $_ -ceq "agents.md" }) {
+        throw "Use AGENTS.md with this exact casing so GitHub/Linux tooling sees the agent instructions."
+    }
+
+    $workflowText = Get-ChildItem -LiteralPath (Join-Path $GitHubDir "workflows") -Filter "*.yml" | ForEach-Object {
+        Get-Content -LiteralPath $_.FullName -Raw
+    }
+    $workflowText = $workflowText -join "`n"
+
+    if ($workflowText -match "java-version:\s*['`"]?21") {
+        throw "GitHub workflows must not use Java 21 for Minecraft 26.1.x. Use Java 25."
+    }
+
+    $buildWorkflow = Get-Content -LiteralPath (Join-Path $GitHubDir "workflows\build.yml") -Raw
+    foreach ($required in @("actions/checkout@v6", "actions/setup-java@v5", "java-version: `"25`"", "gradle/actions/setup-gradle@v6", "./scripts/dev_smoke.ps1", "!build/libs/*-sources.jar")) {
+        if (-not $buildWorkflow.Contains($required)) {
+            throw "Build workflow is missing expected entry: $required"
+        }
+    }
+
+    $releaseWorkflow = Get-Content -LiteralPath (Join-Path $GitHubDir "workflows\release.yml") -Raw
+    foreach ($required in @("tags:", '"v*"', "gh release create", "--verify-tag", "--generate-notes")) {
+        if (-not $releaseWorkflow.Contains($required)) {
+            throw "Release workflow is missing expected entry: $required"
+        }
+    }
+
+    $dependencyWorkflow = Get-Content -LiteralPath (Join-Path $GitHubDir "workflows\dependency-graph.yml") -Raw
+    if (-not $dependencyWorkflow.Contains("gradle/actions/dependency-submission@v6")) {
+        throw "Dependency graph workflow must submit Gradle dependencies to GitHub."
+    }
+
+    $gradleProperties = Get-Content -LiteralPath $GradlePropertiesPath -Raw
+    if ($gradleProperties -match "loom_version=.*SNAPSHOT") {
+        throw "gradle.properties should use a stable Fabric Loom version for release-ready development."
+    }
+    if ($gradleProperties -match "org\.gradle\.java\.installations\.paths=.*[A-Za-z]:") {
+        throw "gradle.properties must not commit a machine-specific Windows Java installation path."
+    }
+
+    $wrapperProperties = Get-Content -LiteralPath (Join-Path $ProjectRoot "gradle\wrapper\gradle-wrapper.properties") -Raw
+    if (-not $wrapperProperties.Contains("gradle-9.4.0-bin.zip")) {
+        throw "Gradle wrapper should stay on the Fabric-recommended 9.4.0 baseline unless intentionally upgraded."
+    }
+}
+
 function Assert-JarMixinContents {
     Write-Step "Checking built jar mixin package contents"
 
@@ -177,11 +350,12 @@ function Assert-JarMixinContents {
 Push-Location $ProjectRoot
 try {
     Assert-MixinConfig
+    Assert-RepositoryWorkflowHygiene
     Assert-ResourceHygiene
 
     if (-not $SkipBuild) {
         Write-Step "Running Gradle build"
-        & .\gradlew.bat build
+        & $GradleWrapper build
         if ($LASTEXITCODE -ne 0) {
             throw "Gradle build failed."
         }
@@ -190,12 +364,23 @@ try {
     Assert-JarMixinContents
 
     if ($CopyToPrism) {
+        if ([string]::IsNullOrWhiteSpace($PrismMinecraftDir)) {
+            $PrismMinecraftDir = if ([string]::IsNullOrWhiteSpace($env:APPDATA)) {
+                ""
+            } else {
+                Join-Path $env:APPDATA "PrismLauncher\instances\Fabulously Optimized(1)\minecraft"
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($PrismMinecraftDir)) {
+            throw "No Prism Minecraft directory was provided. Pass -PrismMinecraftDir when using -CopyToPrism."
+        }
+
         $modsDir = Join-Path $PrismMinecraftDir "mods"
         if (-not (Test-Path -LiteralPath $modsDir)) {
             throw "Prism mods folder not found: $modsDir"
         }
 
-        $targetJar = Join-Path $modsDir "emergent-1.0.0.jar"
+        $targetJar = Join-Path $modsDir $JarFileName
         Write-Step "Copying jar to Prism mods folder"
         Copy-Item -LiteralPath $JarPath -Destination $targetJar -Force
         Write-Host "Copied: $targetJar"

@@ -17,6 +17,17 @@
     - **Refmap**: Ensure `refmap` is defined in `mixins.json` to prevent runtime mapping errors.
     - **Entrypoints**: When renaming main classes or client entry points, update `fabric.mod.json`.
 
+7. **GitHub Workflow**: Keep repository operations simple, reviewable, and release-ready.
+    - **Agent Autonomy**: When explicitly asked, Codex may create/switch branches, stage files, commit, push, open PRs, triage/create issues, create version tags, and publish GitHub releases using the GitHub tools/CLI. Do the whole requested lifecycle cleanly instead of handing manual steps back to the user.
+    - **Branches**: Work on short feature/fix/docs branches. Keep `main` buildable and use `release/<version>` only for release stabilization.
+    - **Pull Requests**: Every PR should explain gameplay/config compatibility impact and list verification. Run `scripts/dev_smoke.ps1` before proposing changes. Prefer draft PRs for work that still needs in-game validation.
+    - **Issues**: Prefer structured issues with Minecraft version, Fabric Loader/API versions, Emergent version, reproduction steps, logs, and mod list when relevant. Use issues for reproducible bugs and concrete feature ideas, not for every tiny internal cleanup.
+    - **Versioning**: Use `MAJOR.MINOR.PATCH` in `gradle.properties` and annotated `vMAJOR.MINOR.PATCH` Git tags. Patch for fixes/tuning, minor for new configurable systems or meaningful behavior expansion, major for breaking config/data behavior or dropping a supported Minecraft line. Minecraft compatibility belongs in metadata/docs, not in the tag unless a future multi-loader/multi-Minecraft release policy requires it.
+    - **Releases**: Release from annotated `vMAJOR.MINOR.PATCH` tags after `gradle.properties` `mod_version`, `CHANGELOG.md`, docs, and smoke checks are updated. Let the release workflow build the jar and generate release notes.
+    - **CI**: GitHub Actions must use Java 25 for Minecraft 26.1.x and run the smoke checks rather than only Gradle compilation.
+    - **Dependency/Source Hygiene**: Avoid snapshot tool versions in committed config unless deliberately testing snapshots. Prefer pinned stable tool versions for reproducible CI.
+    - **Safety**: Never rewrite public history, force-push, delete branches, close issues, publish releases, or alter repository settings unless the user clearly asks for that exact action.
+
 # Lessons Learned & Technical Specifics
 
 ### Vanilla Limitations
