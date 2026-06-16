@@ -156,6 +156,66 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void thermalComponentClearsWakeNearbyQuietFluids(GameTestHelper context) {
+        BlockPos heatedSurfacePos = BELOW_WATER_POS;
+        BlockPos heatedFluidPos = WATER_POS;
+        BlockPos chilledSurfacePos = BELOW_WATER_POS.relative(Direction.EAST, 2);
+        BlockPos chilledFluidPos = WATER_POS.relative(Direction.EAST, 2);
+
+        context.setBlock(heatedSurfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(heatedFluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+        context.setBlock(chilledSurfacePos, Blocks.STONE.defaultBlockState());
+        context.setBlock(chilledFluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(heatedSurfacePos),
+                context.getBlockState(heatedSurfacePos),
+                0.5);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(chilledSurfacePos),
+                context.getBlockState(chilledSurfacePos),
+                0.5);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(heatedFluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(chilledFluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(heatedFluidPos), Fluids.WATER, 1) != null,
+                "heated fixture should start with cached quiet finite water");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(chilledFluidPos), Fluids.WATER, 1) != null,
+                "chilled fixture should start with cached quiet finite water");
+
+        EnvironmentalExposure.clearHeat(context.getLevel(), context.absolutePos(heatedSurfacePos));
+        EnvironmentalExposure.clearCold(context.getLevel(), context.absolutePos(chilledSurfacePos));
+
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(heatedSurfacePos), context.getBlockState(heatedSurfacePos)) == 0.0,
+                "clearHeat should remove stored heat from the current block state");
+        context.assertTrue(
+                EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(chilledSurfacePos), context.getBlockState(chilledSurfacePos)) == 0.0,
+                "clearCold should remove stored cold from the current block state");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(heatedFluidPos), Fluids.WATER, 1) == null,
+                "clearing stored heat should wake nearby quiet finite water");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(chilledFluidPos), Fluids.WATER, 1) == null,
+                "clearing stored cold should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentalMemoryWritesDiscardStaleState(GameTestHelper context) {
         BlockPos surfacePos = BELOW_WATER_POS;
         BlockPos fluidPos = WATER_POS;
@@ -1401,6 +1461,56 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 40)
+    public void storedHeatPreventsColdSourceWaterFreezing(GameTestHelper context) {
+        containCell(context, WATER_POS);
+        context.setBlock(WATER_POS, Blocks.WATER);
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.7);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertFalse(context.getBlockState(WATER_POS).is(Blocks.SNOW),
+                    "stored heat should block stored-cold freezing for source water");
+            context.assertTrue(
+                    context.getBlockState(WATER_POS).getFluidState().is(Fluids.WATER),
+                    "heat-buffered source water should remain liquid after the thermal pass");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 40)
+    public void frozenWaterDoesNotKeepLiquidThermalMemory(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        EnvironmentalExposure.addCold(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.7);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            BlockState frozenState = context.getBlockState(WATER_POS);
+            context.assertBlockPresent(Blocks.SNOW, WATER_POS);
+            context.assertTrue(
+                    EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(WATER_POS), frozenState) == 0.0,
+                    "cold stored on liquid water should not leak into the frozen replacement block");
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), frozenState) == 0.0,
+                    "heat stored on liquid water should not leak into the frozen replacement block");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 20)
     public void storedColdFreezesMoistSurfaceAsSnowLayer(GameTestHelper context) {
         BlockPos supportPos = WATER_POS.below();
@@ -1538,6 +1648,32 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void meltedSnowDoesNotKeepFrozenBlockThermalMemory(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.DIRT);
+        context.setBlock(WATER_POS, Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, 1));
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.3);
+
+        boolean melted = ThermalPhysics.tryMeltFrozenSurface(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        context.assertTrue(melted, "stored heat should melt the snow fixture");
+        context.assertBlockPresent(Blocks.AIR, WATER_POS);
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                "heat stored on snow should not leak into the replacement air block");
+        context.assertTrue(
+                EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                "cold stored on snow should not leak into the replacement air block");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void storedHeatMeltsIceToWaterSource(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.ICE.defaultBlockState());
         EnvironmentalExposure.addHeat(
@@ -1555,6 +1691,31 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.assertBlockPresent(Blocks.WATER, WATER_POS);
         context.assertTrue(context.getBlockState(WATER_POS).getValue(LiquidBlock.LEVEL) == 0,
                 "melted ice should become a source-equivalent water block");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void meltedIceDoesNotKeepFrozenBlockThermalMemory(GameTestHelper context) {
+        context.setBlock(WATER_POS, Blocks.ICE.defaultBlockState());
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                1.1);
+
+        boolean melted = ThermalPhysics.tryMeltFrozenSurface(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS));
+
+        context.assertTrue(melted, "stored heat should melt the ice fixture");
+        context.assertBlockPresent(Blocks.WATER, WATER_POS);
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                "heat stored on ice should not leak into the replacement water block");
+        context.assertTrue(
+                EnvironmentalExposure.cold(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) == 0.0,
+                "cold stored on ice should not leak into the replacement water block");
         context.succeed();
     }
 
