@@ -2,6 +2,7 @@ package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.DynamicExperience;
+import com.teddante.emergent.ExperienceEnergy;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ExplosionEnvironmentPhysics;
 import com.teddante.emergent.FireWetness;
@@ -1201,6 +1202,36 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
                 "a tougher living body should release more experience than a small passive body");
         context.assertTrue(ravagerEnergy > zombieEnergy,
                 "a high-health massive entity should release substantially more experience");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void experienceEnergyUsesVanillaLevelCurve(GameTestHelper context) {
+        context.assertTrue(ExperienceEnergy.pointsNeededForNextLevel(0) == 7,
+                "vanilla level 0 should need seven raw XP points");
+        context.assertTrue(ExperienceEnergy.pointsNeededForNextLevel(15) == 37,
+                "vanilla level 15 should start the middle XP curve");
+        context.assertTrue(ExperienceEnergy.pointsNeededForNextLevel(30) == 112,
+                "vanilla level 30 should start the high XP curve");
+        context.assertTrue(ExperienceEnergy.pointsForLevel(16) == ExperienceEnergy.pointsForLevel(15) + 37,
+                "raw XP storage should advance by the exact vanilla next-level cost");
+        context.assertTrue(ExperienceEnergy.pointsForLevel(32) == ExperienceEnergy.pointsForLevel(31)
+                + ExperienceEnergy.pointsNeededForNextLevel(31),
+                "raw XP storage should follow the high-level vanilla curve exactly");
+        context.assertTrue(ExperienceEnergy.levelForPoints(ExperienceEnergy.pointsForLevel(30)) == 30,
+                "raw XP points should map back to the same vanilla level threshold");
+        context.assertTrue(ExperienceEnergy.levelForPoints(ExperienceEnergy.pointsForLevel(30) + 111) == 30,
+                "points just below the next threshold should stay in the same vanilla level");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
+        int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
+        int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);
+
+        context.assertTrue(dynamicReward == sharedEnergy,
+                "dynamic entity XP should use the shared raw experience-energy model");
         context.succeed();
     }
 

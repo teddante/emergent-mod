@@ -1015,18 +1015,26 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         BlockPos targetPos = waterPos.relative(Direction.EAST);
         context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
         context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
+        EnvironmentalExposure.clear(context.getLevel(), context.absolutePos(waterPos));
+        EnvironmentalExposure.clear(context.getLevel(), context.absolutePos(targetPos));
+
         int movedAmount = 1;
+        BlockState targetState = context.getBlockState(targetPos);
         double wearPerImpulse = EnvironmentalExposure.hydraulicWearFromMovedWater(movedAmount, 1.0, 1.25);
-        double wetThreshold = ErosionPhysics.erosionThreshold(
+        double dryThreshold = ErosionPhysics.erosionThreshold(
                 context.getLevel(),
                 context.absolutePos(targetPos),
-                context.getBlockState(targetPos))
-                * ErosionPhysics.moistureErosionFactor(context.getBlockState(targetPos), 1.0);
-        int wetErosionRepetitions = Math.max(1, (int) Math.ceil(wetThreshold / wearPerImpulse));
+                targetState);
+        int dryErosionRepetitions = repetitionsUntilErosion(dryThreshold, targetState, 0.0, wearPerImpulse);
+        int wetErosionRepetitions = repetitionsUntilErosion(dryThreshold, targetState, 1.0, wearPerImpulse);
+
+        context.assertTrue(wetErosionRepetitions < dryErosionRepetitions,
+                "saturated sand should need fewer identical flow impulses than initially dry sand");
 
         applyFlowErosion(context, waterPos, Direction.EAST, movedAmount, wetErosionRepetitions);
         context.assertBlockPresent(Blocks.SAND, targetPos);
-        EnvironmentalExposure.clearHydraulicWear(context.getLevel(), context.absolutePos(targetPos));
+        EnvironmentalExposure.clear(context.getLevel(), context.absolutePos(targetPos));
+        context.setBlock(targetPos, Blocks.SAND.defaultBlockState());
 
         EnvironmentalExposure.addMoisture(
                 context.getLevel(),
@@ -1221,6 +1229,25 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
                     direction,
                     movedAmount);
         }
+    }
+
+    private static int repetitionsUntilErosion(
+            double dryThreshold,
+            BlockState state,
+            double initialMoisture,
+            double wearPerImpulse) {
+        double accumulatedWear = 0.0;
+        double moisture = Math.max(0.0, Math.min(1.0, initialMoisture));
+        for (int repetitions = 1; repetitions < 10_000; repetitions++) {
+            moisture = Math.min(1.0, moisture + EnvironmentalExposure.surfaceMoistureFromHydraulicWear(wearPerImpulse));
+            accumulatedWear += wearPerImpulse;
+            double threshold = dryThreshold * ErosionPhysics.moistureErosionFactor(state, moisture);
+            if (accumulatedWear >= threshold) {
+                return repetitions;
+            }
+        }
+
+        throw new IllegalStateException("Erosion threshold was not reachable with the configured test impulse");
     }
 
     private static void containCell(GameTestHelper context, BlockPos pos) {

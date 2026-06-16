@@ -102,7 +102,7 @@ Weather and climate affect the same shared environmental memory.
 
 ### Dynamic XP And Sculk
 
-Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value.
+Entity XP is derived from a simple body-energy model using max health, estimated body mass, armor, and toughness. The model treats raw XP points as the shared experience-energy unit and keeps vanilla levels as the display/storage curve. This modifies Minecraft's central living-entity XP query, so dropped XP and sculk catalyst charge use the same value.
 
 Sculk shrieker summoning can also be widened beyond vanilla's default restrictions.
 
