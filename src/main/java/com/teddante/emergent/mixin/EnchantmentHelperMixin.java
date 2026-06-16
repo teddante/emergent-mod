@@ -1,7 +1,10 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.ExperienceEnergy;
 import net.minecraft.core.Holder;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.EnchantmentInstance;
@@ -33,6 +36,17 @@ public abstract class EnchantmentHelperMixin {
             CallbackInfoReturnable<Boolean> cir) {
         if (EmergentConfig.get().unrestrictedEnchantments) {
             cir.setReturnValue(true);
+        }
+    }
+
+    @Inject(method = "modifyDurabilityToRepairFromXp", at = @At("RETURN"), cancellable = true)
+    private static void emergent$repairDurabilityFromStoredExperienceEnergy(
+            ServerLevel serverLevel,
+            ItemStack item,
+            int durability,
+            CallbackInfoReturnable<Integer> cir) {
+        if (EmergentConfig.get().boundlessEnchanting) {
+            cir.setReturnValue(ExperienceEnergy.repairDurabilityFromStoredEnergy(item, cir.getReturnValue()));
         }
     }
 }

@@ -30,8 +30,13 @@
 		"FlowableFluidMixin",
 		"ServerWorldMixin",
 		"AnvilMenuMixin",
+		"EnchantmentMenuMixin",
 		"PotionBrewingMixin",
-		"EnchantmentHelperMixin"
+		"EnchantmentHelperMixin",
+		"IgniteMixin",
+		"DamageEntityMixin",
+		"ChangeItemDamageMixin",
+		"ExplodeEffectMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

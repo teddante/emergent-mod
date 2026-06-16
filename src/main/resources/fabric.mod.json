@@ -18,6 +18,9 @@
 		"main": [
 			"com.teddante.emergent.Emergent"
 		],
+		"client": [
+			"com.teddante.emergent.client.EmergentClient"
+		],
 		"modmenu": [
 			"com.teddante.emergent.client.EmergentModMenuIntegration"
 		]

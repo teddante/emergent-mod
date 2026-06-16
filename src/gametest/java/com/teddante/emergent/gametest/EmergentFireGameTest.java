@@ -16,23 +16,55 @@ import net.fabricmc.fabric.api.gametest.v1.CustomTestMethodInvoker;
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AnvilMenu;
+import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.EnchantmentMenu;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.EnchantedItemInUse;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
+import net.minecraft.world.item.enchantment.EnchantmentInstance;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.enchantment.LevelBasedValue;
+import net.minecraft.world.item.enchantment.TargetedConditionalEffect;
+import net.minecraft.world.item.enchantment.effects.AllOf;
+import net.minecraft.world.item.enchantment.effects.ChangeItemDamage;
+import net.minecraft.world.item.enchantment.effects.DamageEntity;
+import net.minecraft.world.item.enchantment.effects.EnchantmentEntityEffect;
+import net.minecraft.world.item.enchantment.effects.ExplodeEffect;
+import net.minecraft.world.item.enchantment.effects.Ignite;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.RotatedPillarBlock;
+import net.minecraft.world.level.block.entity.SculkCatalystBlockEntity;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.gameevent.BlockPositionSource;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 public class EmergentFireGameTest implements CustomTestMethodInvoker {
     private static final BlockPos TEST_POS = new BlockPos(2, 3, 2);
@@ -1226,6 +1258,766 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void experienceEnergyConvertsLevelCostsToRawPoints(GameTestHelper context) {
+        int lowCost = ExperienceEnergy.rawPointsForWholeLevelCost(10, 3);
+        int highCost = ExperienceEnergy.rawPointsForWholeLevelCost(30, 3);
+        int exactHighCost = ExperienceEnergy.pointsForLevel(30) - ExperienceEnergy.pointsForLevel(27);
+
+        context.assertTrue(lowCost > 0,
+                "a visible level cost should map to raw XP points");
+        context.assertTrue(highCost > lowCost,
+                "the same visible level cost should represent more raw XP at higher levels");
+        context.assertTrue(highCost == exactHighCost,
+                "whole-level cost conversion should use the vanilla nonlinear level curve");
+        context.assertTrue(ExperienceEnergy.wholeLevelsAffordableFromRawPoints(30, highCost - 1) == 2,
+                "raw XP just below a three-level high-level cost should only afford two whole levels");
+        context.assertTrue(ExperienceEnergy.wholeLevelsAffordableFromRawPoints(30, highCost) == 3,
+                "raw XP equal to a three-level high-level cost should afford exactly three whole levels");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void experienceEnergyPreservesProgressWhenSpendingRawCosts(GameTestHelper context) {
+        int rawBefore = ExperienceEnergy.rawPointsAtLevelProgress(30, 0.5F);
+        int rawCost = ExperienceEnergy.rawPointsForWholeLevelCost(30, 3);
+        ExperienceEnergy.LevelProgress after = ExperienceEnergy.progressAfterWholeLevelCost(30, 0.5F, 3);
+        int rawAfter = ExperienceEnergy.rawPointsAtLevelProgress(after.level(), after.progress());
+
+        context.assertTrue(Math.abs(rawAfter - (rawBefore - rawCost)) <= 1,
+                "spending a whole-level cost as raw XP should preserve fractional progress energy within Minecraft's progress-bar precision");
+        context.assertTrue(after.level() == 27 && after.progress() > 0.0F,
+                "half a high-level bar should remain as progress after a three-level raw XP spend");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void enchantmentEnergyBudgetUsesVanillaAnvilCosts(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Holder<Enchantment> mending = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MENDING);
+        ItemEnchantments.Mutable mutable = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+        mutable.set(sharpness, 3);
+        mutable.set(mending, 1);
+        ItemEnchantments enchantments = mutable.toImmutable();
+
+        int expectedLevelBudget = sharpness.value().getAnvilCost() * 3 + mending.value().getAnvilCost();
+        int levelBudget = ExperienceEnergy.enchantmentLevelBudget(enchantments);
+        int rawBudget = ExperienceEnergy.enchantmentEnergyBudgetPoints(enchantments, 30);
+
+        context.assertTrue(levelBudget == expectedLevelBudget,
+                "enchantment energy budget should use vanilla anvil costs as the rarity/work measure");
+        context.assertTrue(rawBudget == ExperienceEnergy.rawPointsForWholeLevelCost(30, expectedLevelBudget),
+                "enchantment budget should convert visible work levels through the shared raw-XP curve");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void enchantedBooksUseVanillaHalfCostForApplicationEnergy(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
+        EnchantmentHelper.updateEnchantments(sword, enchantments -> enchantments.set(sharpness, 4));
+        EnchantmentHelper.updateEnchantments(book, enchantments -> enchantments.set(sharpness, 4));
+
+        int itemCost = ExperienceEnergy.enchantmentApplicationLevelCost(sword);
+        int bookCost = ExperienceEnergy.enchantmentApplicationLevelCost(book);
+
+        context.assertTrue(itemCost == sharpness.value().getAnvilCost() * 4,
+                "applied item enchantment work should use the full vanilla anvil fee");
+        context.assertTrue(bookCost == Math.max(1, sharpness.value().getAnvilCost() / 2) * 4,
+                "stored book application work should use vanilla's half-cost enchanted-book rule");
+        context.assertTrue(ExperienceEnergy.enchantmentApplicationEnergyCostPoints(book, 30)
+                == ExperienceEnergy.rawPointsForWholeLevelCost(30, bookCost),
+                "book application work should convert through the same raw-XP energy curve");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void mergedEnchantmentLevelsConserveStoredEnergyBudget(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        int anvilCost = sharpness.value().getAnvilCost();
+
+        int equalLevelMerge = ExperienceEnergy.mergedEnchantmentLevelFromEnergy(5, 5, anvilCost);
+        int unevenLevelMerge = ExperienceEnergy.mergedEnchantmentLevelFromEnergy(4, 5, anvilCost);
+        int cappedMerge = ExperienceEnergy.mergedEnchantmentLevelFromEnergy(
+                ExperienceEnergy.MAX_ENCHANTMENT_LEVEL,
+                1,
+                anvilCost);
+
+        context.assertTrue(equalLevelMerge == 10,
+                "two equal enchantment levels should combine their stored work budget rather than only adding one level");
+        context.assertTrue(unevenLevelMerge == 9,
+                "uneven enchantment levels should preserve both stored budgets instead of only keeping the larger level");
+        context.assertTrue(cappedMerge == ExperienceEnergy.MAX_ENCHANTMENT_LEVEL,
+                "energy-conserving enchantment merges should still respect Minecraft's component level range");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedDamageEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Player attacker = context.makeMockPlayer(GameType.CREATIVE);
+        LivingEntity victim = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        ItemStack vanillaSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(vanillaSword, enchantments -> enchantments.set(sharpness, 5));
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(sharpness, 10));
+
+        float baseDamage = 7.0F;
+        float vanillaDamage = EnchantmentHelper.modifyDamage(
+                context.getLevel(),
+                vanillaSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                baseDamage);
+        float energeticDamage = EnchantmentHelper.modifyDamage(
+                context.getLevel(),
+                energeticSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                baseDamage);
+
+        context.assertTrue(Math.abs(vanillaDamage - (baseDamage + 3.0F)) < 0.001F,
+                "Sharpness V should keep vanilla's level-based damage bonus");
+        context.assertTrue(Math.abs(energeticDamage - (baseDamage + 5.5F)) < 0.001F,
+                "over-cap Sharpness should already spend stored work through vanilla's level-based damage component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedProtectionEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> protection = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.PROTECTION);
+        LivingEntity defender = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        LivingEntity attacker = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST).above()));
+        ItemStack chestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(chestplate, enchantments -> enchantments.set(protection, 4));
+        defender.setItemSlot(EquipmentSlot.CHEST, chestplate);
+
+        float vanillaProtection = EnchantmentHelper.getDamageProtection(
+                context.getLevel(),
+                defender,
+                context.getLevel().damageSources().mobAttack(attacker));
+
+        EnchantmentHelper.updateEnchantments(chestplate, enchantments -> enchantments.set(protection, 8));
+        defender.setItemSlot(EquipmentSlot.CHEST, chestplate);
+        float energeticProtection = EnchantmentHelper.getDamageProtection(
+                context.getLevel(),
+                defender,
+                context.getLevel().damageSources().mobAttack(attacker));
+
+        context.assertTrue(Math.abs(vanillaProtection - 4.0F) < 0.001F,
+                "Protection IV should keep vanilla's level-based protection value");
+        context.assertTrue(Math.abs(energeticProtection - 8.0F) < 0.001F,
+                "over-cap Protection should already spend stored work through vanilla's level-based protection component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedKnockbackEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> knockback = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.KNOCKBACK);
+        Player attacker = context.makeMockPlayer(GameType.CREATIVE);
+        LivingEntity victim = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        ItemStack vanillaSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(vanillaSword, enchantments -> enchantments.set(knockback, 2));
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(knockback, 4));
+
+        float vanillaKnockback = EnchantmentHelper.modifyKnockback(
+                context.getLevel(),
+                vanillaSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                0.0F);
+        float energeticKnockback = EnchantmentHelper.modifyKnockback(
+                context.getLevel(),
+                energeticSword,
+                victim,
+                context.getLevel().damageSources().playerAttack(attacker),
+                0.0F);
+
+        context.assertTrue(Math.abs(vanillaKnockback - 2.0F) < 0.001F,
+                "Knockback II should keep vanilla's level-based knockback value");
+        context.assertTrue(Math.abs(energeticKnockback - 4.0F) < 0.001F,
+                "over-cap Knockback should already spend stored work through vanilla's level-based knockback component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedProjectileCountEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> multishot = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MULTISHOT);
+        Player shooter = context.makeMockPlayer(GameType.CREATIVE);
+        ItemStack vanillaCrossbow = new ItemStack(Items.CROSSBOW);
+        ItemStack energeticCrossbow = new ItemStack(Items.CROSSBOW);
+        EnchantmentHelper.updateEnchantments(vanillaCrossbow, enchantments -> enchantments.set(multishot, 1));
+        EnchantmentHelper.updateEnchantments(energeticCrossbow, enchantments -> enchantments.set(multishot, 3));
+
+        int vanillaProjectiles = EnchantmentHelper.processProjectileCount(
+                context.getLevel(),
+                vanillaCrossbow,
+                shooter,
+                1);
+        int energeticProjectiles = EnchantmentHelper.processProjectileCount(
+                context.getLevel(),
+                energeticCrossbow,
+                shooter,
+                1);
+
+        context.assertTrue(vanillaProjectiles == 3,
+                "Multishot I should keep vanilla's level-based projectile count");
+        context.assertTrue(energeticProjectiles == 7,
+                "over-cap Multishot should already spend stored work through vanilla's level-based projectile-count component");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void boundlessThornsDamageOutputScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        DamageEntity thornsDamage = new DamageEntity(
+                LevelBasedValue.constant(1.0F),
+                LevelBasedValue.constant(5.0F),
+                context.getLevel().registryAccess()
+                        .lookupOrThrow(Registries.DAMAGE_TYPE)
+                        .getOrThrow(DamageTypes.THORNS));
+        ItemStack ordinaryChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(ordinaryChestplate, enchantments -> enchantments.set(thorns, 3));
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+
+        float ordinaryDamage = ExperienceEnergy.damageEntityDamageFromStoredEnergy(ordinaryChestplate, 3, thornsDamage, 5.0F);
+        float energeticDamage = ExperienceEnergy.damageEntityDamageFromStoredEnergy(energeticChestplate, 6, thornsDamage, 5.0F);
+
+        context.assertTrue(Math.abs(ordinaryDamage - 5.0F) < 0.001F,
+                "vanilla-level Thorns should keep vanilla's fixed returned-damage range");
+        context.assertTrue(Math.abs(energeticDamage - 10.0F) < 0.001F,
+                "over-cap Thorns should convert stored work into stronger fixed returned damage");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void boundlessThornsItemDamageCostScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        ChangeItemDamage thornsItemDamage = new ChangeItemDamage(LevelBasedValue.constant(2.0F));
+        ItemStack ordinaryChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(ordinaryChestplate, enchantments -> enchantments.set(thorns, 3));
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+
+        int ordinaryCost = ExperienceEnergy.itemDamageCostFromStoredEnergy(ordinaryChestplate, 3, thornsItemDamage, 2);
+        int energeticCost = ExperienceEnergy.itemDamageCostFromStoredEnergy(energeticChestplate, 6, thornsItemDamage, 2);
+
+        context.assertTrue(ordinaryCost == 2,
+                "vanilla-level Thorns should keep vanilla's returned-damage durability cost");
+        context.assertTrue(energeticCost == 4,
+                "over-cap Thorns should spend proportionally more armor durability for stronger returned damage");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void changeItemDamageEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+        ChangeItemDamage thornsItemDamage = new ChangeItemDamage(LevelBasedValue.constant(2.0F));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticChestplate, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            thornsItemDamage.apply(context.getLevel(), 6, item, context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.above())), Vec3.atBottomCenterOf(TEST_POS.above()));
+            context.assertTrue(energeticChestplate.getDamageValue() == 2,
+                    "when boundless enchanting is disabled, fixed item-damage effects should keep vanilla cost");
+
+            energeticChestplate.setDamageValue(0);
+            EmergentConfig.get().boundlessEnchanting = true;
+            thornsItemDamage.apply(context.getLevel(), 6, item, context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST).above())), Vec3.atBottomCenterOf(TEST_POS.above()));
+            context.assertTrue(energeticChestplate.getDamageValue() == 4,
+                    "when boundless enchanting is enabled, fixed item-damage effects should scale through the real effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void damageEntityEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> thorns = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.THORNS);
+        DamageEntity thornsDamage = new DamageEntity(
+                LevelBasedValue.constant(1.0F),
+                LevelBasedValue.constant(5.0F),
+                context.getLevel().registryAccess()
+                        .lookupOrThrow(Registries.DAMAGE_TYPE)
+                        .getOrThrow(DamageTypes.THORNS));
+        ItemStack energeticChestplate = new ItemStack(Items.DIAMOND_CHESTPLATE);
+        EnchantmentHelper.updateEnchantments(energeticChestplate, enchantments -> enchantments.set(thorns, 6));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticChestplate, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            float vanillaDamage = maxObservedDamageFromEffect(context, thornsDamage, item, 6);
+            context.assertTrue(vanillaDamage <= 5.0F + 0.001F,
+                    "when boundless enchanting is disabled, fixed damage-entity effects should keep vanilla damage");
+
+            EmergentConfig.get().boundlessEnchanting = true;
+            float boundlessDamage = maxObservedDamageFromEffect(context, thornsDamage, item, 6);
+            context.assertTrue(boundlessDamage > 5.0F,
+                    "when boundless enchanting is enabled, fixed damage-entity effects should scale through the real effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void boundlessMendingRepairOutputScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> mending = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MENDING);
+        ItemStack ordinaryPick = new ItemStack(Items.DIAMOND_PICKAXE);
+        ItemStack energeticPick = new ItemStack(Items.DIAMOND_PICKAXE);
+        EnchantmentHelper.updateEnchantments(ordinaryPick, enchantments -> enchantments.set(mending, 1));
+        EnchantmentHelper.updateEnchantments(energeticPick, enchantments -> enchantments.set(mending, 4));
+
+        int ordinaryRepair = EnchantmentHelper.modifyDurabilityToRepairFromXp(context.getLevel(), ordinaryPick, 3);
+        int energeticRepair = EnchantmentHelper.modifyDurabilityToRepairFromXp(context.getLevel(), energeticPick, 3);
+        double outputRatio = ExperienceEnergy.enchantmentOutputEnergyRatio(
+                4,
+                mending.value().getMaxLevel(),
+                mending.value().getAnvilCost());
+
+        context.assertTrue(ordinaryRepair == 6,
+                "vanilla-level Mending should still repair two durability per raw XP point");
+        context.assertTrue(outputRatio == 4.0,
+                "Mending IV stores four times the vanilla repair enchantment work budget");
+        context.assertTrue(energeticRepair == ordinaryRepair * 4,
+                "boundless repair output should spend raw XP with power proportional to stored repair energy");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void disabledBoundlessEnchantingKeepsVanillaMendingRate(GameTestHelper context) {
+        Holder<Enchantment> mending = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.MENDING);
+        ItemStack energeticPick = new ItemStack(Items.DIAMOND_PICKAXE);
+        EnchantmentHelper.updateEnchantments(energeticPick, enchantments -> enchantments.set(mending, 4));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            int repair = EnchantmentHelper.modifyDurabilityToRepairFromXp(context.getLevel(), energeticPick, 3);
+            context.assertTrue(repair == 6,
+                    "when boundless enchanting is disabled, high stored Mending work should not alter vanilla repair rate");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void boundlessFlameIgniteDurationScalesWithStoredEnergy(GameTestHelper context) {
+        Holder<Enchantment> flame = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FLAME);
+        ItemStack ordinaryBow = new ItemStack(Items.BOW);
+        ItemStack energeticBow = new ItemStack(Items.BOW);
+        EnchantmentHelper.updateEnchantments(ordinaryBow, enchantments -> enchantments.set(flame, 1));
+        EnchantmentHelper.updateEnchantments(energeticBow, enchantments -> enchantments.set(flame, 4));
+
+        float vanillaSeconds = 100.0F;
+        float ordinarySeconds = ExperienceEnergy.igniteDurationFromStoredEnergy(ordinaryBow, 1, vanillaSeconds);
+        float energeticSeconds = ExperienceEnergy.igniteDurationFromStoredEnergy(energeticBow, 4, vanillaSeconds);
+
+        context.assertTrue(ordinarySeconds == vanillaSeconds,
+                "vanilla-level Flame should keep vanilla's projectile burn duration");
+        context.assertTrue(energeticSeconds == vanillaSeconds * 4.0F,
+                "boundless Flame should turn stored enchantment work into longer projectile ignition");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedIgniteEnchantmentsScaleThroughVanillaEffects(GameTestHelper context) {
+        Holder<Enchantment> fireAspect = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FIRE_ASPECT);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(fireAspect, 4));
+        float vanillaSecondsAtLevel = 16.0F;
+        float adjustedSeconds = ExperienceEnergy.igniteDurationFromStoredEnergy(energeticSword, 4, vanillaSecondsAtLevel);
+
+        context.assertTrue(adjustedSeconds == vanillaSecondsAtLevel,
+                "over-cap Fire Aspect should already spend stored work through vanilla's level-based ignite duration");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void levelBasedIgniteEffectDoesNotDoubleScaleThroughRealPath(GameTestHelper context) {
+        Holder<Enchantment> fireAspect = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FIRE_ASPECT);
+        ItemStack energeticSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(energeticSword, enchantments -> enchantments.set(fireAspect, 4));
+        LivingEntity target = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        Ignite ignite = new Ignite(LevelBasedValue.perLevel(4.0F));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticSword, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            ignite.apply(context.getLevel(), 4, item, target, target.position());
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.assertTrue(target.getRemainingFireTicks() == 320,
+                "real level-based ignite effects should scale once through vanilla, not again through stored work");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void igniteEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> flame = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.FLAME);
+        ItemStack energeticBow = new ItemStack(Items.BOW);
+        EnchantmentHelper.updateEnchantments(energeticBow, enchantments -> enchantments.set(flame, 4));
+        LivingEntity target = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        Ignite ignite = new Ignite(LevelBasedValue.constant(100.0F));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticBow, null, null, ignored -> {
+        });
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            ignite.apply(context.getLevel(), 4, item, target, target.position());
+            context.assertTrue(target.getRemainingFireTicks() == 2000,
+                    "when boundless enchanting is disabled, constant ignite effects should keep vanilla duration");
+
+            target.setRemainingFireTicks(0);
+            EmergentConfig.get().boundlessEnchanting = true;
+            ignite.apply(context.getLevel(), 4, item, target, target.position());
+            context.assertTrue(target.getRemainingFireTicks() == 8000,
+                    "when boundless enchanting is enabled, constant ignite effects should scale through the real vanilla effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void boundlessWindBurstExplosionRadiusScalesWithStoredEnergyVolume(GameTestHelper context) {
+        Holder<Enchantment> windBurst = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.WIND_BURST);
+        ExplodeEffect windBurstExplosion = firstExplodeEffect(windBurst.value());
+        ItemStack ordinaryMace = new ItemStack(Items.MACE);
+        ItemStack energeticMace = new ItemStack(Items.MACE);
+        EnchantmentHelper.updateEnchantments(ordinaryMace, enchantments -> enchantments.set(windBurst, 3));
+        EnchantmentHelper.updateEnchantments(energeticMace, enchantments -> enchantments.set(windBurst, 6));
+
+        float vanillaRadius = Math.max(windBurstExplosion.radius().calculate(3), 0.0F);
+        float ordinaryRadius = ExperienceEnergy.explosionRadiusFromStoredEnergy(ordinaryMace, 3, windBurstExplosion, vanillaRadius);
+        float energeticRadius = ExperienceEnergy.explosionRadiusFromStoredEnergy(energeticMace, 6, windBurstExplosion, vanillaRadius);
+        double expectedEnergeticRadius = vanillaRadius * Math.cbrt(ExperienceEnergy.enchantmentOutputEnergyRatio(
+                6,
+                windBurst.value().getMaxLevel(),
+                windBurst.value().getAnvilCost()));
+
+        context.assertTrue(Math.abs(ordinaryRadius - vanillaRadius) < 0.001F,
+                "vanilla-level Wind Burst should keep vanilla's fixed explosion radius");
+        context.assertTrue(Math.abs(energeticRadius - expectedEnergeticRadius) < 0.001F,
+                "over-cap fixed explosion radius should scale by cube root of stored work so influenced volume tracks energy");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void explodeEffectObeysBoundlessEnchantingConfigGate(GameTestHelper context) {
+        Holder<Enchantment> windBurst = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.WIND_BURST);
+        ExplodeEffect windBurstExplosion = firstExplodeEffect(windBurst.value());
+        ItemStack energeticMace = new ItemStack(Items.MACE);
+        EnchantmentHelper.updateEnchantments(energeticMace, enchantments -> enchantments.set(windBurst, 6));
+        Entity source = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+        EnchantedItemInUse item = new EnchantedItemInUse(energeticMace, null, null, ignored -> {
+        });
+        Vec3 center = Vec3.atBottomCenterOf(context.absolutePos(TEST_POS.above()));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            Vec3 targetPos = Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST, 4).above());
+            LivingEntity vanillaRangeTarget = context.spawn(EntityType.COW, targetPos);
+            EmergentConfig.get().boundlessEnchanting = false;
+            windBurstExplosion.apply(context.getLevel(), 6, item, source, center);
+            double vanillaImpulse = vanillaRangeTarget.getDeltaMovement().lengthSqr();
+            vanillaRangeTarget.discard();
+
+            LivingEntity boundlessRangeTarget = context.spawn(EntityType.COW, targetPos);
+            EmergentConfig.get().boundlessEnchanting = true;
+            windBurstExplosion.apply(context.getLevel(), 6, item, source, center);
+            double boundlessImpulse = boundlessRangeTarget.getDeltaMovement().lengthSqr();
+            context.assertTrue(boundlessImpulse > vanillaImpulse * 1.15,
+                    "when boundless enchanting is enabled, fixed explosion effects should scale through the real vanilla effect path");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void anvilMergesEnchantmentEnergyBudgets(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Player player = context.makeMockPlayer(GameType.CREATIVE);
+        AnvilMenu menu = new AnvilMenu(0, player.getInventory());
+        ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
+        EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+            ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            int resultLevel = EnchantmentHelper.getEnchantmentsForCrafting(result).getLevel(sharpness);
+            int visibleCost = menu.getCost();
+            int expectedWorkCost = sharpness.value().getAnvilCost() * resultLevel;
+
+            context.assertTrue(resultLevel == 10,
+                    "anvil output should merge both inputs' stored enchantment work budget through the real menu path");
+            context.assertTrue(visibleCost == expectedWorkCost,
+                    "boundless anvil cost should charge for the merged stored work level shown in the output");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void anvilTakeSpendsVisibleCostAsRawExperienceEnergy(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Player player = context.makeMockPlayer(GameType.SURVIVAL);
+        player.experienceLevel = 30;
+        player.experienceProgress = 0.5F;
+        player.totalExperience = ExperienceEnergy.rawPointsAtLevelProgress(player.experienceLevel, player.experienceProgress);
+        AnvilMenu menu = new AnvilMenu(0, player.getInventory());
+        ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
+        EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+            menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+            ItemStack result = menu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            int visibleCost = menu.getCost();
+            ExperienceEnergy.LevelProgress expected = ExperienceEnergy.progressAfterWholeLevelCost(30, 0.5F, visibleCost);
+
+            context.assertTrue(!result.isEmpty() && visibleCost > 0,
+                    "boundless anvil setup should produce a payable result before testing raw XP spending");
+            menu.getSlot(AnvilMenu.RESULT_SLOT).onTake(player, result);
+
+            context.assertTrue(player.experienceLevel == expected.level(),
+                    "anvil take should spend the visible cost as raw XP through the nonlinear level curve");
+            context.assertTrue(Math.abs(player.experienceProgress - expected.progress()) < 0.001F,
+                    "anvil take should preserve fractional raw XP progress after spending energy");
+            context.assertTrue(player.totalExperience == ExperienceEnergy.rawPointsAtLevelProgress(expected.level(), expected.progress()),
+                    "anvil take should keep total raw XP storage synchronized with the new level progress");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void enchantingTableSpendsVisibleCostAsRawExperienceEnergy(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.ENCHANTING_TABLE);
+        Player player = context.makeMockPlayer(GameType.SURVIVAL);
+        player.experienceLevel = 30;
+        player.experienceProgress = 0.5F;
+        player.totalExperience = ExperienceEnergy.rawPointsAtLevelProgress(player.experienceLevel, player.experienceProgress);
+        EnchantmentMenu menu = new EnchantmentMenu(
+                0,
+                player.getInventory(),
+                ContainerLevelAccess.create(context.getLevel(), context.absolutePos(TEST_POS)));
+        ItemStack sword = new ItemStack(Items.DIAMOND_SWORD);
+        menu.getSlot(0).set(sword);
+        menu.getSlot(1).set(new ItemStack(Items.LAPIS_LAZULI, 3));
+
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = true;
+            int buttonId = 0;
+            int visibleCost = buttonId + 1;
+            ExperienceEnergy.LevelProgress expected = ExperienceEnergy.progressAfterWholeLevelCost(30, 0.5F, visibleCost);
+            boolean enchanted = menu.clickMenuButton(player, buttonId);
+
+            context.assertTrue(enchanted,
+                    "enchanting table setup should produce a payable enchantment before testing raw XP spending");
+            context.assertTrue(player.experienceLevel == expected.level(),
+                    "enchanting table should spend the visible lapis option cost as raw XP through the nonlinear level curve");
+            context.assertTrue(Math.abs(player.experienceProgress - expected.progress()) < 0.001F,
+                    "enchanting table should preserve fractional raw XP progress after spending energy");
+            context.assertTrue(player.totalExperience == ExperienceEnergy.rawPointsAtLevelProgress(expected.level(), expected.progress()),
+                    "enchanting table should keep total raw XP storage synchronized with the new level progress");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void disabledBoundlessEnchantingKeepsVanillaMenuLevelSpending(GameTestHelper context) {
+        context.setBlock(TEST_POS, Blocks.ENCHANTING_TABLE);
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        boolean previous = EmergentConfig.get().boundlessEnchanting;
+        try {
+            EmergentConfig.get().boundlessEnchanting = false;
+            Player enchantingPlayer = context.makeMockPlayer(GameType.SURVIVAL);
+            enchantingPlayer.experienceLevel = 30;
+            enchantingPlayer.experienceProgress = 0.5F;
+            EnchantmentMenu enchantmentMenu = new EnchantmentMenu(
+                    0,
+                    enchantingPlayer.getInventory(),
+                    ContainerLevelAccess.create(context.getLevel(), context.absolutePos(TEST_POS)));
+            enchantmentMenu.getSlot(0).set(new ItemStack(Items.DIAMOND_SWORD));
+            enchantmentMenu.getSlot(1).set(new ItemStack(Items.LAPIS_LAZULI, 3));
+
+            context.assertTrue(enchantmentMenu.clickMenuButton(enchantingPlayer, 0),
+                    "vanilla enchanting table setup should still produce a payable option");
+            context.assertTrue(enchantingPlayer.experienceLevel == 29 && Math.abs(enchantingPlayer.experienceProgress - 0.5F) < 0.001F,
+                    "when boundless enchanting is disabled, the enchanting table should keep vanilla whole-level subtraction");
+
+            Player anvilPlayer = context.makeMockPlayer(GameType.SURVIVAL);
+            anvilPlayer.experienceLevel = 30;
+            anvilPlayer.experienceProgress = 0.5F;
+            AnvilMenu anvilMenu = new AnvilMenu(0, anvilPlayer.getInventory());
+            ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+            ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+            EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(sharpness, 5));
+            EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(sharpness, 5));
+            anvilMenu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+            anvilMenu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+            ItemStack result = anvilMenu.getSlot(AnvilMenu.RESULT_SLOT).getItem();
+            int visibleCost = anvilMenu.getCost();
+
+            context.assertTrue(!result.isEmpty() && visibleCost > 0,
+                    "vanilla anvil setup should still produce a payable result");
+            anvilMenu.getSlot(AnvilMenu.RESULT_SLOT).onTake(anvilPlayer, result);
+            context.assertTrue(anvilPlayer.experienceLevel == 30 - visibleCost
+                            && Math.abs(anvilPlayer.experienceProgress - 0.5F) < 0.001F,
+                    "when boundless enchanting is disabled, the anvil should keep vanilla whole-level subtraction");
+        } finally {
+            EmergentConfig.get().boundlessEnchanting = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void unrestrictedEnchantmentsGateControlsAnvilCompatibility(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Holder<Enchantment> smite = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SMITE);
+
+        boolean previous = EmergentConfig.get().unrestrictedEnchantments;
+        try {
+            EmergentConfig.get().unrestrictedEnchantments = false;
+            ItemStack vanillaResult = anvilResultForTwoEnchantedSwords(context, sharpness, smite);
+            context.assertTrue(EnchantmentHelper.getEnchantmentsForCrafting(vanillaResult).getLevel(smite) == 0,
+                    "when unrestricted enchantments are disabled, vanilla anvil compatibility should reject Smite on a Sharpness sword");
+
+            EmergentConfig.get().unrestrictedEnchantments = true;
+            ItemStack unrestrictedResult = anvilResultForTwoEnchantedSwords(context, sharpness, smite);
+            ItemEnchantments enchantments = EnchantmentHelper.getEnchantmentsForCrafting(unrestrictedResult);
+            context.assertTrue(enchantments.getLevel(sharpness) == 1 && enchantments.getLevel(smite) == 1,
+                    "when unrestricted enchantments are enabled, the real anvil path should keep both mutually exclusive combat enchantments");
+        } finally {
+            EmergentConfig.get().unrestrictedEnchantments = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void unrestrictedEnchantmentsGateControlsHelperCompatibility(GameTestHelper context) {
+        Holder<Enchantment> sharpness = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SHARPNESS);
+        Holder<Enchantment> smite = context.getLevel().registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .getOrThrow(Enchantments.SMITE);
+
+        boolean previous = EmergentConfig.get().unrestrictedEnchantments;
+        try {
+            EmergentConfig.get().unrestrictedEnchantments = false;
+            context.assertFalse(EnchantmentHelper.isEnchantmentCompatible(List.of(sharpness), smite),
+                    "vanilla helper compatibility should reject Smite when Sharpness is already present");
+            List<EnchantmentInstance> vanillaOptions = new ArrayList<>(List.of(new EnchantmentInstance(smite, 1)));
+            EnchantmentHelper.filterCompatibleEnchantments(vanillaOptions, new EnchantmentInstance(sharpness, 1));
+            context.assertTrue(vanillaOptions.isEmpty(),
+                    "vanilla enchantment selection should filter mutually exclusive options");
+
+            EmergentConfig.get().unrestrictedEnchantments = true;
+            context.assertTrue(EnchantmentHelper.isEnchantmentCompatible(List.of(sharpness), smite),
+                    "unrestricted enchantments should make helper compatibility accept Smite with Sharpness");
+            List<EnchantmentInstance> unrestrictedOptions = new ArrayList<>(List.of(new EnchantmentInstance(smite, 1)));
+            EnchantmentHelper.filterCompatibleEnchantments(unrestrictedOptions, new EnchantmentInstance(sharpness, 1));
+            context.assertTrue(unrestrictedOptions.size() == 1 && unrestrictedOptions.getFirst().enchantment().equals(smite),
+                    "unrestricted enchantments should keep mutually exclusive options during helper filtering");
+        } finally {
+            EmergentConfig.get().unrestrictedEnchantments = previous;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void dynamicExperienceDelegatesToExperienceEnergy(GameTestHelper context) {
         int dynamicReward = DynamicExperience.baseExperienceFromMeasurements(20.0, 4.0, 2.0, 0.0);
         int sharedEnergy = ExperienceEnergy.livingDeathEnergyPoints(20.0, 4.0, 2.0, 0.0);
@@ -1243,10 +2035,51 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         int zombieReward = zombie.getExperienceReward(context.getLevel(), null);
         int ravagerReward = ravager.getExperienceReward(context.getLevel(), null);
 
-        context.assertTrue(zombieReward == DynamicExperience.rewardAfterVanillaProcessing(zombie, 5),
-                "the central vanilla experience query should use the dynamic physical formula");
+        context.assertTrue(zombieReward == DynamicExperience.baseRewardForVanillaProcessing(zombie, 5),
+                "the central vanilla experience query should feed the dynamic physical formula into vanilla processing");
         context.assertTrue(ravagerReward > zombieReward,
                 "sculk catalysts and XP orbs should see more charge from a larger, tougher entity");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sculkCatalystChargeUsesDynamicExperienceEnergy(GameTestHelper context) {
+        BlockPos catalystPos = TEST_POS;
+        context.setBlock(catalystPos, Blocks.SCULK_CATALYST);
+
+        LivingEntity zombie = context.spawn(EntityType.ZOMBIE, Vec3.atBottomCenterOf(TEST_POS.above()));
+        LivingEntity ravager = context.spawn(EntityType.RAVAGER, Vec3.atBottomCenterOf(TEST_POS.relative(Direction.EAST, 2).above()));
+        int zombieReward = zombie.getExperienceReward(context.getLevel(), null);
+        int ravagerReward = ravager.getExperienceReward(context.getLevel(), null);
+
+        SculkCatalystBlockEntity.CatalystListener zombieListener = new SculkCatalystBlockEntity.CatalystListener(
+                Blocks.SCULK_CATALYST.defaultBlockState(),
+                new BlockPositionSource(context.absolutePos(catalystPos)));
+        SculkCatalystBlockEntity.CatalystListener ravagerListener = new SculkCatalystBlockEntity.CatalystListener(
+                Blocks.SCULK_CATALYST.defaultBlockState(),
+                new BlockPositionSource(context.absolutePos(catalystPos)));
+
+        boolean zombieHandled = zombieListener.handleGameEvent(
+                context.getLevel(),
+                GameEvent.ENTITY_DIE,
+                GameEvent.Context.of(zombie),
+                zombie.position());
+        boolean ravagerHandled = ravagerListener.handleGameEvent(
+                context.getLevel(),
+                GameEvent.ENTITY_DIE,
+                GameEvent.Context.of(ravager),
+                ravager.position());
+
+        context.assertTrue(zombieHandled && ravagerHandled,
+                "sculk catalyst listeners should consume living death events");
+        context.assertTrue(totalSculkCharge(zombieListener) == zombieReward,
+                "sculk catalyst charge should use the same dynamic XP-energy reward as dropped orbs");
+        context.assertTrue(totalSculkCharge(ravagerListener) == ravagerReward,
+                "larger dynamic XP rewards should become matching sculk spread charge");
+        context.assertTrue(ravagerReward > zombieReward,
+                "a larger, tougher entity should feed more sculk charge than a zombie");
+        context.assertTrue(zombie.wasExperienceConsumed() && ravager.wasExperienceConsumed(),
+                "sculk catalysts should mark the living death energy as consumed to prevent duplicate XP drops");
         context.succeed();
     }
 
@@ -1406,10 +2239,73 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.succeed();
     }
 
+    private static float maxObservedDamageFromEffect(
+            GameTestHelper context,
+            DamageEntity effect,
+            EnchantedItemInUse item,
+            int enchantmentLevel) {
+        float maxDamage = 0.0F;
+        for (int seed = 0; seed < 128; seed++) {
+            LivingEntity target = context.spawn(EntityType.COW, Vec3.atBottomCenterOf(TEST_POS.above()));
+            target.getRandom().setSeed(seed);
+            effect.apply(context.getLevel(), enchantmentLevel, item, target, target.position());
+            maxDamage = Math.max(maxDamage, target.getMaxHealth() - target.getHealth());
+            target.discard();
+        }
+        return maxDamage;
+    }
+
+    private static ExplodeEffect firstExplodeEffect(Enchantment enchantment) {
+        for (TargetedConditionalEffect<EnchantmentEntityEffect> effect : enchantment.getEffects(EnchantmentEffectComponents.POST_ATTACK)) {
+            ExplodeEffect explodeEffect = firstExplodeEffect(effect.effect());
+            if (explodeEffect != null) {
+                return explodeEffect;
+            }
+        }
+        throw new AssertionError("expected enchantment to contain an explosion effect");
+    }
+
+    private static ItemStack anvilResultForTwoEnchantedSwords(
+            GameTestHelper context,
+            Holder<Enchantment> first,
+            Holder<Enchantment> second) {
+        Player player = context.makeMockPlayer(GameType.SURVIVAL);
+        player.experienceLevel = 30;
+        AnvilMenu menu = new AnvilMenu(0, player.getInventory());
+        ItemStack baseSword = new ItemStack(Items.DIAMOND_SWORD);
+        ItemStack additionSword = new ItemStack(Items.DIAMOND_SWORD);
+        EnchantmentHelper.updateEnchantments(baseSword, enchantments -> enchantments.set(first, 1));
+        EnchantmentHelper.updateEnchantments(additionSword, enchantments -> enchantments.set(second, 1));
+        menu.getSlot(AnvilMenu.INPUT_SLOT).set(baseSword);
+        menu.getSlot(AnvilMenu.ADDITIONAL_SLOT).set(additionSword);
+        return menu.getSlot(AnvilMenu.RESULT_SLOT).getItem().copy();
+    }
+
+    private static ExplodeEffect firstExplodeEffect(EnchantmentEntityEffect effect) {
+        if (effect instanceof ExplodeEffect explodeEffect) {
+            return explodeEffect;
+        }
+        if (effect instanceof AllOf.EntityEffects allOf) {
+            for (EnchantmentEntityEffect childEffect : allOf.effects()) {
+                ExplodeEffect explodeEffect = firstExplodeEffect(childEffect);
+                if (explodeEffect != null) {
+                    return explodeEffect;
+                }
+            }
+        }
+        return null;
+    }
+
     private static void assertClose(double actual, double expected, String message) {
         if (Math.abs(actual - expected) > 1.0E-6) {
             throw new AssertionError(message + ": " + actual + " != " + expected);
         }
+    }
+
+    private static int totalSculkCharge(SculkCatalystBlockEntity.CatalystListener listener) {
+        return listener.getSculkSpreader().getCursors().stream()
+                .mapToInt(cursor -> cursor.getCharge())
+                .sum();
     }
 
     @Override

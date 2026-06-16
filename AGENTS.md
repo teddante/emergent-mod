@@ -56,6 +56,7 @@ Keep the mod readable, compatible, and efficient. Use simple mechanisms that com
 - Keep PR bodies grouped and concise as they grow; summarize intent and current evidence rather than appending every historical micro-change when commits, checks, and logs already preserve the details.
 - When editing long PR bodies from shell scripts, prefer a markdown body file and verify the result does not contain literal escape sequences such as `` `n`` or `` `r``.
 - Do not block every inner-loop push on `gh pr checks --watch`. Prefer local smoke/perf gates first, then check CI synchronously when build tooling changed, a failure is suspected, the PR is being readied, or the user needs a definitive remote status now.
+- Optimize for real elapsed time as well as tokens: avoid long watches and repeated broad commands when a short bounded poll, targeted search, or local gate gives enough evidence for the next decision.
 - Use issues for reproducible bugs and concrete feature ideas with versions, logs, mod lists, and reproduction steps when relevant.
 - Use SemVer in `gradle.properties`: patch for compatible fixes/tuning, minor for compatible feature systems, major for breaking config/data behavior or dropping a supported Minecraft line. `0.y.z` still means early development.
 - Only tag tested public builds. Releases should come from annotated `vMAJOR.MINOR.PATCH` tags after smoke checks and release notes are ready.
