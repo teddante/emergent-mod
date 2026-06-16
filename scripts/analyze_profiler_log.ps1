@@ -61,6 +61,17 @@ function Get-CounterTotal([hashtable]$Totals, [string]$Name) {
     return 0L
 }
 
+function Add-TopChunkSummary([System.Collections.Generic.List[string]]$Summary, [hashtable]$ChunkTotals, [string]$Prefix, [string]$Label, [int]$Top) {
+    $topChunks = @($ChunkTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "$Prefix@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First ([Math]::Min(3, $Top)))
+    if ($topChunks.Count -gt 0) {
+        $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+        $Summary.Add("  ${Label}=$chunkText")
+    }
+}
+
 function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summary, [hashtable]$CounterTotals, [hashtable]$ChunkTotals, [int]$Top) {
     $finiteTicks = Get-CounterTotal $CounterTotals "finite_fluid_ticks"
     if ($finiteTicks -le 0) {
@@ -69,31 +80,71 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
 
     $waterTicks = Get-CounterTotal $CounterTotals "finite_fluid_water_ticks"
     $lavaTicks = Get-CounterTotal $CounterTotals "finite_fluid_lava_ticks"
+    $lavaHeat = Get-CounterTotal $CounterTotals "finite_fluid_lava_heat"
     $activeSchedules = Get-CounterTotal $CounterTotals "finite_fluid_active_schedules"
     $quietSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_schedule_skips"
+    $inspectionClaims = Get-CounterTotal $CounterTotals "finite_fluid_inspection_claims"
+    $inspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_deferrals"
+    $chunkInspectionClaims = Get-CounterTotal $CounterTotals "finite_fluid_inspection_chunk_claims"
+    $globalInspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_global_deferrals"
+    $chunkInspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_chunk_deferrals"
+    $budgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_claims"
+    $budgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_deferrals"
+    $chunkBudgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_claims"
+    $globalBudgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_global_deferrals"
+    $chunkBudgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_deferrals"
     $horizontalMoves = Get-CounterTotal $CounterTotals "finite_fluid_horizontal_moves"
     $downwardMoves = Get-CounterTotal $CounterTotals "finite_fluid_downward_moves"
     $thermalReactions = Get-CounterTotal $CounterTotals "finite_fluid_thermal_reactions"
+    $thermalQuietSkips = Get-CounterTotal $CounterTotals "finite_fluid_water_thermal_quiet_skips"
+    $thermalCacheSkips = Get-CounterTotal $CounterTotals "finite_fluid_water_thermal_cache_skips"
     $thinSettled = Get-CounterTotal $CounterTotals "finite_fluid_thin_settled"
     $stableSources = Get-CounterTotal $CounterTotals "finite_fluid_stable_sources"
     $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
+    $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
 
-    $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions
+    $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions + $lavaHeat
     $hasScheduleCounters = $activeSchedules -gt 0 -or $quietSkips -gt 0 -or
             $CounterTotals.ContainsKey("finite_fluid_active_schedules") -or
             $CounterTotals.ContainsKey("finite_fluid_quiet_schedule_skips")
+    $hasBudgetCounters = $CounterTotals.ContainsKey("finite_fluid_budget_claims") -or
+            $CounterTotals.ContainsKey("finite_fluid_budget_deferrals") -or
+            $CounterTotals.ContainsKey("finite_fluid_budget_chunk_claims") -or
+            $CounterTotals.ContainsKey("finite_fluid_budget_chunk_deferrals")
+    $hasInspectionCounters = $CounterTotals.ContainsKey("finite_fluid_inspection_claims") -or
+            $CounterTotals.ContainsKey("finite_fluid_inspection_deferrals") -or
+            $CounterTotals.ContainsKey("finite_fluid_inspection_chunk_claims") -or
+            $CounterTotals.ContainsKey("finite_fluid_inspection_chunk_deferrals")
+    $hasQuietCacheCounters = $CounterTotals.ContainsKey("finite_fluid_quiet_cache_hits")
     $quietDenominator = [Math]::Max(1L, $activeSchedules + $quietSkips)
     $quietPercent = ($quietSkips * 100.0) / $quietDenominator
     $workPercent = ($workEvents * 100.0) / [Math]::Max(1L, $finiteTicks)
+    $lavaHeatPercent = ($lavaHeat * 100.0) / [Math]::Max(1L, $lavaTicks)
 
     $Summary.Add("")
     $Summary.Add("Finite fluid diagnosis:")
     $Summary.Add(("  ticks={0} water={1} lava={2} activeSchedules={3} quietSkips={4} quietRatio={5:N1}% workEvents={6} workPerTick={7:N1}%" -f `
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
-    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} horizontalMoves={3} downwardMoves={4} thermalReactions={5}" -f `
-                $thinSettled, $stableSources, $quietTickSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  inspectionClaims={0} chunkInspectionClaims={1} inspectionDeferrals={2} globalInspectionDeferrals={3} chunkInspectionDeferrals={4}" -f `
+                $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
+    $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
+                $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} thermalQuietSkips={4} thermalCacheSkips={5} horizontalMoves={6} downwardMoves={7} thermalReactions={8}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
+        $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
+    }
     if (!$hasScheduleCounters) {
         $Summary.Add("  scheduleCounters=missing; this log was probably captured before active/quiet schedule counters were added.")
+    }
+    if (!$hasBudgetCounters) {
+        $Summary.Add("  budgetCounters=missing; this log was probably captured before finite-fluid active work budgets were added.")
+    }
+    if (!$hasInspectionCounters) {
+        $Summary.Add("  inspectionCounters=missing; this log was probably captured before finite-fluid scheduled tick inspection budgets were added.")
+    }
+    if (!$hasQuietCacheCounters) {
+        $Summary.Add("  quietCacheCounters=missing; this log was probably captured before repeated quiet-state caching was added.")
     }
 
     $quietReasons = @(
@@ -107,17 +158,20 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
         $Summary.Add("  topQuietReason=$($topQuiet.Name):$($topQuiet.Value)")
     }
 
-    $topChunks = @($ChunkTotals.GetEnumerator() |
-        Where-Object { $_.Name -like "finite_fluids@*" } |
-        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
-        Select-Object -First ([Math]::Min(3, $Top)))
-    if ($topChunks.Count -gt 0) {
-        $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
-        $Summary.Add("  hottestFiniteFluidChunks=$chunkText")
-    }
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_fluids" "hottestFiniteFluidChunks" $Top
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_water" "hottestFiniteWaterChunks" $Top
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_lava" "hottestFiniteLavaChunks" $Top
 
     if (!$hasScheduleCounters) {
         $Summary.Add("  interpretation=older profiler format; retest with the latest jar before deciding whether wakeups are stale or active.")
+    } elseif (!$hasBudgetCounters) {
+        $Summary.Add("  interpretation=pre-budget profiler format; retest with the latest copied jar before tuning active fluid budgets.")
+    } elseif ($inspectionDeferrals -gt 0 -and $budgetDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid inspection and active work both exceeded budget and were deferred fairly; inspect chunk hotspots before raising either budget.")
+    } elseif ($inspectionDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid scheduled tick inspection exceeded the per-tick budget and was deferred fairly before expensive thermal/neighbour checks.")
+    } elseif ($budgetDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid neighbour-scan/active work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
     } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
     } elseif ($quietPercent -ge 65.0 -and $activeSchedules -gt 0) {
@@ -163,8 +217,72 @@ function Add-LagCorrelation([System.Collections.Generic.List[string]]$Summary, [
     }
 }
 
+function Get-StartupDiagnostics([array]$LogLines) {
+    $profilerEnabled = $false
+    $slowMs = ""
+    $activeBudget = ""
+    $chunkBudget = ""
+    $inspectionBudget = ""
+    $inspectionChunkBudget = ""
+
+    foreach ($line in $LogLines) {
+        if ($line -match "Emergent profiler enabled\. Slow tick threshold: (.+?) ms") {
+            $profilerEnabled = $true
+            $slowMs = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid work budget: ([0-9]+) cells/tick") {
+            $activeBudget = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid chunk work budget: ([0-9]+) cells/chunk/tick") {
+            $chunkBudget = $Matches[1]
+        } elseif ($line -match "Emergent finite fluid inspection budget: ([0-9]+) cells/tick and ([0-9]+) cells/chunk/tick") {
+            $inspectionBudget = $Matches[1]
+            $inspectionChunkBudget = $Matches[2]
+        }
+    }
+
+    [PSCustomObject]@{
+        ProfilerEnabled = $profilerEnabled
+        SlowMs = $slowMs
+        ActiveBudget = $activeBudget
+        ChunkBudget = $chunkBudget
+        InspectionBudget = $inspectionBudget
+        InspectionChunkBudget = $inspectionChunkBudget
+    }
+}
+
+function Get-LogLines([string]$ResolvedPath) {
+    if (!$ResolvedPath.EndsWith(".gz", [System.StringComparison]::OrdinalIgnoreCase)) {
+        return @(Get-Content -LiteralPath $ResolvedPath)
+    }
+
+    $fileStream = [IO.File]::OpenRead($ResolvedPath)
+    try {
+        $gzipStream = [IO.Compression.GzipStream]::new($fileStream, [IO.Compression.CompressionMode]::Decompress)
+        try {
+            $reader = [IO.StreamReader]::new($gzipStream)
+            try {
+                $lines = New-Object System.Collections.Generic.List[string]
+                while (!$reader.EndOfStream) {
+                    $lines.Add($reader.ReadLine())
+                }
+                return @($lines)
+            } finally {
+                $reader.Dispose()
+            }
+        } finally {
+            if ($gzipStream) {
+                $gzipStream.Dispose()
+            }
+        }
+    } finally {
+        if ($fileStream) {
+            $fileStream.Dispose()
+        }
+    }
+}
+
 $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
-$logLines = Get-Content -LiteralPath $resolvedPath
+$logLines = Get-LogLines $resolvedPath
+$startup = Get-StartupDiagnostics $logLines
 $allProfilerLines = @($logLines | Where-Object { $_ -like "*Emergent profiler:*" })
 $profilerLines = @($allProfilerLines | Where-Object { (Get-ProfilerTick $_) -gt $WarmupTicks })
 $lagLines = @($logLines | Where-Object { $_ -like "*Can't keep up!*" })
@@ -183,6 +301,13 @@ $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log summary")
 $summary.Add("Log: $resolvedPath")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
+$summary.Add(("Startup: profilerEnabled={0} slowMs={1} finiteFluidBudget={2} finiteFluidChunkBudget={3} finiteFluidInspectionBudget={4} finiteFluidInspectionChunkBudget={5}" -f `
+            $startup.ProfilerEnabled,
+            $(if ($startup.SlowMs -ne "") { $startup.SlowMs } else { "-" }),
+            $(if ($startup.ActiveBudget -ne "") { $startup.ActiveBudget } else { "-" }),
+            $(if ($startup.ChunkBudget -ne "") { $startup.ChunkBudget } else { "-" }),
+            $(if ($startup.InspectionBudget -ne "") { $startup.InspectionBudget } else { "-" }),
+            $(if ($startup.InspectionChunkBudget -ne "") { $startup.InspectionChunkBudget } else { "-" })))
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 $summary.Add("")
 $summary.Add("Worst profiler ticks:")

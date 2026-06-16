@@ -4,12 +4,15 @@ import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
+import com.teddante.emergent.FiniteFluidQuietCache;
+import com.teddante.emergent.FiniteFluidBudgetSettings;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.ThermalPhysics;
 import com.teddante.emergent.WaterPhysics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LiquidBlockContainer;
@@ -24,8 +27,11 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
 
 /**
  * Cellular automata fluid physics.
@@ -37,6 +43,20 @@ import java.util.List;
  */
 @Mixin(FlowingFluid.class)
 public abstract class FlowableFluidMixin extends Fluid {
+    @Unique
+    private static final int emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET = FiniteFluidBudgetSettings.activeTickBudget();
+    @Unique
+    private static final int emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET = FiniteFluidBudgetSettings.activeChunkTickBudget();
+    @Unique
+    private static final int emergent$FINITE_FLUID_INSPECTION_TICK_BUDGET = FiniteFluidBudgetSettings.inspectionTickBudget();
+    @Unique
+    private static final int emergent$FINITE_FLUID_INSPECTION_CHUNK_TICK_BUDGET = FiniteFluidBudgetSettings.inspectionChunkTickBudget();
+    @Unique
+    private static final int emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS = FiniteFluidBudgetSettings.budgetDeferSpreadTicks();
+    @Unique
+    private static final int emergent$MAX_HORIZONTAL_DIRECTIONS = 4;
+    @Unique
+    private static final Map<ServerLevel, EmergentFiniteFluidBudget> emergent$FINITE_FLUID_BUDGETS = new WeakHashMap<>();
 
     @Shadow
     public abstract FluidState getFlowing(int level, boolean falling);
@@ -79,45 +99,92 @@ public abstract class FlowableFluidMixin extends Fluid {
         int startingLevel = currentLevel;
         int tickDelay = fluid.getTickDelay(world);
 
-        if (WaterPhysics.isWater(fluid)) {
+        boolean isWater = WaterPhysics.isWater(fluid);
+        boolean isLava = WaterPhysics.isLava(fluid);
+        if (isWater) {
             EmergentProfiler.count(world, "finite_fluid_water_ticks", 1);
-            int evaporatedByEnvironment = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(world, pos, currentLevel);
-            if (evaporatedByEnvironment <= 0) {
-                EmergentProfiler.count(world, "finite_fluid_environment_evaporations", 1);
-                removeWaterAt(world, pos, blockState);
-                return;
-            }
-            currentLevel = evaporatedByEnvironment;
+            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_WATER, pos);
+        }
+        if (isLava) {
+            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
+            EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
+        }
 
-            if (ThermalPhysics.tryFreezeWaterFromStoredCold(world, pos, currentLevel)) {
-                EmergentProfiler.count(world, "finite_fluid_freezes", 1);
-                return;
-            }
+        if (!emergent$claimFiniteFluidInspectionSlot(world, pos, fluid, tickDelay)) {
+            return;
+        }
 
-            int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
-            if (evaporatedLevel != currentLevel) {
-                EmergentProfiler.count(world, "finite_fluid_heat_evaporations", 1);
-                if (evaporatedLevel <= 0) {
+        String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (cachedQuietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_cache_hits", 1);
+            if (isWater) {
+                EmergentProfiler.count(world, "finite_fluid_water_thermal_cache_skips", 1);
+            }
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + cachedQuietTickReason + "_skips", 1);
+            return;
+        }
+
+        if (isWater) {
+            if (!ThermalPhysics.finiteWaterMayChangeThermally(world, pos, currentLevel)) {
+                EmergentProfiler.count(world, "finite_fluid_water_thermal_quiet_skips", 1);
+            } else {
+                int evaporatedByEnvironment = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(world, pos, currentLevel);
+                if (evaporatedByEnvironment <= 0) {
+                    EmergentProfiler.count(world, "finite_fluid_environment_evaporations", 1);
                     removeWaterAt(world, pos, blockState);
-                } else {
-                    setWaterLevel(world, pos, evaporatedLevel, false);
-                    emergent$scheduleFiniteFluidIfActive(world, pos, fluid, evaporatedLevel, tickDelay);
+                    return;
                 }
-                return;
+                currentLevel = evaporatedByEnvironment;
+
+                if (ThermalPhysics.tryFreezeWaterFromStoredCold(world, pos, currentLevel)) {
+                    EmergentProfiler.count(world, "finite_fluid_freezes", 1);
+                    return;
+                }
+
+                int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
+                if (evaporatedLevel != currentLevel) {
+                    EmergentProfiler.count(world, "finite_fluid_heat_evaporations", 1);
+                    if (evaporatedLevel <= 0) {
+                        removeWaterAt(world, pos, blockState);
+                    } else {
+                        setWaterLevel(world, pos, evaporatedLevel, false);
+                        emergent$scheduleFiniteFluidIfActive(world, pos, fluid, evaporatedLevel, tickDelay);
+                    }
+                    return;
+                }
             }
         }
 
         if (currentLevel >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
             EmergentProfiler.count(world, "finite_fluid_stable_sources", 1);
+            emergent$rememberFiniteFluidQuietReason(world, pos, fluid, currentLevel, "stable_source");
             return;
         }
 
-        if (WaterPhysics.isLava(fluid)) {
-            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
-            if (EmergentConfig.get().materialReactions) {
-                EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
-                ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
-            }
+        String earlyQuietTickReason = emergent$cheapFiniteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (earlyQuietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + earlyQuietTickReason + "_skips", 1);
+            emergent$rememberFiniteFluidQuietReason(world, pos, fluid, currentLevel, earlyQuietTickReason);
+            return;
+        }
+
+        if (!emergent$claimFiniteFluidWorkSlot(world, pos, fluid, tickDelay)) {
+            return;
+        }
+
+        if (isLava && EmergentConfig.get().materialReactions) {
+            EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
+            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
+        }
+
+        String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (quietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + quietTickReason + "_skips", 1);
+            emergent$rememberFiniteFluidQuietReason(world, pos, fluid, currentLevel, quietTickReason);
+            return;
         }
 
         // STEP 1: Gravity - try to flow down
@@ -134,7 +201,8 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         boolean belowWaterloggable = isWaterloggableTarget(world, below, belowBlockState);
-        if (canFlowInto(world, below, belowBlockState, Direction.DOWN) && (!belowWaterloggable || currentLevel >= 8)) {
+        if (emergent$canFlowInto(world, below, belowBlockState, belowFluidState, fluid, Direction.DOWN)
+                && (!belowWaterloggable || currentLevel >= 8)) {
             int belowLevel = WaterPhysics.isSameFluid(fluid, belowFluidState) ? belowFluidState.getAmount() : 0;
             int spaceBelow = 8 - belowLevel;
 
@@ -213,13 +281,6 @@ public abstract class FlowableFluidMixin extends Fluid {
             return;
         }
 
-        String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
-        if (quietTickReason != null) {
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
-            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + quietTickReason + "_skips", 1);
-            return;
-        }
-
         // Find all horizontal neighbors and calculate average level
         int totalLevel = currentLevel;
         int count = 1;
@@ -231,6 +292,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         for (Direction dir : Direction.Plane.HORIZONTAL) {
             BlockPos neighborPos = pos.relative(dir);
             BlockState neighborBlockState = world.getBlockState(neighborPos);
+            FluidState neighborFluidState = neighborBlockState.getFluidState();
             neighbors[idx] = neighborPos;
             directions[idx] = dir;
 
@@ -240,9 +302,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 EmergentProfiler.count(world, "finite_fluid_thermal_reactions", 1);
                 updateSourceAfterThermalReaction(world, pos, blockState, fluid, tickDelay, thermalResult);
                 return;
-            } else if (canFlowInto(world, neighborPos, neighborBlockState, dir)
+            } else if (emergent$canFlowInto(world, neighborPos, neighborBlockState, neighborFluidState, fluid, dir)
                     && !isWaterloggableTarget(world, neighborPos, neighborBlockState)) {
-                FluidState neighborFluidState = neighborBlockState.getFluidState();
                 int neighborLevel = WaterPhysics.isSameFluid(fluid, neighborFluidState)
                         ? neighborFluidState.getAmount()
                         : 0;
@@ -281,6 +342,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // 4. If we don't have enough to fill all lowest neighbors, use a stable
                 // position-based ordering so the same world settles the same way each run.
 
+                int[] minLevelIndices = new int[emergent$MAX_HORIZONTAL_DIRECTIONS];
                 while (toDistribute > 0) {
                     // Find current minimum level among valid neighbors that we can flow into
                     int minLevel = 9; // Max is 8
@@ -293,30 +355,32 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
 
                     // Collect all neighbors at this minimum level
-                    List<Integer> minLevelIndices = new ArrayList<>();
+                    int minLevelCount = 0;
                     for (int i = 0; i < 4; i++) {
                         if (canFlow[i] && neighborLevels[i] == minLevel && neighborLevels[i] < currentLevel) {
-                            minLevelIndices.add(i);
+                            minLevelIndices[minLevelCount] = i;
+                            minLevelCount++;
                         }
                     }
 
-                    if (minLevelIndices.isEmpty()) {
+                    if (minLevelCount == 0) {
                         break; // Should not happen given logic
                     }
 
                     // Do we have enough to give 1 to everyone?
-                    if (toDistribute >= minLevelIndices.size()) {
+                    if (toDistribute >= minLevelCount) {
                         // Yes, give 1 to all
-                        for (int index : minLevelIndices) {
+                        for (int i = 0; i < minLevelCount; i++) {
+                            int index = minLevelIndices[i];
                             neighborLevels[index]++;
                             currentLevel--; // Update virtual current level
                             toDistribute--;
                         }
                     } else {
                         // No, we must choose lucky winners
-                        sortDeterministically(minLevelIndices, pos);
+                        sortDeterministically(minLevelIndices, minLevelCount, pos);
                         for (int i = 0; i < toDistribute; i++) {
-                            int chosenIndex = minLevelIndices.get(i);
+                            int chosenIndex = minLevelIndices[i];
                             neighborLevels[chosenIndex]++;
                             currentLevel--;
                         }
@@ -329,10 +393,11 @@ public abstract class FlowableFluidMixin extends Fluid {
                 // Apply changes to world
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
-                        int movedAmount = Math.max(0, neighborLevels[i]
-                                - (WaterPhysics.isSameFluid(fluid, world.getFluidState(neighbors[i]))
-                                        ? world.getFluidState(neighbors[i]).getAmount()
-                                        : 0));
+                        FluidState neighborFluidState = world.getFluidState(neighbors[i]);
+                        int existingNeighborLevel = WaterPhysics.isSameFluid(fluid, neighborFluidState)
+                                ? neighborFluidState.getAmount()
+                                : 0;
+                        int movedAmount = Math.max(0, neighborLevels[i] - existingNeighborLevel);
                         if (movedAmount <= 0) {
                             continue;
                         }
@@ -373,6 +438,112 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
+    private boolean emergent$claimFiniteFluidInspectionSlot(ServerLevel world, BlockPos pos, Fluid fluid, int tickDelay) {
+        if (emergent$FINITE_FLUID_INSPECTION_TICK_BUDGET <= 0
+                && emergent$FINITE_FLUID_INSPECTION_CHUNK_TICK_BUDGET <= 0) {
+            return true;
+        }
+
+        EmergentFiniteFluidBudget budget = emergent$finiteFluidBudgetForTick(world);
+        if (emergent$FINITE_FLUID_INSPECTION_TICK_BUDGET > 0
+                && budget.inspected >= emergent$FINITE_FLUID_INSPECTION_TICK_BUDGET) {
+            emergent$deferFiniteFluidInspection(world, pos, fluid, tickDelay, "global");
+            return false;
+        }
+
+        long chunkKey = ChunkPos.pack(pos);
+        int chunkInspected = budget.chunkInspections.getOrDefault(chunkKey, 0);
+        if (emergent$FINITE_FLUID_INSPECTION_CHUNK_TICK_BUDGET > 0
+                && chunkInspected >= emergent$FINITE_FLUID_INSPECTION_CHUNK_TICK_BUDGET) {
+            emergent$deferFiniteFluidInspection(world, pos, fluid, tickDelay, "chunk");
+            return false;
+        }
+
+        budget.inspected++;
+        budget.chunkInspections.put(chunkKey, chunkInspected + 1);
+        EmergentProfiler.count(world, "finite_fluid_inspection_claims", 1);
+        EmergentProfiler.count(world, "finite_fluid_inspection_chunk_claims", 1);
+        return true;
+    }
+
+    @Unique
+    private boolean emergent$claimFiniteFluidWorkSlot(ServerLevel world, BlockPos pos, Fluid fluid, int tickDelay) {
+        if (emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET <= 0
+                && emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET <= 0) {
+            return true;
+        }
+
+        EmergentFiniteFluidBudget budget = emergent$finiteFluidBudgetForTick(world);
+
+        if (emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET > 0
+                && budget.claimed >= emergent$FINITE_FLUID_ACTIVE_TICK_BUDGET) {
+            emergent$deferFiniteFluidWork(world, pos, fluid, tickDelay, "global");
+            return false;
+        }
+
+        long chunkKey = ChunkPos.pack(pos);
+        int chunkClaimed = budget.chunkClaims.getOrDefault(chunkKey, 0);
+        if (emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET > 0
+                && chunkClaimed >= emergent$FINITE_FLUID_ACTIVE_CHUNK_TICK_BUDGET) {
+            emergent$deferFiniteFluidWork(world, pos, fluid, tickDelay, "chunk");
+            return false;
+        }
+
+        budget.claimed++;
+        budget.chunkClaims.put(chunkKey, chunkClaimed + 1);
+        EmergentProfiler.count(world, "finite_fluid_budget_claims", 1);
+        EmergentProfiler.count(world, "finite_fluid_budget_chunk_claims", 1);
+        return true;
+    }
+
+    @Unique
+    private EmergentFiniteFluidBudget emergent$finiteFluidBudgetForTick(ServerLevel world) {
+        EmergentFiniteFluidBudget budget = emergent$FINITE_FLUID_BUDGETS.computeIfAbsent(
+                world,
+                ignored -> new EmergentFiniteFluidBudget(world.getGameTime()));
+        if (budget.gameTime != world.getGameTime()) {
+            budget.gameTime = world.getGameTime();
+            budget.claimed = 0;
+            budget.inspected = 0;
+            budget.chunkClaims.clear();
+            budget.chunkInspections.clear();
+        }
+        return budget;
+    }
+
+    @Unique
+    private void emergent$deferFiniteFluidInspection(
+            ServerLevel world,
+            BlockPos pos,
+            Fluid fluid,
+            int tickDelay,
+            String reason) {
+        EmergentProfiler.count(world, "finite_fluid_inspection_deferrals", 1);
+        EmergentProfiler.count(world, "finite_fluid_inspection_" + reason + "_deferrals", 1);
+        emergent$scheduleDeferredFiniteFluidTick(world, pos, fluid, tickDelay);
+    }
+
+    @Unique
+    private void emergent$deferFiniteFluidWork(
+            ServerLevel world,
+            BlockPos pos,
+            Fluid fluid,
+            int tickDelay,
+            String reason) {
+        EmergentProfiler.count(world, "finite_fluid_budget_deferrals", 1);
+        EmergentProfiler.count(world, "finite_fluid_budget_" + reason + "_deferrals", 1);
+        emergent$scheduleDeferredFiniteFluidTick(world, pos, fluid, tickDelay);
+    }
+
+    @Unique
+    private void emergent$scheduleDeferredFiniteFluidTick(ServerLevel world, BlockPos pos, Fluid fluid, int tickDelay) {
+        int spread = Math.max(1, emergent$FINITE_FLUID_BUDGET_DEFER_SPREAD_TICKS);
+        int chunkPhase = Math.floorMod(ChunkPos.pack(pos), spread);
+        int phaseDelay = 1 + Math.floorMod(directionRank(pos, 0) + pos.getY() + chunkPhase, spread);
+        world.scheduleTick(pos, fluid, Math.max(1, tickDelay + phaseDelay));
+    }
+
+    @Unique
     private boolean isValidSourceLevel(BlockState state, int level) {
         // Waterloggable blocks (fences, slabs, etc.) used as sources only support
         // binary water states.
@@ -386,12 +557,12 @@ public abstract class FlowableFluidMixin extends Fluid {
     private boolean emergent$isStableFiniteSource(ServerLevel world, BlockPos pos, Fluid fluid) {
         BlockPos below = pos.below();
         BlockState belowState = world.getBlockState(below);
-        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
             return false;
         }
 
-        if (canFlowInto(world, below, belowState, Direction.DOWN)
-                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+        if (emergent$targetCanAcceptFiniteFluid(world, below, belowState, belowFluidState, fluid)) {
             return false;
         }
 
@@ -407,8 +578,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 return false;
             }
 
-            if (canFlowInto(world, targetPos, targetState, direction)
-                    && emergent$targetCanAcceptSourceFluid(world, targetPos, targetState, fluid)) {
+            if (emergent$targetCanAcceptFiniteFluid(world, targetPos, targetState, targetFluidState, fluid)) {
                 return false;
             }
         }
@@ -417,8 +587,12 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
-    private boolean emergent$targetCanAcceptSourceFluid(ServerLevel world, BlockPos pos, BlockState state, Fluid fluid) {
-        FluidState targetFluidState = state.getFluidState();
+    private boolean emergent$targetCanAcceptFiniteFluid(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            FluidState targetFluidState,
+            Fluid fluid) {
         if (WaterPhysics.isSameFluid(fluid, targetFluidState)) {
             return targetFluidState.getAmount() < 8;
         }
@@ -438,8 +612,17 @@ public abstract class FlowableFluidMixin extends Fluid {
     @Unique
     private boolean canFlowInto(ServerLevel world, BlockPos pos, BlockState state, Direction direction) {
         Fluid fluid = (Fluid) (Object) this;
-        FluidState targetFluidState = state.getFluidState();
+        return emergent$canFlowInto(world, pos, state, state.getFluidState(), fluid, direction);
+    }
 
+    @Unique
+    private boolean emergent$canFlowInto(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            FluidState targetFluidState,
+            Fluid fluid,
+            Direction direction) {
         if (state.isAir())
             return true;
         if (WaterPhysics.isSameFluid(fluid, targetFluidState))
@@ -448,7 +631,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             return true;
         if (!targetFluidState.isEmpty())
             return false;
-        return state.canBeReplaced((Fluid) (Object) this);
+        return state.canBeReplaced(fluid);
     }
 
     @Unique
@@ -649,11 +832,31 @@ public abstract class FlowableFluidMixin extends Fluid {
         if (quietReason != null) {
             EmergentProfiler.count(world, "finite_fluid_quiet_schedule_skips", 1);
             EmergentProfiler.count(world, "finite_fluid_quiet_" + quietReason + "_skips", 1);
+            emergent$rememberFiniteFluidQuietReason(world, pos, fluid, amount, quietReason);
             return;
         }
 
         EmergentProfiler.count(world, "finite_fluid_active_schedules", 1);
         world.scheduleTick(pos, fluid, tickDelay);
+    }
+
+    @Unique
+    private String emergent$cheapFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
+            if (WaterPhysics.isWater(fluid)
+                    && EmergentConfig.get().hydraulicErosion
+                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
+                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
+            }
+            return "thin";
+        }
+
+        BlockState state = world.getBlockState(pos);
+        if (state.getBlock() instanceof LiquidBlockContainer) {
+            return "waterloggable";
+        }
+
+        return null;
     }
 
     @Unique
@@ -678,11 +881,11 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         BlockPos below = pos.below();
         BlockState belowState = world.getBlockState(below);
-        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+        FluidState belowFluidState = belowState.getFluidState();
+        if (emergent$fluidContactWouldReact(fluid, belowFluidState)) {
             return null;
         }
-        if (canFlowInto(world, below, belowState, Direction.DOWN)
-                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+        if (emergent$targetCanAcceptFiniteFluid(world, below, belowState, belowFluidState, fluid)) {
             return null;
         }
 
@@ -694,6 +897,12 @@ public abstract class FlowableFluidMixin extends Fluid {
             if (emergent$fluidContactWouldReact(fluid, targetFluidState)) {
                 return null;
             }
+            if (WaterPhysics.isSameFluid(fluid, targetFluidState)) {
+                if (targetFluidState.getAmount() < amount) {
+                    return null;
+                }
+                continue;
+            }
             if (isWaterloggableTarget(world, targetPos, targetState)) {
                 if (amount >= 8 && WaterPhysics.isWater(fluid)) {
                     return null;
@@ -701,11 +910,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                 blockedByWaterloggableNeighbor = true;
                 continue;
             }
-            if (canFlowInto(world, targetPos, targetState, direction)) {
-                int targetAmount = WaterPhysics.isSameFluid(fluid, targetFluidState) ? targetFluidState.getAmount() : 0;
-                if (targetAmount < amount) {
-                    return null;
-                }
+            if (emergent$targetCanAcceptFiniteFluid(world, targetPos, targetState, targetFluidState, fluid)) {
+                return null;
             }
         }
 
@@ -713,8 +919,27 @@ public abstract class FlowableFluidMixin extends Fluid {
     }
 
     @Unique
-    private void sortDeterministically(List<Integer> indices, BlockPos pos) {
-        indices.sort((left, right) -> Integer.compare(directionRank(pos, left), directionRank(pos, right)));
+    private String emergent$cachedFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        return FiniteFluidQuietCache.reason(world, pos, fluid, amount);
+    }
+
+    @Unique
+    private void emergent$rememberFiniteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount, String reason) {
+        FiniteFluidQuietCache.remember(world, pos, fluid, amount, reason);
+    }
+
+    @Unique
+    private void sortDeterministically(int[] indices, int count, BlockPos pos) {
+        for (int i = 1; i < count; i++) {
+            int value = indices[i];
+            int rank = directionRank(pos, value);
+            int j = i - 1;
+            while (j >= 0 && directionRank(pos, indices[j]) > rank) {
+                indices[j + 1] = indices[j];
+                j--;
+            }
+            indices[j + 1] = value;
+        }
     }
 
     @Unique
@@ -737,5 +962,18 @@ public abstract class FlowableFluidMixin extends Fluid {
             case WEST -> 3;
             default -> 0;
         };
+    }
+
+    @Unique
+    private static final class EmergentFiniteFluidBudget {
+        private long gameTime;
+        private int claimed;
+        private int inspected;
+        private final Map<Long, Integer> chunkClaims = new LinkedHashMap<>();
+        private final Map<Long, Integer> chunkInspections = new LinkedHashMap<>();
+
+        private EmergentFiniteFluidBudget(long gameTime) {
+            this.gameTime = gameTime;
+        }
     }
 }

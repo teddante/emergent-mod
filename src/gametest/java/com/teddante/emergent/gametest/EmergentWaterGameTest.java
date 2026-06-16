@@ -524,6 +524,36 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 80)
+    public void cachedQuietFiniteWaterWakesAfterNeighborChange(GameTestHelper context) {
+        BlockPos sourcePos = WATER_POS;
+        BlockPos targetPos = sourcePos.relative(Direction.EAST);
+
+        context.setBlock(sourcePos.below(), Blocks.STONE);
+        context.setBlock(targetPos.below(), Blocks.STONE);
+        context.setBlock(sourcePos, Fluids.WATER.getFlowing(4, false).createLegacyBlock());
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            context.setBlock(sourcePos.relative(direction), Blocks.STONE);
+        }
+
+        context.getLevel().scheduleTick(context.absolutePos(sourcePos), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.WATER, sourcePos);
+            context.assertBlockPresent(Blocks.STONE, targetPos);
+
+            context.setBlock(targetPos, Blocks.AIR);
+            context.getLevel().scheduleTick(context.absolutePos(sourcePos), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+        });
+
+        context.runAfterDelay(35, () -> {
+            context.assertTrue(
+                    fluidAmount(context, targetPos, Fluids.WATER) > 0,
+                    "finite water cached as quiet should flow once a neighboring block changes");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
     public void finiteLavaUsesSlowerDownwardFlow(GameTestHelper context) {
         context.setBlock(WATER_POS, Blocks.LAVA.defaultBlockState());
         context.setBlock(BELOW_WATER_POS, Blocks.AIR);
@@ -560,6 +590,81 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.assertTrue(
                 ThermalPhysics.evaporationCooling(2) > ThermalPhysics.lavaContactHeat(2),
                 "evaporating water should remove substantial stored heat at the same block-scale volume");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void finiteWaterThermalWorkPredicateIgnoresOrdinaryQuietWater(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        boolean mayChange = ThermalPhysics.finiteWaterMayChangeThermally(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertFalse(mayChange,
+                "quiet shallow water without heat, cold, or evaporating environment should skip thermal work");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void finiteWaterThermalWorkPredicateKeepsRealThermalContacts(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK);
+
+        boolean mayChange = ThermalPhysics.finiteWaterMayChangeThermally(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertTrue(mayChange,
+                "shallow water beside a heat source should still run the thermal pass");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void sourceWaterThermalWorkPredicateIgnoresAdjacentHeatEvaporation(GameTestHelper context) {
+        BlockPos magmaPos = WATER_POS.relative(Direction.EAST);
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(magmaPos.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Blocks.WATER);
+        context.setBlock(magmaPos, Blocks.MAGMA_BLOCK);
+
+        boolean mayChange = ThermalPhysics.finiteWaterMayChangeThermally(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                8);
+
+        context.assertFalse(mayChange,
+                "source-equivalent water should not scan heat evaporation that cannot affect a full cubic metre");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void finiteWaterThermalSignatureTracksStoredHeat(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+
+        int quietSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                context.getBlockState(WATER_POS),
+                0.5);
+        int heatedSignature = ThermalPhysics.finiteWaterThermalSignature(
+                context.getLevel(),
+                context.absolutePos(WATER_POS),
+                2);
+
+        context.assertTrue(quietSignature != heatedSignature,
+                "stored heat should change the finite-water thermal cache signature");
         context.succeed();
     }
 
@@ -658,6 +763,38 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
 
         context.runAfterDelay(10, () -> {
+            context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void quietFiniteWaterCacheWakesWhenStoredHeatChanges(GameTestHelper context) {
+        context.setBlock(WATER_POS.below(), Blocks.STONE);
+        context.setBlock(WATER_POS, Fluids.WATER.getFlowing(2, false).createLegacyBlock());
+        scheduleCurrentFluidTick(context, WATER_POS);
+
+        context.runAfterDelay(10, () -> {
+            context.assertTrue(
+                    context.getBlockState(WATER_POS).getFluidState().getAmount() == 2,
+                    "ordinary shallow water should settle quietly before heat is added");
+            EnvironmentalExposure.addHeat(
+                    context.getLevel(),
+                    context.absolutePos(WATER_POS),
+                    context.getBlockState(WATER_POS),
+                    0.5);
+            context.assertTrue(
+                    EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(WATER_POS), context.getBlockState(WATER_POS)) > 0.35,
+                    "stored heat should remain above the shallow-water evaporation threshold when the wakeup is scheduled");
+            context.getLevel().scheduleTick(
+                    context.absolutePos(WATER_POS),
+                    context.getBlockState(WATER_POS).getFluidState().getType(),
+                    1);
+        });
+        context.runAfterDelay(20, () -> scheduleCurrentFluidTick(context, WATER_POS));
+        context.runAfterDelay(30, () -> scheduleCurrentFluidTick(context, WATER_POS));
+
+        context.runAfterDelay(60, () -> {
             context.assertBlockPresent(Blocks.AIR, WATER_POS);
             context.succeed();
         });
@@ -1292,6 +1429,13 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     private static int fluidAmount(GameTestHelper context, BlockPos pos, Fluid fluid) {
         FluidState fluidState = context.getBlockState(pos).getFluidState();
         return fluidState.getType().isSame(fluid) ? fluidState.getAmount() : 0;
+    }
+
+    private static void scheduleCurrentFluidTick(GameTestHelper context, BlockPos pos) {
+        FluidState fluidState = context.getBlockState(pos).getFluidState();
+        if (!fluidState.isEmpty()) {
+            context.getLevel().scheduleTick(context.absolutePos(pos), fluidState.getType(), 1);
+        }
     }
 
     private static void assertClose(double actual, double expected, String message) {

@@ -2,6 +2,12 @@ param(
     [int]$SlowMs = 10,
     [int]$Top = 12,
     [int]$WarmupTicks = 20,
+    [double]$MaxProfilerMs = 0,
+    [int]$ActiveFluidBudget = 0,
+    [int]$ActiveFluidChunkBudget = 0,
+    [switch]$RequireInspectionDeferrals,
+    [switch]$RequireBudgetDeferrals,
+    [switch]$RequireChunkBudgetDeferrals,
     [switch]$SkipStressScenarios
 )
 
@@ -69,6 +75,17 @@ function Get-CounterTotal([hashtable]$Totals, [string]$Name) {
     return 0L
 }
 
+function Add-TopChunkSummary([System.Collections.Generic.List[string]]$Summary, [hashtable]$ChunkTotals, [string]$Prefix, [string]$Label, [int]$Top) {
+    $topChunks = @($ChunkTotals.GetEnumerator() |
+        Where-Object { $_.Name -like "$Prefix@*" } |
+        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
+        Select-Object -First ([Math]::Min(3, $Top)))
+    if ($topChunks.Count -gt 0) {
+        $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
+        $Summary.Add("  ${Label}=$chunkText")
+    }
+}
+
 function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summary, [hashtable]$CounterTotals, [hashtable]$ChunkTotals, [int]$Top) {
     $finiteTicks = Get-CounterTotal $CounterTotals "finite_fluid_ticks"
     if ($finiteTicks -le 0) {
@@ -77,26 +94,50 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
 
     $waterTicks = Get-CounterTotal $CounterTotals "finite_fluid_water_ticks"
     $lavaTicks = Get-CounterTotal $CounterTotals "finite_fluid_lava_ticks"
+    $lavaHeat = Get-CounterTotal $CounterTotals "finite_fluid_lava_heat"
     $activeSchedules = Get-CounterTotal $CounterTotals "finite_fluid_active_schedules"
     $quietSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_schedule_skips"
+    $inspectionClaims = Get-CounterTotal $CounterTotals "finite_fluid_inspection_claims"
+    $inspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_deferrals"
+    $chunkInspectionClaims = Get-CounterTotal $CounterTotals "finite_fluid_inspection_chunk_claims"
+    $globalInspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_global_deferrals"
+    $chunkInspectionDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_inspection_chunk_deferrals"
+    $budgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_claims"
+    $budgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_deferrals"
+    $chunkBudgetClaims = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_claims"
+    $globalBudgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_global_deferrals"
+    $chunkBudgetDeferrals = Get-CounterTotal $CounterTotals "finite_fluid_budget_chunk_deferrals"
     $horizontalMoves = Get-CounterTotal $CounterTotals "finite_fluid_horizontal_moves"
     $downwardMoves = Get-CounterTotal $CounterTotals "finite_fluid_downward_moves"
     $thermalReactions = Get-CounterTotal $CounterTotals "finite_fluid_thermal_reactions"
+    $thermalQuietSkips = Get-CounterTotal $CounterTotals "finite_fluid_water_thermal_quiet_skips"
+    $thermalCacheSkips = Get-CounterTotal $CounterTotals "finite_fluid_water_thermal_cache_skips"
     $thinSettled = Get-CounterTotal $CounterTotals "finite_fluid_thin_settled"
     $stableSources = Get-CounterTotal $CounterTotals "finite_fluid_stable_sources"
     $quietTickSkips = Get-CounterTotal $CounterTotals "finite_fluid_quiet_tick_skips"
+    $quietCacheHits = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_hits"
+    $quietCacheMisses = [Math]::Max(0L, $inspectionClaims - $quietCacheHits)
+    $quietCacheEvictions = Get-CounterTotal $CounterTotals "finite_fluid_quiet_cache_evictions"
 
-    $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions
+    $workEvents = $horizontalMoves + $downwardMoves + $thermalReactions + $lavaHeat
     $quietDenominator = [Math]::Max(1L, $activeSchedules + $quietSkips)
     $quietPercent = ($quietSkips * 100.0) / $quietDenominator
     $workPercent = ($workEvents * 100.0) / [Math]::Max(1L, $finiteTicks)
+    $lavaHeatPercent = ($lavaHeat * 100.0) / [Math]::Max(1L, $lavaTicks)
 
     $Summary.Add("")
     $Summary.Add("Finite fluid diagnosis:")
     $Summary.Add(("  ticks={0} water={1} lava={2} activeSchedules={3} quietSkips={4} quietRatio={5:N1}% workEvents={6} workPerTick={7:N1}%" -f `
                 $finiteTicks, $waterTicks, $lavaTicks, $activeSchedules, $quietSkips, $quietPercent, $workEvents, $workPercent))
-    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} horizontalMoves={3} downwardMoves={4} thermalReactions={5}" -f `
-                $thinSettled, $stableSources, $quietTickSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    $Summary.Add(("  inspectionClaims={0} chunkInspectionClaims={1} inspectionDeferrals={2} globalInspectionDeferrals={3} chunkInspectionDeferrals={4}" -f `
+                $inspectionClaims, $chunkInspectionClaims, $inspectionDeferrals, $globalInspectionDeferrals, $chunkInspectionDeferrals))
+    $Summary.Add(("  budgetClaims={0} chunkBudgetClaims={1} budgetDeferrals={2} globalDeferrals={3} chunkDeferrals={4}" -f `
+                $budgetClaims, $chunkBudgetClaims, $budgetDeferrals, $globalBudgetDeferrals, $chunkBudgetDeferrals))
+    $Summary.Add(("  settledThin={0} stableSources={1} quietTickSkips={2} quietCacheHits={3} estimatedQuietCacheMisses={4} quietCacheEvictions={5} thermalQuietSkips={6} thermalCacheSkips={7} horizontalMoves={8} downwardMoves={9} thermalReactions={10}" -f `
+                $thinSettled, $stableSources, $quietTickSkips, $quietCacheHits, $quietCacheMisses, $quietCacheEvictions, $thermalQuietSkips, $thermalCacheSkips, $horizontalMoves, $downwardMoves, $thermalReactions))
+    if ($lavaTicks -gt 0 -or $lavaHeat -gt 0) {
+        $Summary.Add(("  lavaHeat={0} lavaHeatPerLavaTick={1:N1}%" -f $lavaHeat, $lavaHeatPercent))
+    }
 
     $quietReasons = @(
         @{ Name = "no_work"; Value = Get-CounterTotal $CounterTotals "finite_fluid_quiet_no_work_skips" },
@@ -109,16 +150,17 @@ function Add-FiniteFluidDiagnosis([System.Collections.Generic.List[string]]$Summ
         $Summary.Add("  topQuietReason=$($topQuiet.Name):$($topQuiet.Value)")
     }
 
-    $topChunks = @($ChunkTotals.GetEnumerator() |
-        Where-Object { $_.Name -like "finite_fluids@*" } |
-        Sort-Object -Property @{ Expression = { $_.Value }; Descending = $true }, Name |
-        Select-Object -First ([Math]::Min(3, $Top)))
-    if ($topChunks.Count -gt 0) {
-        $chunkText = ($topChunks | ForEach-Object { "$($_.Name):$($_.Value)" }) -join " "
-        $Summary.Add("  hottestFiniteFluidChunks=$chunkText")
-    }
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_fluids" "hottestFiniteFluidChunks" $Top
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_water" "hottestFiniteWaterChunks" $Top
+    Add-TopChunkSummary $Summary $ChunkTotals "finite_lava" "hottestFiniteLavaChunks" $Top
 
-    if ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
+    if ($inspectionDeferrals -gt 0 -and $budgetDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid inspection and active work both exceeded budget and were deferred fairly; inspect chunk hotspots before raising either budget.")
+    } elseif ($inspectionDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid scheduled tick inspection exceeded the per-tick budget and was deferred fairly before expensive thermal/neighbour checks.")
+    } elseif ($budgetDeferrals -gt 0) {
+        $Summary.Add("  interpretation=finite-fluid neighbour-scan/active work exceeded the per-tick budget and was deferred fairly; inspect chunk hotspots before raising the budget.")
+    } elseif ($quietPercent -ge 65.0 -and $workPercent -ge 35.0) {
         $Summary.Add("  interpretation=mixed active movement plus many quiet wakeups; inspect hotspot chunks before changing simulation pacing.")
     } elseif ($quietPercent -ge 65.0 -and $activeSchedules -gt 0) {
         $Summary.Add("  interpretation=mostly quiet wakeups; inspect top quiet reason and chunk hotspots for stale rescheduling.")
@@ -142,10 +184,19 @@ $summaryPath = Join-Path $reportDir "headless-perf-$stamp.summary.txt"
 $gradleArgs = @("--no-daemon", "runGameTest")
 
 $stressScenariosEnabled = !$SkipStressScenarios
+$effectiveSlowMs = $SlowMs
+if ($MaxProfilerMs -gt 0 -and $MaxProfilerMs -lt $effectiveSlowMs) {
+    $effectiveSlowMs = $MaxProfilerMs
+}
+if (($RequireInspectionDeferrals -or $RequireBudgetDeferrals -or $RequireChunkBudgetDeferrals) -and $effectiveSlowMs -gt 1) {
+    $effectiveSlowMs = 1
+}
 
-Write-Step "Running headless GameTests with Emergent profiler slowMs=$SlowMs stress=$stressScenariosEnabled"
+Write-Step "Running headless GameTests with Emergent profiler slowMs=$effectiveSlowMs stress=$stressScenariosEnabled"
 $oldJavaToolOptions = $env:JAVA_TOOL_OPTIONS
-$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$SlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())"
+$activeFluidBudgetOption = if ($ActiveFluidBudget -gt 0) { " -Demergent.finiteFluid.activeTickBudget=$ActiveFluidBudget" } else { "" }
+$activeFluidChunkBudgetOption = if ($ActiveFluidChunkBudget -gt 0) { " -Demergent.finiteFluid.activeChunkTickBudget=$ActiveFluidChunkBudget" } else { "" }
+$env:JAVA_TOOL_OPTIONS = "-Demergent.profiler=true -Demergent.profiler.slowMs=$effectiveSlowMs -Demergent.perfScenarios=$($stressScenariosEnabled.ToString().ToLowerInvariant())$activeFluidBudgetOption$activeFluidChunkBudgetOption"
 $oldErrorActionPreference = $ErrorActionPreference
 try {
     $ErrorActionPreference = "Continue"
@@ -181,9 +232,30 @@ $worstProfilerLines = @($profilerLines |
 $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent headless perf summary")
 $summary.Add("Log: $logPath")
-$summary.Add("Profiler slowMs: $SlowMs")
+$summary.Add("Profiler slowMs: $effectiveSlowMs")
+if ($effectiveSlowMs -ne $SlowMs) {
+    $summary.Add("Requested profiler slowMs: $SlowMs")
+}
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
 $summary.Add("Stress scenarios: $stressScenariosEnabled")
+if ($ActiveFluidBudget -gt 0) {
+    $summary.Add("Forced finite fluid work budget: $ActiveFluidBudget")
+}
+if ($ActiveFluidChunkBudget -gt 0) {
+    $summary.Add("Forced finite fluid chunk work budget: $ActiveFluidChunkBudget")
+}
+if ($RequireBudgetDeferrals) {
+    $summary.Add("Required budget deferrals: True")
+}
+if ($RequireInspectionDeferrals) {
+    $summary.Add("Required inspection deferrals: True")
+}
+if ($RequireChunkBudgetDeferrals) {
+    $summary.Add("Required chunk budget deferrals: True")
+}
+if ($MaxProfilerMs -gt 0) {
+    $summary.Add(("Required max profiler ms after warmup: {0:N3}" -f $MaxProfilerMs))
+}
 $summary.Add("Profiler lines: $($profilerLines.Count) after warmup ($($allProfilerLines.Count) total)")
 if ($testPassLine.Count -gt 0) {
     $summary.Add("Tests: $($testPassLine[-1])")
@@ -233,4 +305,24 @@ $summary | ForEach-Object { Write-Host $_ }
 
 if ($exitCode -ne 0) {
     throw "Headless perf run failed with exit code $exitCode. Full log: $logPath"
+}
+
+if ($RequireInspectionDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_inspection_deferrals") -le 0) {
+    throw "Expected finite fluid inspection deferrals, but none were recorded. Full log: $logPath"
+}
+
+if ($RequireBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_deferrals") -le 0) {
+    throw "Expected finite fluid budget deferrals, but none were recorded. Full log: $logPath"
+}
+
+if ($RequireChunkBudgetDeferrals -and (Get-CounterTotal $counterTotals "finite_fluid_budget_chunk_deferrals") -le 0) {
+    throw "Expected finite fluid chunk budget deferrals, but none were recorded. Full log: $logPath"
+}
+
+$worstProfilerMs = 0.0
+if ($profilerLines.Count -gt 0) {
+    $worstProfilerMs = [double](@($profilerLines | ForEach-Object { Get-ProfilerValue $_ } | Sort-Object -Descending | Select-Object -First 1)[0])
+}
+if ($MaxProfilerMs -gt 0 -and $worstProfilerMs -gt $MaxProfilerMs) {
+    throw ("Expected profiler max <= {0:N3} ms after warmup, but saw {1:N3} ms. Full log: {2}" -f $MaxProfilerMs, $worstProfilerMs, $logPath)
 }
