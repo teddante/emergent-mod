@@ -151,14 +151,25 @@ public final class EnvironmentalExposure {
     }
 
     public static double addRainfall(ServerLevel world, BlockPos pos, BlockState state, double climateMoistureFactor) {
-        double moisture = addMoisture(world, pos, state, rainfallSurfaceMoisture(state, RAIN_SAMPLE_DEPTH_METERS, climateMoistureFactor));
-        washAshResidue(world, pos, state, RAIN_SAMPLE_DEPTH_METERS * 25.0);
+        return addRainfall(world, pos, state, climateMoistureFactor, 1);
+    }
+
+    public static double addRainfall(ServerLevel world, BlockPos pos, BlockState state, double climateMoistureFactor, int samples) {
+        double sampleScale = Math.max(1, samples);
+        double rainfallDepth = RAIN_SAMPLE_DEPTH_METERS * sampleScale;
+        double moisture = addMoisture(world, pos, state, rainfallSurfaceMoisture(state, rainfallDepth, climateMoistureFactor));
+        washAshResidue(world, pos, state, rainfallDepth * 25.0);
         return moisture;
     }
 
     public static double addSnowfall(ServerLevel world, BlockPos pos, BlockState state) {
-        addMoisture(world, pos, state, SNOW_SAMPLE_MOISTURE * MaterialPhysicsProfiles.surfaceWaterAbsorption(state));
-        return addCold(world, pos, state, SNOW_SAMPLE_COLD);
+        return addSnowfall(world, pos, state, 1);
+    }
+
+    public static double addSnowfall(ServerLevel world, BlockPos pos, BlockState state, int samples) {
+        double sampleScale = Math.max(1, samples);
+        addMoisture(world, pos, state, SNOW_SAMPLE_MOISTURE * MaterialPhysicsProfiles.surfaceWaterAbsorption(state) * sampleScale);
+        return addCold(world, pos, state, SNOW_SAMPLE_COLD * sampleScale);
     }
 
     public static double hydraulicWearFromMovedWater(int movedAmount, double gravityFactor, double pressureFactor) {
@@ -218,6 +229,7 @@ public final class EnvironmentalExposure {
         }
 
         ExposureEntry entry = entryFor(world, pos, state);
+        EmergentProfiler.recordHeat(world, state, heat);
         entry = entry.withHeat(entry.heat() + heat)
                 .withCold(Math.max(0.0, entry.cold() - heat))
                 .withMoisture(Math.max(0.0, entry.moisture() - heat * HEAT_DRYING_RATE))
@@ -350,28 +362,53 @@ public final class EnvironmentalExposure {
             double climateMoistureFactor,
             double daylightStrength,
             double airExposureFactor) {
+        applyAmbientSurfaceExchange(
+                world,
+                pos,
+                state,
+                biomeBaseTemperature,
+                skyExposed,
+                localHeat,
+                climateMoistureFactor,
+                daylightStrength,
+                airExposureFactor,
+                1);
+    }
+
+    public static void applyAmbientSurfaceExchange(
+            ServerLevel world,
+            BlockPos pos,
+            BlockState state,
+            float biomeBaseTemperature,
+            boolean skyExposed,
+            int localHeat,
+            double climateMoistureFactor,
+            double daylightStrength,
+            double airExposureFactor,
+            int samples) {
         if (state.isAir() || !state.getFluidState().isEmpty()) {
             clear(world, pos);
             return;
         }
 
+        double sampleScale = Math.max(1, samples);
         double dryAirMultiplier = 1.0 / climateMoistureFactor(climateMoistureFactor);
         double materialDrying = MaterialPhysicsProfiles.dryingExposure(state);
         double hotBiomeDrying = Math.max(0.0, biomeBaseTemperature - 0.8) * HOT_BIOME_DRYING_PER_SAMPLE;
         double coldBiomeExposure = Math.max(0.0, 0.15 - biomeBaseTemperature) * COLD_BIOME_EXPOSURE_PER_SAMPLE;
         double skyDrying = Math.max(0.0, airExposureFactor) * SKY_EXPOSURE_DRYING_PER_SAMPLE;
         double heatDrying = Math.max(0, localHeat) * LOCAL_HEAT_DRYING_PER_SAMPLE;
-        removeMoisture(world, pos, state, (hotBiomeDrying + skyDrying + heatDrying) * materialDrying * dryAirMultiplier);
+        removeMoisture(world, pos, state, (hotBiomeDrying + skyDrying + heatDrying) * materialDrying * dryAirMultiplier * sampleScale);
 
         if (localHeat > 0) {
-            addHeat(world, pos, state, localHeat * LOCAL_HEAT_EXPOSURE_PER_SAMPLE);
+            addHeat(world, pos, state, localHeat * LOCAL_HEAT_EXPOSURE_PER_SAMPLE * sampleScale);
         }
         double solarHeat = solarHeatExposure(biomeBaseTemperature, skyExposed, daylightStrength, climateMoistureFactor);
         if (solarHeat > 0.0) {
-            addHeat(world, pos, state, solarHeat);
+            addHeat(world, pos, state, solarHeat * sampleScale);
         }
         if (coldBiomeExposure > 0.0) {
-            addCold(world, pos, state, coldBiomeExposure);
+            addCold(world, pos, state, coldBiomeExposure * sampleScale);
         }
         ThermalPhysics.conductStoredTemperature(world, pos, world.getBlockState(pos));
     }

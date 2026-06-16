@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.MaterialReactions;
@@ -66,6 +67,10 @@ public abstract class FlowableFluidMixin extends Fluid {
 
         // Cancel vanilla behavior for finite fluids.
         ci.cancel();
+        long emergent$profileStart = EmergentProfiler.start();
+        try {
+        EmergentProfiler.count(world, "finite_fluid_ticks", 1);
+        EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_FLUIDS, pos);
 
         int currentLevel = fluidState.getAmount();
         if (currentLevel <= 0)
@@ -75,29 +80,44 @@ public abstract class FlowableFluidMixin extends Fluid {
         int tickDelay = fluid.getTickDelay(world);
 
         if (WaterPhysics.isWater(fluid)) {
+            EmergentProfiler.count(world, "finite_fluid_water_ticks", 1);
             int evaporatedByEnvironment = ThermalPhysics.evaporateWaterInEvaporatingEnvironment(world, pos, currentLevel);
             if (evaporatedByEnvironment <= 0) {
+                EmergentProfiler.count(world, "finite_fluid_environment_evaporations", 1);
                 removeWaterAt(world, pos, blockState);
                 return;
             }
             currentLevel = evaporatedByEnvironment;
 
             if (ThermalPhysics.tryFreezeWaterFromStoredCold(world, pos, currentLevel)) {
+                EmergentProfiler.count(world, "finite_fluid_freezes", 1);
                 return;
             }
 
             int evaporatedLevel = ThermalPhysics.evaporateWaterNearHeat(world, pos, currentLevel);
             if (evaporatedLevel != currentLevel) {
+                EmergentProfiler.count(world, "finite_fluid_heat_evaporations", 1);
                 if (evaporatedLevel <= 0) {
                     removeWaterAt(world, pos, blockState);
                 } else {
                     setWaterLevel(world, pos, evaporatedLevel, false);
-                    world.scheduleTick(pos, fluid, tickDelay);
+                    emergent$scheduleFiniteFluidIfActive(world, pos, fluid, evaporatedLevel, tickDelay);
                 }
                 return;
             }
-        } else if (WaterPhysics.isLava(fluid) && EmergentConfig.get().materialReactions) {
-            ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
+        }
+
+        if (currentLevel >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
+            EmergentProfiler.count(world, "finite_fluid_stable_sources", 1);
+            return;
+        }
+
+        if (WaterPhysics.isLava(fluid)) {
+            EmergentProfiler.count(world, "finite_fluid_lava_ticks", 1);
+            if (EmergentConfig.get().materialReactions) {
+                EmergentProfiler.count(world, "finite_fluid_lava_heat", 1);
+                ThermalPhysics.applyLavaContactHeat(world, pos, currentLevel);
+            }
         }
 
         // STEP 1: Gravity - try to flow down
@@ -108,6 +128,7 @@ public abstract class FlowableFluidMixin extends Fluid {
         ThermalPhysics.FluidContactResult downwardThermalResult = tryReactWithOtherFiniteFluid(
                 world, pos, currentLevel, below, belowBlockState, Direction.DOWN);
         if (downwardThermalResult.reacted()) {
+            EmergentProfiler.count(world, "finite_fluid_thermal_reactions", 1);
             updateSourceAfterThermalReaction(world, pos, blockState, fluid, tickDelay, downwardThermalResult);
             return;
         }
@@ -139,6 +160,7 @@ public abstract class FlowableFluidMixin extends Fluid {
                 }
 
                 if (transfer > 0) {
+                    EmergentProfiler.count(world, "finite_fluid_downward_moves", 1);
                     int newBelowLevel = belowLevel + transfer;
                     int newCurrentLevel = currentLevel - transfer;
 
@@ -147,7 +169,9 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
 
                     // Update below
-                    setWaterLevel(world, below, newBelowLevel, false);
+                    if (!setWaterLevel(world, below, newBelowLevel, false)) {
+                        return;
+                    }
                     emergent$transferSuspendedSediment(world, pos, blockState, below, transfer, startingLevel);
 
                     // Update current position after transferring water down
@@ -157,9 +181,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                         setWaterLevel(world, pos, newCurrentLevel, false);
                     }
 
-                    // Schedule next tick
-                    world.scheduleTick(pos, fluid, tickDelay);
-                    world.scheduleTick(below, fluid, tickDelay);
+                    emergent$scheduleFiniteFluidIfActive(world, pos, fluid, newCurrentLevel, tickDelay);
+                    emergent$scheduleFiniteFluidIfActive(world, below, fluid, newBelowLevel, tickDelay);
                     return;
                 }
             }
@@ -169,22 +192,31 @@ public abstract class FlowableFluidMixin extends Fluid {
         if (WaterPhysics.isWater(fluid)
                 && currentLevel >= 8
                 && tryMoveSourceIntoWaterloggableNeighbor(world, pos, blockState, fluidState, tickDelay)) {
+            EmergentProfiler.count(world, "finite_fluid_waterloggable_moves", 1);
             return;
         }
 
         if (currentLevel <= WaterPhysics.settledThinLayerAmount(fluid)) {
             if (WaterPhysics.isWater(fluid) && EmergentConfig.get().hydraulicErosion
                     && ErosionPhysics.tryDepositSediment(world, pos, fluid, currentLevel)) {
+                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
                 return;
             }
+            EmergentProfiler.count(world, "finite_fluid_thin_settled", 1);
             return;
         }
 
         // Constraint: If Source is Waterloggable (restrictive), we cannot partially
         // drain it horizontally.
         if (blockState.getBlock() instanceof LiquidBlockContainer) {
-            // Schedule tick just in case context changes (e.g. block below clears up)
-            world.scheduleTick(pos, fluid, tickDelay);
+            EmergentProfiler.count(world, "finite_fluid_waterloggable_quiet", 1);
+            return;
+        }
+
+        String quietTickReason = emergent$finiteFluidQuietReason(world, pos, fluid, currentLevel);
+        if (quietTickReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_tick_" + quietTickReason + "_skips", 1);
             return;
         }
 
@@ -205,6 +237,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             ThermalPhysics.FluidContactResult thermalResult = tryReactWithOtherFiniteFluid(
                     world, pos, currentLevel, neighborPos, neighborBlockState, dir);
             if (thermalResult.reacted()) {
+                EmergentProfiler.count(world, "finite_fluid_thermal_reactions", 1);
                 updateSourceAfterThermalReaction(world, pos, blockState, fluid, tickDelay, thermalResult);
                 return;
             } else if (canFlowInto(world, neighborPos, neighborBlockState, dir)
@@ -238,6 +271,7 @@ public abstract class FlowableFluidMixin extends Fluid {
 
             // Only transfer if we're above average
             if (currentLevel > avgLevel) {
+                int sourceLevelBeforeHorizontal = currentLevel;
                 int toDistribute = currentLevel - avgLevel;
 
                 // Iterative Fill Algorithm:
@@ -290,6 +324,8 @@ public abstract class FlowableFluidMixin extends Fluid {
                     }
                 }
 
+                boolean movedHorizontally = false;
+                int actualMovedHorizontally = 0;
                 // Apply changes to world
                 for (int i = 0; i < 4; i++) {
                     if (canFlow[i]) {
@@ -297,6 +333,10 @@ public abstract class FlowableFluidMixin extends Fluid {
                                 - (WaterPhysics.isSameFluid(fluid, world.getFluidState(neighbors[i]))
                                         ? world.getFluidState(neighbors[i]).getAmount()
                                         : 0));
+                        if (movedAmount <= 0) {
+                            continue;
+                        }
+
                         if (movedAmount > 0
                                 && EmergentConfig.get().hydraulicErosion
                                 && WaterPhysics.canHydraulicallyErode(fluid)) {
@@ -304,25 +344,31 @@ public abstract class FlowableFluidMixin extends Fluid {
                         }
 
                         // Optimization: The implementation of setWaterLevel does extensive checks.
-                        setWaterLevel(world, neighbors[i], neighborLevels[i], false);
+                        if (!setWaterLevel(world, neighbors[i], neighborLevels[i], false)) {
+                            continue;
+                        }
                         emergent$transferSuspendedSediment(world, pos, blockState, neighbors[i], movedAmount, startingLevel);
-                        world.scheduleTick(neighbors[i], fluid, tickDelay);
+                        emergent$scheduleFiniteFluidIfActive(world, neighbors[i], fluid, neighborLevels[i], tickDelay);
+                        actualMovedHorizontally += movedAmount;
+                        movedHorizontally = true;
                     }
                 }
 
-                // Update current position after horizontal distribution
-                if (currentLevel <= 0) {
-                    removeWaterAt(world, pos, blockState);
-                } else {
-                    setWaterLevel(world, pos, currentLevel, false);
+                if (movedHorizontally) {
+                    EmergentProfiler.count(world, "finite_fluid_horizontal_moves", 1);
+                    currentLevel = sourceLevelBeforeHorizontal - actualMovedHorizontally;
+                    // Update current position after horizontal distribution.
+                    if (currentLevel <= 0) {
+                        removeWaterAt(world, pos, blockState);
+                    } else {
+                        setWaterLevel(world, pos, currentLevel, false);
+                        emergent$scheduleFiniteFluidIfActive(world, pos, fluid, currentLevel, tickDelay);
+                    }
                 }
             }
         }
-
-        // Schedule next tick if we still have water
-        FluidState newState = world.getFluidState(pos);
-        if (!newState.isEmpty() && currentLevel > WaterPhysics.settledThinLayerAmount(fluid)) {
-            world.scheduleTick(pos, fluid, tickDelay);
+        } finally {
+            EmergentProfiler.record(world, EmergentProfiler.FINITE_FLUIDS, emergent$profileStart);
         }
     }
 
@@ -334,6 +380,59 @@ public abstract class FlowableFluidMixin extends Fluid {
             return level == 0 || level == 8;
         }
         return true;
+    }
+
+    @Unique
+    private boolean emergent$isStableFiniteSource(ServerLevel world, BlockPos pos, Fluid fluid) {
+        BlockPos below = pos.below();
+        BlockState belowState = world.getBlockState(below);
+        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+            return false;
+        }
+
+        if (canFlowInto(world, below, belowState, Direction.DOWN)
+                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+            return false;
+        }
+
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos targetPos = pos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            FluidState targetFluidState = targetState.getFluidState();
+            if (emergent$fluidContactWouldReact(fluid, targetFluidState)) {
+                return false;
+            }
+
+            if (WaterPhysics.isWater(fluid) && isWaterloggableTarget(world, targetPos, targetState)) {
+                return false;
+            }
+
+            if (canFlowInto(world, targetPos, targetState, direction)
+                    && emergent$targetCanAcceptSourceFluid(world, targetPos, targetState, fluid)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    @Unique
+    private boolean emergent$targetCanAcceptSourceFluid(ServerLevel world, BlockPos pos, BlockState state, Fluid fluid) {
+        FluidState targetFluidState = state.getFluidState();
+        if (WaterPhysics.isSameFluid(fluid, targetFluidState)) {
+            return targetFluidState.getAmount() < 8;
+        }
+
+        return state.isAir()
+                || isWaterloggableTarget(world, pos, state)
+                || (targetFluidState.isEmpty() && state.canBeReplaced(fluid));
+    }
+
+    @Unique
+    private boolean emergent$fluidContactWouldReact(Fluid fluid, FluidState targetFluidState) {
+        return EmergentConfig.get().materialReactions
+                && !targetFluidState.isEmpty()
+                && !WaterPhysics.isSameFluid(fluid, targetFluidState);
     }
 
     @Unique
@@ -457,7 +556,7 @@ public abstract class FlowableFluidMixin extends Fluid {
             if (setWaterLevel(world, targetPos, 8, false)) {
                 emergent$transferSuspendedSediment(world, pos, blockState, targetPos, 8, 8);
                 removeWaterAt(world, pos, blockState);
-                world.scheduleTick(targetPos, (Fluid) (Object) this, tickDelay);
+                emergent$scheduleFiniteFluidIfActive(world, targetPos, (Fluid) (Object) this, 8, tickDelay);
                 return true;
             }
         }
@@ -537,7 +636,80 @@ public abstract class FlowableFluidMixin extends Fluid {
         }
 
         setWaterLevel(world, sourcePos, result.remainingSourceAmount(), false);
-        world.scheduleTick(sourcePos, fluid, tickDelay);
+        emergent$scheduleFiniteFluidIfActive(world, sourcePos, fluid, result.remainingSourceAmount(), tickDelay);
+    }
+
+    @Unique
+    private void emergent$scheduleFiniteFluidIfActive(ServerLevel world, BlockPos pos, Fluid fluid, int amount, int tickDelay) {
+        if (amount <= 0 || !WaterPhysics.isSameFluid(fluid, world.getFluidState(pos))) {
+            return;
+        }
+
+        String quietReason = emergent$finiteFluidQuietReason(world, pos, fluid, amount);
+        if (quietReason != null) {
+            EmergentProfiler.count(world, "finite_fluid_quiet_schedule_skips", 1);
+            EmergentProfiler.count(world, "finite_fluid_quiet_" + quietReason + "_skips", 1);
+            return;
+        }
+
+        EmergentProfiler.count(world, "finite_fluid_active_schedules", 1);
+        world.scheduleTick(pos, fluid, tickDelay);
+    }
+
+    @Unique
+    private String emergent$finiteFluidQuietReason(ServerLevel world, BlockPos pos, Fluid fluid, int amount) {
+        if (amount <= WaterPhysics.settledThinLayerAmount(fluid)) {
+            if (WaterPhysics.isWater(fluid)
+                    && EmergentConfig.get().hydraulicErosion
+                    && ErosionPhysics.tryDepositSediment(world, pos, fluid, amount)) {
+                EmergentProfiler.count(world, "finite_fluid_sediment_deposits", 1);
+            }
+            return "thin";
+        }
+
+        if (amount >= 8 && emergent$isStableFiniteSource(world, pos, fluid)) {
+            return "stable_source";
+        }
+
+        BlockState state = world.getBlockState(pos);
+        if (state.getBlock() instanceof LiquidBlockContainer) {
+            return "waterloggable";
+        }
+
+        BlockPos below = pos.below();
+        BlockState belowState = world.getBlockState(below);
+        if (emergent$fluidContactWouldReact(fluid, belowState.getFluidState())) {
+            return null;
+        }
+        if (canFlowInto(world, below, belowState, Direction.DOWN)
+                && emergent$targetCanAcceptSourceFluid(world, below, belowState, fluid)) {
+            return null;
+        }
+
+        boolean blockedByWaterloggableNeighbor = false;
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            BlockPos targetPos = pos.relative(direction);
+            BlockState targetState = world.getBlockState(targetPos);
+            FluidState targetFluidState = targetState.getFluidState();
+            if (emergent$fluidContactWouldReact(fluid, targetFluidState)) {
+                return null;
+            }
+            if (isWaterloggableTarget(world, targetPos, targetState)) {
+                if (amount >= 8 && WaterPhysics.isWater(fluid)) {
+                    return null;
+                }
+                blockedByWaterloggableNeighbor = true;
+                continue;
+            }
+            if (canFlowInto(world, targetPos, targetState, direction)) {
+                int targetAmount = WaterPhysics.isSameFluid(fluid, targetFluidState) ? targetFluidState.getAmount() : 0;
+                if (targetAmount < amount) {
+                    return null;
+                }
+            }
+        }
+
+        return blockedByWaterloggableNeighbor ? "waterloggable" : "no_work";
     }
 
     @Unique

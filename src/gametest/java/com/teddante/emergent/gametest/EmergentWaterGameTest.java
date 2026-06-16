@@ -1,6 +1,7 @@
 package com.teddante.emergent.gametest;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EnvironmentalScheduler;
 import com.teddante.emergent.EnvironmentalExposure;
 import com.teddante.emergent.ErosionPhysics;
 import com.teddante.emergent.FireWetness;
@@ -61,6 +62,112 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         context.assertTrue(remaining == 8,
                 "the default GameTest overworld should not use Nether-style environmental water evaporation");
         context.assertBlockPresent(Blocks.WATER, WATER_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void schedulerProbabilityAccumulatesDelayedSamples(GameTestHelper context) {
+        double singleSampleChance = 0.1;
+        double threeSampleChance = EnvironmentalScheduler.probabilityOverSamples(singleSampleChance, 3);
+
+        assertClose(
+                EnvironmentalScheduler.probabilityOverSamples(singleSampleChance, 1),
+                singleSampleChance,
+                "one queued sample should preserve the original chance");
+        assertClose(
+                threeSampleChance,
+                1.0 - Math.pow(0.9, 3),
+                "queued samples should combine as independent physical opportunities");
+        context.assertTrue(threeSampleChance > singleSampleChance && threeSampleChance < singleSampleChance * 3.0,
+                "accumulated probability should grow without becoming a linear certainty");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 30)
+    public void schedulerCoalescesRepeatedSurfaceSamples(GameTestHelper context) {
+        BlockPos samplePos = new BlockPos(6, 3, 6);
+
+        EnvironmentalScheduler.enqueueSurfaceWeatherSample(context.getLevel(), context.absolutePos(samplePos));
+        EnvironmentalScheduler.enqueueSurfaceWeatherSample(context.getLevel(), context.absolutePos(samplePos));
+
+        context.assertTrue(
+                EnvironmentalScheduler.pendingSurfaceWeatherSampleWeightForTests(context.getLevel(), context.absolutePos(samplePos)) == 2,
+                "repeated samples for the same surface should merge into one weighted pending job");
+
+        context.runAfterDelay(12, () -> {
+            EnvironmentalScheduler.tickWorldForTests(context.getLevel());
+            context.assertTrue(
+                    EnvironmentalScheduler.pendingSurfaceWeatherSampleWeightForTests(context.getLevel(), context.absolutePos(samplePos)) == 0,
+                    "due environmental samples should drain from the scheduler queue");
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 20)
+    public void batchedRainfallMatchesRepeatedSingleSamples(GameTestHelper context) {
+        BlockPos repeatedPos = new BlockPos(5, 3, 2);
+        BlockPos batchedPos = new BlockPos(7, 3, 2);
+        context.setBlock(repeatedPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(batchedPos, Blocks.DIRT.defaultBlockState());
+
+        for (int i = 0; i < 4; i++) {
+            EnvironmentalExposure.addRainfall(
+                    context.getLevel(),
+                    context.absolutePos(repeatedPos),
+                    context.getBlockState(repeatedPos),
+                    1.0);
+        }
+        EnvironmentalExposure.addRainfall(
+                context.getLevel(),
+                context.absolutePos(batchedPos),
+                context.getBlockState(batchedPos),
+                1.0,
+                4);
+
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos)),
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos)),
+                "batched rain samples should store the same moisture as repeated vanilla precipitation samples");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void batchedAmbientDryingMatchesRepeatedSingleSamples(GameTestHelper context) {
+        BlockPos repeatedPos = new BlockPos(5, 3, 3);
+        BlockPos batchedPos = new BlockPos(7, 3, 3);
+        context.setBlock(repeatedPos, Blocks.DIRT.defaultBlockState());
+        context.setBlock(batchedPos, Blocks.DIRT.defaultBlockState());
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos), 0.7);
+        EnvironmentalExposure.addMoisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos), 0.7);
+
+        for (int i = 0; i < 4; i++) {
+            EnvironmentalExposure.applyAmbientSurfaceExchange(
+                    context.getLevel(),
+                    context.absolutePos(repeatedPos),
+                    context.getBlockState(repeatedPos),
+                    1.0F,
+                    true,
+                    0,
+                    1.0,
+                    1.0,
+                    1.0);
+        }
+        EnvironmentalExposure.applyAmbientSurfaceExchange(
+                context.getLevel(),
+                context.absolutePos(batchedPos),
+                context.getBlockState(batchedPos),
+                1.0F,
+                true,
+                0,
+                1.0,
+                1.0,
+                1.0,
+                4);
+
+        assertClose(
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(batchedPos), context.getBlockState(batchedPos)),
+                EnvironmentalExposure.moisture(context.getLevel(), context.absolutePos(repeatedPos), context.getBlockState(repeatedPos)),
+                "batched ambient drying should remove the same moisture as repeated single samples");
         context.succeed();
     }
 
@@ -315,6 +422,32 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
         });
     }
 
+    @GameTest(maxTicks = 40)
+    public void equalFiniteWaterLayerStaysQuietAndConservesMass(GameTestHelper context) {
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                BlockPos pos = WATER_POS.offset(x, 0, z);
+                context.setBlock(pos.below(), Blocks.STONE);
+                context.setBlock(pos, Blocks.STONE);
+            }
+        }
+        context.setBlock(WATER_POS, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4));
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            context.setBlock(WATER_POS.relative(direction), Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 4));
+        }
+
+        int initialMass = totalFluidAmount(context, WATER_POS, 1, Fluids.WATER);
+        context.getLevel().scheduleTick(context.absolutePos(WATER_POS), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(10, () -> {
+            context.assertTrue(totalFluidAmount(context, WATER_POS, 1, Fluids.WATER) == initialMass,
+                    "an equal finite-water layer should wake quietly without creating or deleting volume");
+            context.assertTrue(countFluidCells(context, WATER_POS, 1, Fluids.WATER) == 5,
+                    "an equal finite-water layer should not spread into new cells");
+            context.succeed();
+        });
+    }
+
     @GameTest(maxTicks = 80)
     public void flatLavaSpreadConservesMassInLocalBasin(GameTestHelper context) {
         prepareFlatBasin(context, WATER_POS, 1);
@@ -344,6 +477,48 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
             context.assertTrue(campfireState.getValue(BlockStateProperties.WATERLOGGED), "source water should waterlog the campfire");
             context.assertFalse(campfireState.getValue(CampfireBlock.LIT), "campfire waterlogging should use vanilla extinguish behavior");
             context.assertBlockPresent(Blocks.AIR, WATER_POS);
+            context.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 80)
+    public void partialWaterloggableNeighborDoesNotBlockOtherFlowPath(GameTestHelper context) {
+        BlockPos sourcePos = WATER_POS;
+        BlockPos firstTarget = sourcePos.relative(Direction.EAST);
+        BlockPos secondTarget = firstTarget.relative(Direction.EAST);
+        BlockPos waterloggableNeighbor = firstTarget.relative(Direction.NORTH);
+
+        context.setBlock(sourcePos.below(), Blocks.STONE);
+        context.setBlock(firstTarget.below(), Blocks.STONE);
+        context.setBlock(secondTarget.below(), Blocks.STONE);
+        context.setBlock(waterloggableNeighbor.below(), Blocks.STONE);
+        context.setBlock(sourcePos, Blocks.AIR);
+        context.setBlock(firstTarget, Blocks.AIR);
+        context.setBlock(secondTarget, Blocks.AIR);
+        context.setBlock(sourcePos.relative(Direction.NORTH), Blocks.STONE);
+        context.setBlock(sourcePos.relative(Direction.SOUTH), Blocks.STONE);
+        context.setBlock(sourcePos.relative(Direction.WEST), Blocks.STONE);
+        context.setBlock(firstTarget.relative(Direction.SOUTH), Blocks.STONE);
+        context.setBlock(secondTarget.relative(Direction.NORTH), Blocks.STONE);
+        context.setBlock(secondTarget.relative(Direction.SOUTH), Blocks.STONE);
+        context.setBlock(secondTarget.relative(Direction.EAST), Blocks.STONE);
+        context.setBlock(waterloggableNeighbor, Blocks.CAMPFIRE.defaultBlockState().setValue(CampfireBlock.LIT, false));
+        context.setBlock(sourcePos, Blocks.WATER.defaultBlockState().setValue(LiquidBlock.LEVEL, 3));
+        context.assertTrue(fluidAmount(context, sourcePos, Fluids.WATER) == 5,
+                "test fixture should start with five finite water units");
+
+        context.getLevel().scheduleTick(context.absolutePos(sourcePos), Fluids.WATER, Fluids.WATER.getTickDelay(context.getLevel()));
+
+        context.runAfterDelay(30, () -> {
+            int sourceAmount = fluidAmount(context, sourcePos, Fluids.WATER);
+            int firstTargetAmount = fluidAmount(context, firstTarget, Fluids.WATER);
+            int secondTargetAmount = fluidAmount(context, secondTarget, Fluids.WATER);
+            int waterloggedNeighborAmount = fluidAmount(context, waterloggableNeighbor, Fluids.WATER);
+            context.assertTrue(secondTargetAmount > 0,
+                    "a partial water layer beside a waterloggable block should still keep flowing into other open lower-pressure cells; amounts="
+                            + sourceAmount + "," + firstTargetAmount + "," + secondTargetAmount + "," + waterloggedNeighborAmount);
+            context.assertFalse(context.getBlockState(waterloggableNeighbor).getValue(BlockStateProperties.WATERLOGGED),
+                    "partial finite water should not waterlog a block unless it has source-equivalent volume");
             context.succeed();
         });
     }

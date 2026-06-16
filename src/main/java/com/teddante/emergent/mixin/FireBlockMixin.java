@@ -1,6 +1,7 @@
 package com.teddante.emergent.mixin;
 
 import com.teddante.emergent.EmergentConfig;
+import com.teddante.emergent.EmergentProfiler;
 import com.teddante.emergent.FireWetness;
 import com.teddante.emergent.MaterialReactions;
 import com.teddante.emergent.VolatileExplosionUtils;
@@ -100,6 +101,8 @@ public abstract class FireBlockMixin {
 
     @Unique
     private void emergent$reactAroundFire(ServerLevel world, BlockPos pos, RandomSource random, int age) {
+        long startedAt = EmergentProfiler.start();
+        try {
         float heat = 0.75f + age * 0.06f;
 
         emergent$tryReactNearFire(world, pos.below(), random, heat * 1.35f);
@@ -110,6 +113,10 @@ public abstract class FireBlockMixin {
         }
 
         emergent$tryReactNearFire(world, pos.above(), random, heat * 0.45f);
+        } finally {
+            EmergentProfiler.record(world, EmergentProfiler.FIRE_REACTIONS, startedAt);
+            EmergentProfiler.count(world, "fire_reaction_scans", 1);
+        }
     }
 
     @Unique
