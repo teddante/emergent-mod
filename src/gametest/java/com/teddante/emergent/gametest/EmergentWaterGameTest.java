@@ -216,6 +216,36 @@ public class EmergentWaterGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void blockUpdateClearWakesNearbyQuietFluid(GameTestHelper context) {
+        BlockPos changedPos = BELOW_WATER_POS;
+        BlockPos fluidPos = WATER_POS;
+        context.setBlock(changedPos, Blocks.STONE.defaultBlockState());
+        context.setBlock(fluidPos, Fluids.WATER.getFlowing(7, false).createLegacyBlock());
+
+        EnvironmentalExposure.addHeat(
+                context.getLevel(),
+                context.absolutePos(changedPos),
+                context.getBlockState(changedPos),
+                0.5);
+        FiniteFluidQuietCache.remember(
+                context.getLevel(),
+                context.absolutePos(fluidPos),
+                Fluids.WATER,
+                1,
+                "thin");
+
+        EnvironmentalExposure.clearForBlockUpdate(context.getLevel(), context.absolutePos(changedPos));
+
+        context.assertTrue(
+                EnvironmentalExposure.heat(context.getLevel(), context.absolutePos(changedPos), context.getBlockState(changedPos)) == 0.0,
+                "block updates should discard environmental memory attached to the old block state");
+        context.assertTrue(
+                FiniteFluidQuietCache.reason(context.getLevel(), context.absolutePos(fluidPos), Fluids.WATER, 1) == null,
+                "block updates should wake nearby quiet finite water");
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void environmentalMemoryWritesDiscardStaleState(GameTestHelper context) {
         BlockPos surfacePos = BELOW_WATER_POS;
         BlockPos fluidPos = WATER_POS;

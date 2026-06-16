@@ -111,14 +111,14 @@ public abstract class FlowableFluidMixin extends Fluid {
             EmergentProfiler.recordChunk(world, EmergentProfiler.FINITE_LAVA, pos);
         }
 
-        if (!emergent$claimFiniteFluidInspectionSlot(world, pos, fluid, tickDelay)) {
-            return;
-        }
-
         boolean reactiveLava = isLava && EmergentConfig.get().materialReactions;
         String cachedQuietTickReason = emergent$cachedFiniteFluidQuietReason(world, pos, fluid, currentLevel);
         if (cachedQuietTickReason != null && !reactiveLava) {
             emergent$countFiniteFluidQuietCacheHit(world, isWater, cachedQuietTickReason);
+            return;
+        }
+
+        if (!emergent$claimFiniteFluidInspectionSlot(world, pos, fluid, tickDelay)) {
             return;
         }
 

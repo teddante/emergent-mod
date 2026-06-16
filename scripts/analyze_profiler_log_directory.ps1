@@ -42,16 +42,42 @@ function Get-LogLines([string]$ResolvedPath) {
 function Get-PrismCopyInfo([string]$Directory) {
     $resolved = (Resolve-Path -LiteralPath $Directory).Path
     if ((Split-Path -Leaf $resolved) -ne "logs") {
-        return @()
+        return $null
     }
 
     $minecraftDir = Split-Path -Parent $resolved
     $copyInfoPath = Join-Path $minecraftDir "mods\emergent-copy-info.txt"
     if (-not (Test-Path -LiteralPath $copyInfoPath)) {
-        return @()
+        return $null
     }
 
-    return @(Get-Content -LiteralPath $copyInfoPath | Select-Object -First 16)
+    $lines = @(Get-Content -LiteralPath $copyInfoPath | Select-Object -First 16)
+    $values = @{}
+    foreach ($line in $lines) {
+        $separator = $line.IndexOf("=")
+        if ($separator -le 0) {
+            continue
+        }
+        $values[$line.Substring(0, $separator)] = $line.Substring($separator + 1)
+    }
+
+    $copiedUtc = $null
+    if ($values.ContainsKey("copiedUtc")) {
+        $parsed = [datetime]::MinValue
+        if ([datetime]::TryParse(
+                $values["copiedUtc"],
+                [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal,
+                [ref]$parsed)) {
+            $copiedUtc = $parsed
+        }
+    }
+
+    [PSCustomObject]@{
+        Lines = $lines
+        CopiedUtc = $copiedUtc
+        Path = $copyInfoPath
+    }
 }
 
 function Get-ProfilerValue($Line) {
@@ -272,6 +298,7 @@ function Measure-Log($File, [int]$WarmupTicks, [int]$TopChunks) {
     [PSCustomObject]@{
         Name = $File.Name
         LastWriteTime = $File.LastWriteTime
+        LastWriteTimeUtc = $File.LastWriteTimeUtc
         ProfilerLines = $profilerLines.Count
         LagWarnings = $lagLines.Count
         MaxProfilerMs = $maxProfilerMs
@@ -315,9 +342,9 @@ $files = @(Get-ChildItem -LiteralPath $resolvedDirectory -File |
 $summary = New-Object System.Collections.Generic.List[string]
 $summary.Add("Emergent profiler log directory summary")
 $summary.Add("Directory: $resolvedDirectory")
-$copyInfo = @(Get-PrismCopyInfo $resolvedDirectory)
-if ($copyInfo.Count -gt 0) {
-    $summary.Add("Latest Prism copy: $($copyInfo -join ' ')")
+$copyInfo = Get-PrismCopyInfo $resolvedDirectory
+if ($null -ne $copyInfo -and $copyInfo.Lines.Count -gt 0) {
+    $summary.Add("Latest Prism copy: $($copyInfo.Lines -join ' ')")
 }
 $summary.Add("Files scanned: $($files.Count)")
 $summary.Add("Warmup ticks ignored: $WarmupTicks")
@@ -380,6 +407,7 @@ if ($files.Count -eq 0) {
     $preInspectionLogs = @($measurements | Where-Object { $_.Format -eq "pre-inspection-budget" })
     $lagOnlyLogs = @($measurements | Where-Object { $_.LagWarnings -gt 0 -and $_.ProfilerLines -eq 0 })
     $latestMeasurement = $measurements | Select-Object -First 1
+    $latestLog = $measurements | Where-Object { $_.Name -eq "latest.log" } | Select-Object -First 1
     $summary.Add("")
     $summary.Add(("Format counts: current={0} pre-inspection-budget={1} pre-budget={2} pre-cache={3} no-profiler={4}" -f `
                 $currentLogs.Count,
@@ -387,7 +415,11 @@ if ($files.Count -eq 0) {
                 $preBudgetLogs.Count,
                 @($measurements | Where-Object { $_.Format -eq "pre-cache" }).Count,
                 @($measurements | Where-Object { $_.Format -eq "no-profiler" }).Count))
-    if ($latestMeasurement -and $latestMeasurement.LagWarnings -gt 0 -and !$latestMeasurement.StartupProfilerEnabled) {
+    if ($latestLog -and $copyInfo -and $copyInfo.CopiedUtc -and $latestLog.LastWriteTimeUtc -lt $copyInfo.CopiedUtc) {
+        $summary.Add(("interpretation=latest.log is older than the latest copied Emergent jar ({0:u} < {1:u}); launch Prism once before using these logs to judge the copied build." -f `
+                    $latestLog.LastWriteTimeUtc,
+                    $copyInfo.CopiedUtc))
+    } elseif ($latestMeasurement -and $latestMeasurement.LagWarnings -gt 0 -and !$latestMeasurement.StartupProfilerEnabled) {
         $summary.Add("interpretation=latest scanned log has lag warnings but no Emergent profiler startup line; enable -Demergent.profiler=true -Demergent.profiler.slowMs=25 on the Prism instance and retest the latest jar before tuning budgets.")
     } elseif ($currentLogs.Count -eq 0 -and $preBudgetLogs.Count -gt 0) {
         $summary.Add("interpretation=no current-format finite-fluid profiler log was found; retest with the latest copied jar before tuning budgets.")

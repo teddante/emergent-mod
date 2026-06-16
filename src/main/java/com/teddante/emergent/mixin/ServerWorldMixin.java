@@ -37,7 +37,7 @@ public abstract class ServerWorldMixin {
         @SuppressWarnings("resource")
         ServerLevel serverWorld = (ServerLevel) (Object) this;
         if (!oldState.equals(currentState)) {
-            EnvironmentalExposure.clear(serverWorld, pos);
+            EnvironmentalExposure.clearForBlockUpdate(serverWorld, pos);
             return;
         }
 

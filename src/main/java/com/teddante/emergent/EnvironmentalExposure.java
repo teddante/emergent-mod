@@ -687,6 +687,14 @@ public final class EnvironmentalExposure {
         FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "environmental_memory_clear");
     }
 
+    public static void clearForBlockUpdate(ServerLevel world, BlockPos pos) {
+        Map<Long, ExposureEntry> levelExposure = EXPOSURES.get(world);
+        if (levelExposure != null && levelExposure.remove(pos.asLong()) != null) {
+            EmergentProfiler.count(world, "environmental_memory_block_update_clears", 1);
+        }
+        FiniteFluidQuietCache.invalidateNeighborhood(world, pos, "block_update");
+    }
+
     private static void clearIfPresent(ServerLevel world, BlockPos pos) {
         Map<Long, ExposureEntry> levelExposure = EXPOSURES.get(world);
         if (levelExposure != null && levelExposure.remove(pos.asLong()) != null) {
