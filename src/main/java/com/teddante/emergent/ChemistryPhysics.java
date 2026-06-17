@@ -53,11 +53,12 @@ public final class ChemistryPhysics {
         // Water-soluble: dissolve slowly in water.
         if (inWater && stack.is(WATER_SOLUBLE)) {
             if (item.tickCount % 40 == 0) {
+                boolean wasFertilizer = stack.is(FERTILIZERS);
                 level.sendParticles(ParticleTypes.HAPPY_VILLAGER, item.getX(), item.getY() + 0.1,
                         item.getZ(), 3, 0.2, 0.1, 0.2, 0.0);
                 stack.shrink(1);
                 // Fertilizer in water boosts nearby crop growth slightly.
-                if (stack.is(FERTILIZERS)) {
+                if (wasFertilizer) {
                     tryBonemealNearby(level, pos);
                 }
                 if (stack.isEmpty()) {

@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -40,7 +41,7 @@ public abstract class ItemEntityVolatileMixin {
      */
     @Inject(method = "ignoreExplosion", at = @At("HEAD"), cancellable = true)
     private void makeVolatilesExplosionSensitive(Explosion explosion, CallbackInfoReturnable<Boolean> cir) {
-        if (EmergentConfig.get().volatileDroppedItems && VolatileExplosionUtils.isVolatile(this.getItem())) {
+        if (EmergentConfig.get().volatileDroppedItems && VolatileExplosionUtils.containsVolatileItems(this.getItem())) {
             cir.setReturnValue(false); // Not immune - can be damaged by explosions
         }
     }
@@ -68,8 +69,10 @@ public abstract class ItemEntityVolatileMixin {
             ItemEntity self = (ItemEntity) (Object) this;
             ItemStack stack = self.getItem();
 
-            if (VolatileExplosionUtils.isVolatile(stack)) {
-                float power = VolatileExplosionUtils.calculateExplosionPower(List.of(stack));
+            if (VolatileExplosionUtils.containsVolatileItems(stack)) {
+                List<ItemStack> volatiles = new ArrayList<>();
+                VolatileExplosionUtils.collectVolatileItems(stack, volatiles);
+                float power = VolatileExplosionUtils.calculateExplosionPower(volatiles);
 
                 if (power > 0) {
                     // Clear stack BEFORE exploding to prevent recursion

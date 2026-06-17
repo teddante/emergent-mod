@@ -1,5 +1,6 @@
 package com.teddante.emergent.gametest;
 
+import com.teddante.emergent.ChemistryPhysics;
 import com.teddante.emergent.EmergentConfig;
 import com.teddante.emergent.DynamicExperience;
 import com.teddante.emergent.ExperienceEnergy;
@@ -17,6 +18,7 @@ import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.util.RandomSource;
@@ -24,6 +26,7 @@ import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.animal.cow.Cow;
@@ -48,6 +51,7 @@ import net.minecraft.world.item.enchantment.effects.DamageEntity;
 import net.minecraft.world.item.enchantment.effects.EnchantmentEntityEffect;
 import net.minecraft.world.item.enchantment.effects.ExplodeEffect;
 import net.minecraft.world.item.enchantment.effects.Ignite;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CampfireBlock;
@@ -941,6 +945,31 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
         context.assertTrue(stress > 0.0, "blast aftermath should leave structural stress");
         context.assertTrue(stress < threshold, "one modest blast should weaken stone without instantly fracturing it");
         context.assertBlockPresent(Blocks.STONE, TEST_POS);
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
+    public void droppedNestedExplosiveContainerDetonatesOnFireDamage(GameTestHelper context) {
+        boolean volatileDroppedItems = EmergentConfig.get().volatileDroppedItems;
+        try {
+            EmergentConfig.get().volatileDroppedItems = true;
+            ItemStack nestedContainer = new ItemStack(Items.SHULKER_BOX);
+            nestedContainer.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(new ItemStack(Items.GUNPOWDER))));
+            Vec3 pos = Vec3.atBottomCenterOf(TEST_POS.above());
+            Vec3 absolutePos = context.absoluteVec(pos);
+            ItemEntity item = new ItemEntity(context.getLevel(), absolutePos.x, absolutePos.y, absolutePos.z, nestedContainer);
+            item.setDeltaMovement(Vec3.ZERO);
+            context.getLevel().addFreshEntity(item);
+
+            boolean damaged = item.hurtServer(context.getLevel(), context.getLevel().damageSources().inFire(), 1.0F);
+
+            context.assertTrue(damaged, "test setup should let fire damage reach the dropped container item");
+            context.assertTrue(!item.isAlive() || item.getItem().isEmpty(),
+                    "dropped containers with nested explosive items should detonate and consume the dropped stack");
+        } finally {
+            EmergentConfig.get().volatileDroppedItems = volatileDroppedItems;
+        }
+
         context.succeed();
     }
 
@@ -2305,6 +2334,52 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
     }
 
     @GameTest(maxTicks = 20)
+    public void singleDissolvedBoneMealStillFertilizesNearbyCrop(GameTestHelper context) throws ReflectiveOperationException {
+        BlockPos cropOrigin = TEST_POS;
+        BlockPos waterPos = cropOrigin.above();
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                BlockPos cropPos = cropOrigin.offset(dx, 0, dz);
+                context.setBlock(cropPos.below(), Blocks.FARMLAND);
+                context.setBlock(cropPos, Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, 0));
+            }
+        }
+        context.setBlock(waterPos, Blocks.WATER.defaultBlockState());
+
+        boolean chemistryReactions = EmergentConfig.get().chemistryReactions;
+        try {
+            EmergentConfig.get().chemistryReactions = true;
+            Vec3 absoluteWaterCenter = context.absoluteVec(Vec3.atCenterOf(waterPos));
+            Method updateFluidInteraction = Entity.class.getDeclaredMethod("updateFluidInteraction");
+            updateFluidInteraction.setAccessible(true);
+            for (int attempt = 0; attempt < 96 && !anyCropGrew(context, cropOrigin); attempt++) {
+                ItemEntity boneMeal = new ItemEntity(
+                        context.getLevel(),
+                        absoluteWaterCenter.x,
+                        absoluteWaterCenter.y,
+                        absoluteWaterCenter.z,
+                        new ItemStack(Items.BONE_MEAL));
+                boneMeal.setDeltaMovement(Vec3.ZERO);
+                boneMeal.setNoGravity(true);
+                context.getLevel().addFreshEntity(boneMeal);
+                updateFluidInteraction.invoke(boneMeal);
+                boneMeal.tickCount = 40;
+                ChemistryPhysics.tickChemistry(boneMeal);
+                if (boneMeal.isAlive()) {
+                    boneMeal.discard();
+                }
+            }
+
+            context.assertTrue(anyCropGrew(context, cropOrigin),
+                    "a single dissolved bone meal item should fertilize nearby crops before the stack becomes empty");
+        } finally {
+            EmergentConfig.get().chemistryReactions = chemistryReactions;
+        }
+
+        context.succeed();
+    }
+
+    @GameTest(maxTicks = 20)
     public void waterShortsPoweredConductiveNeighbors(GameTestHelper context) {
         BlockPos wirePos = TEST_POS.relative(Direction.EAST);
         context.setBlock(TEST_POS, Blocks.WATER);
@@ -2335,6 +2410,17 @@ public class EmergentFireGameTest implements CustomTestMethodInvoker {
             target.discard();
         }
         return maxDamage;
+    }
+
+    private static boolean anyCropGrew(GameTestHelper context, BlockPos cropOrigin) {
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
+                if (context.getBlockState(cropOrigin.offset(dx, 0, dz)).getValue(CropBlock.AGE) > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static ExplodeEffect firstExplodeEffect(Enchantment enchantment) {
